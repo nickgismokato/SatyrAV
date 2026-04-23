@@ -3,7 +3,7 @@
 An AV cue controller for SaTyR revyer. Dual-display output with keyboard-first
 navigation through acts, scenes, and commands.
 
-**Current version:** 1.5.0 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
+**Current version:** 1.5.1 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
 
 Full documentation lives in [docs/](docs/README.md).
 
