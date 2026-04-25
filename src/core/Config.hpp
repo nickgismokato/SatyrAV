@@ -15,6 +15,12 @@ public:
 
 	// Font
 	std::string fontPath     = "";
+	// (1.6.1) Optional italic/bold/bold-italic face paths. Empty = no
+	// dedicated face for that style; the renderer falls back to regular.
+	// Project-level [Options] in schema.toml can override these per project.
+	std::string fontPathItalic     = "";
+	std::string fontPathBold       = "";
+	std::string fontPathBoldItalic = "";
 	int fontSize             = 25;
 	Colour fontColour        = Colours::ORANGE;
 
@@ -39,6 +45,16 @@ public:
 	std::string projectsDir  = "";
 	std::string lastProject  = "";
 	std::string configPath   = "";
+	// (1.6.1) Shared fonts directory. Sits parallel to `projectsDir` —
+	// `~/Documents/SatyrAV/FONTS` on Windows, `~/satyrav/FONTS` elsewhere
+	// — and `font.path` / `font.italic` / etc. accept either an absolute
+	// path or a bare filename that's resolved against this directory.
+	std::string fontsDir     = "";
+
+	// Resolve a font reference: if `name` already contains a path
+	// separator or drive letter it's returned as-is; otherwise it's
+	// prepended with `fontsDir`. Empty `name` returns empty.
+	std::string ResolveFontPath(const std::string& name) const;
 
 	// Video preload
 	int videoPreloadBudgetMB  = 4096; // 4 GB total across all preloaded videos

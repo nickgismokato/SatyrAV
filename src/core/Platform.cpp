@@ -44,6 +44,14 @@ std::string Platform::GetDefaultConfigPath(){
 #endif
 }
 
+std::string Platform::GetDefaultFontsDir(){
+#ifdef _WIN32
+	return GetHomeDir() + "\\Documents\\SatyrAV\\FONTS";
+#else
+	return GetHomeDir() + "/satyrav/FONTS";
+#endif
+}
+
 void Platform::EnsureDirectoryExists(const std::string& path){
 	if(!fs::exists(path)){
 		fs::create_directories(path);

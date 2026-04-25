@@ -48,23 +48,57 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 
 	// Calculate total height for default-positioned, non-animated text.
 	// Animated (move) entries float independently and don't take a slot.
+	// (1.6.1) Subtitle entries also opt out — they have their own bottom
+	// anchor and would otherwise displace the centred-stack baseline.
 	int defaultCount = 0;
 	for(auto& entry : textEntries){
 		bool animated = entry.mods.hasMove;
-		if(!entry.mods.HasPosition() && !animated) defaultCount++;
+		if(!entry.mods.HasPosition() && !animated && !entry.subtitleAnchor) defaultCount++;
 	}
 	int totalH = defaultCount * slaveLineH;
 	int defaultY = slaveH / 2 - totalH / 2;
 
-	for(auto& entry : textEntries){
+	// (1.6.1) Pre-pass: assign a per-subtitle bottom-Y so multiple
+	// `textD` entries stack instead of overlapping. The most-recently
+	// pushed subtitle sits at the posY anchor; older ones move one
+	// `slaveLineH` higher per rank. The anchor itself is taken from the
+	// LAST subtitle's `mods.posY` so a project-options change picks up
+	// without requiring a clearText. Indices are written into a parallel
+	// vector keyed by entry index so the draw loop below can read them
+	// without re-deriving the order.
+	std::vector<int> subtitleBottomY(textEntries.size(), 0);
+	{
+		std::vector<size_t> subIdx;
+		subIdx.reserve(textEntries.size());
+		for(size_t i = 0; i < textEntries.size(); i++){
+			if(textEntries[i].subtitleAnchor) subIdx.push_back(i);
+		}
+		if(!subIdx.empty()){
+			const auto& last = textEntries[subIdx.back()];
+			float anchorPct = last.mods.HasPosition() ? last.mods.posY : 90.0f;
+			int anchorY = (int)(anchorPct / 100.0f * (float)slaveH);
+			int n = (int)subIdx.size();
+			for(int j = 0; j < n; j++){
+				int rankFromBottom = n - 1 - j; // 0 = newest, sits at anchor
+				subtitleBottomY[subIdx[j]] = anchorY - rankFromBottom * slaveLineH;
+			}
+		}
+	}
+
+	for(size_t entryIdx = 0; entryIdx < textEntries.size(); entryIdx++){
+		auto& entry = textEntries[entryIdx];
 		if(entry.runs.empty()) continue;
 
 		// ── Measure the full line (sum of every run's width, max of heights). ──
+		// (1.6.1) Each run carries its own bold/italic flags from the parser,
+		// so MeasureSlave/DrawTextSlave must pick the matching face. Bold
+		// widens glyphs; using the regular face here would shift later runs.
 		int textW = 0, textH = 0;
 		std::vector<int> runWidths(entry.runs.size(), 0);
 		for(size_t k = 0; k < entry.runs.size(); k++){
 			int rw = 0, rh = 0;
-			text.MeasureSlave(entry.runs[k].text, rw, rh);
+			const TextRun& r = entry.runs[k];
+			text.MeasureSlave(r.text, rw, rh, r.bold, r.italic);
 			runWidths[k] = rw;
 			textW += rw;
 			if(rh > textH) textH = rh;
@@ -104,6 +138,13 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 			}
 			drawX = (int)((1.0f - t) * (float)fromX + t * (float)toX);
 			drawY = (int)((1.0f - t) * (float)fromY + t * (float)toY);
+		} else if(entry.subtitleAnchor){
+			// (1.6.1) `textD` subtitle row: horizontally centred. The
+			// vertical position was assigned in the subtitleBottomY
+			// pre-pass above so multiple textD entries stack upward
+			// from the configured anchor instead of overlapping.
+			drawX = slaveW / 2 - textW / 2;
+			drawY = subtitleBottomY[entryIdx] - textH;
 		} else if(entry.mods.HasPosition()){
 			drawX = (int)(entry.mods.posX / 100.0f * (float)slaveW);
 			drawY = (int)(entry.mods.posY / 100.0f * (float)slaveH);
@@ -127,9 +168,11 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 			Colour c = ResolveRunColour(run, entry.mods);
 
 			if(rotation != 0.0f){
-				text.DrawTextSlaveRotated(renderer, run.text, cursorX, drawY, c, rotation);
+				text.DrawTextSlaveRotated(renderer, run.text, cursorX, drawY, c,
+					rotation, run.bold, run.italic);
 			} else{
-				text.DrawTextSlave(renderer, run.text, cursorX, drawY, c);
+				text.DrawTextSlave(renderer, run.text, cursorX, drawY, c,
+					run.bold, run.italic);
 			}
 			cursorX += runWidths[k];
 		}
@@ -263,6 +306,19 @@ void SlaveWindow::PushTextRuns(const std::vector<TextRun>& runs,
 		}
 	}
 	if(!current.empty()) emit(std::move(current));
+}
+
+void SlaveWindow::PushSubtitleRuns(const std::vector<TextRun>& runs,
+	const RenderModifiers& mods, const std::string& groupName){
+	// Reuses the PushTextRuns plumbing for capitalize/`\n`-splitting/spawn
+	// time, then flips `subtitleAnchor` on every emitted entry produced by
+	// the call. Marking the entries afterwards is simpler than threading a
+	// subtitle flag through emit/PushTextRuns and keeps them in lockstep.
+	size_t before = textEntries.size();
+	PushTextRuns(runs, mods, groupName);
+	for(size_t i = before; i < textEntries.size(); i++){
+		textEntries[i].subtitleAnchor = true;
+	}
 }
 
 void SlaveWindow::AppendToLastText(const std::vector<TextRun>& runs,

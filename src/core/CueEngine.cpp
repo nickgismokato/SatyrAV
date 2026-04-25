@@ -234,6 +234,42 @@ bool CueEngine::GetEffectiveCapitalize() const{
 	return projectData.schema.capitalize;
 }
 
+bool   CueEngine::GetSubtitleItalic() const       { return projectData.schema.subtitleItalic; }
+Colour CueEngine::GetSubtitleColour() const       { return projectData.schema.subtitleColour; }
+float  CueEngine::GetSubtitleTransparency() const { return projectData.schema.subtitleTransparency; }
+float  CueEngine::GetSubtitlePosY() const         { return projectData.schema.subtitlePosY; }
+
+std::string CueEngine::GetEffectiveFontPath(bool bold, bool italic) const{
+	// Pick the per-style cascade: scene field first, then project field.
+	// Empty at every level means "no dedicated face for this style".
+	auto* scene = GetCurrentScene();
+	auto pickStyled = [&](const std::string& sceneVal, const std::string& projVal){
+		if(!sceneVal.empty()) return sceneVal;
+		return projVal;
+	};
+
+	if(bold && italic){
+		std::string p = pickStyled(
+			scene ? scene->fontPathBoldItalic : std::string(),
+			projectData.schema.fontPathBoldItalic);
+		return p;
+	}
+	if(bold){
+		return pickStyled(
+			scene ? scene->fontPathBold : std::string(),
+			projectData.schema.fontPathBold);
+	}
+	if(italic){
+		return pickStyled(
+			scene ? scene->fontPathItalic : std::string(),
+			projectData.schema.fontPathItalic);
+	}
+	// Regular: scene -> project -> empty (caller falls back to Config-level
+	// path it already has loaded into TextRenderer).
+	if(scene && !scene->fontPath.empty()) return scene->fontPath;
+	return projectData.schema.fontPath;
+}
+
 ParticleTuning CueEngine::GetEffectiveParticleTuning(ParticleType type) const{
 	ParticleTuning out; // built-in defaults (1.0, 1.0, Uniform)
 

@@ -36,12 +36,39 @@ bool App::Init(){
 		SDL_FreeSurface(iconSurface);
 	}
 
-	std::string fontPath = config.fontPath;
+	// (1.6.1) Font paths in config.toml may be bare filenames — resolve
+	// them against the shared FONTS directory so projects can reference
+	// fonts portably. Absolute/relative paths pass through unchanged.
+	std::string fontPath        = config.ResolveFontPath(config.fontPath);
+	std::string fontPathItalic  = config.ResolveFontPath(config.fontPathItalic);
+	std::string fontPathBold    = config.ResolveFontPath(config.fontPathBold);
+	std::string fontPathBoldIt  = config.ResolveFontPath(config.fontPathBoldItalic);
+
+	// (1.6.1) Fall back to the bundled DejaVu Sans family in
+	// `assets/fonts/`. Shipped with the installer / `make install`, so
+	// every user gets a working italic + bold out of the box without
+	// touching `config.toml`. Each style only fills in if the user
+	// hasn't already set it, so partial overrides (e.g. user set
+	// `font.path` but not `font.bold`) still pick up the bundled bold.
+	auto fillBundled = [&](std::string& slot, const char* assetName){
+		if(!slot.empty()) return;
+		std::string p = FindAsset(assetName);
+		FILE* f = fopen(p.c_str(), "r");
+		if(f){ fclose(f); slot = p; }
+	};
+	fillBundled(fontPath,       "fonts/DejaVuSans.ttf");
+	fillBundled(fontPathItalic, "fonts/DejaVuSans-Oblique.ttf");
+	fillBundled(fontPathBold,   "fonts/DejaVuSans-Bold.ttf");
+	fillBundled(fontPathBoldIt, "fonts/DejaVuSans-BoldOblique.ttf");
+
+	// Last-resort regular: if the bundled file is somehow missing, fall
+	// back to OS-installed DejaVu (Linux) or Arial (Windows). The styled
+	// slots stay empty in that case — TextRenderer falls through to
+	// regular for any styled run.
 	if(fontPath.empty()){
 		const char* FALLBACK_FONTS[] = {
 			"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 			"C:\\Windows\\Fonts\\arial.ttf",
-			"assets/font.ttf",
 			nullptr
 		};
 		for(int i = 0; FALLBACK_FONTS[i]; i++){
@@ -50,7 +77,8 @@ bool App::Init(){
 		}
 	}
 
-	if(!textRenderer.Init(fontPath, config.fontSize)){
+	if(!textRenderer.Init(fontPath, config.fontSize,
+			fontPathItalic, fontPathBold, fontPathBoldIt)){
 		fprintf(stderr, "Warning: Text rendering unavailable\n");
 	}
 

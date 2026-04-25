@@ -164,15 +164,30 @@ void PerformanceScreen::NavigateRight(){
 		if(snapped >= 0) primedCmd = snapped;
 
 		// Apply options cascade
-		int effectiveSize = engine.GetEffectiveFontSize();
-		app->GetTextRenderer().SetSlaveFontSize(effectiveSize);
-		app->GetTextRenderer().outlineThickness = engine.GetTextOutline();
-		slaveUI.SetBackgroundColour(engine.GetEffectiveBackgroundColour());
-		slaveUI.SetCapitalize(engine.GetEffectiveCapitalize());
+		ApplySceneOptionsCascade();
 
 		// Preload media for current + adjacent scenes
 		PreloadForCurrentScene();
 	}
+}
+
+void PerformanceScreen::ApplySceneOptionsCascade(){
+	auto& tr = app->GetTextRenderer();
+	auto& cfg = Config::Instance();
+	tr.SetSlaveFontSize(engine.GetEffectiveFontSize());
+	tr.outlineThickness = engine.GetTextOutline();
+	// (1.6.1) Re-resolve every face path; bare filenames in scene/project
+	// options resolve against the shared FONTS directory so authors can
+	// reference fonts by short name (`FontBold = "Inter-Bold.ttf"`).
+	// Empty regular keeps the existing loaded face — see
+	// TextRenderer::SetSlaveFontPaths comment.
+	tr.SetSlaveFontPaths(
+		cfg.ResolveFontPath(engine.GetEffectiveFontPath(false, false)),
+		cfg.ResolveFontPath(engine.GetEffectiveFontPath(false, true)),
+		cfg.ResolveFontPath(engine.GetEffectiveFontPath(true,  false)),
+		cfg.ResolveFontPath(engine.GetEffectiveFontPath(true,  true)));
+	slaveUI.SetBackgroundColour(engine.GetEffectiveBackgroundColour());
+	slaveUI.SetCapitalize(engine.GetEffectiveCapitalize());
 }
 
 void PerformanceScreen::PreloadForCurrentScene(){
@@ -381,10 +396,7 @@ void PerformanceScreen::StepBack(){
 			primedCmd = last;
 
 			// Apply options cascade for the scene we're returning to
-			app->GetTextRenderer().SetSlaveFontSize(engine.GetEffectiveFontSize());
-			app->GetTextRenderer().outlineThickness = engine.GetTextOutline();
-			slaveUI.SetBackgroundColour(engine.GetEffectiveBackgroundColour());
-			slaveUI.SetCapitalize(engine.GetEffectiveCapitalize());
+			ApplySceneOptionsCascade();
 			PreloadForCurrentScene();
 		}
 		// Could also go back to previous akt's last scene, but leave that for now
@@ -417,10 +429,7 @@ void PerformanceScreen::AdvanceToNextScene(){
 	engine.SelectScene(primedScene);
 
 	// Apply options cascade for new scene
-	app->GetTextRenderer().SetSlaveFontSize(engine.GetEffectiveFontSize());
-	app->GetTextRenderer().outlineThickness = engine.GetTextOutline();
-	slaveUI.SetBackgroundColour(engine.GetEffectiveBackgroundColour());
-	slaveUI.SetCapitalize(engine.GetEffectiveCapitalize());
+	ApplySceneOptionsCascade();
 
 	// Clear slave for new scene
 	slaveUI.ClearText();
@@ -464,6 +473,19 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 		switch(c.type){
 			case CommandType::Text:        return "text \"" + c.argument + "\"";
 			case CommandType::TextCont:    return "textCont \"" + c.argument + "\"";
+			case CommandType::TextBf:      return "textbf \"" + c.argument + "\"";
+			case CommandType::TextIt:      return "textit \"" + c.argument + "\"";
+			case CommandType::TextBfCont:  return "textbfCont \"" + c.argument + "\"";
+			case CommandType::TextItCont:  return "textitCont \"" + c.argument + "\"";
+			case CommandType::TextD:{
+				std::string out = "textD \"" + c.argument + "\"";
+				if(!c.subtitleRuns.empty()){
+					std::string sub;
+					for(auto& r : c.subtitleRuns) sub += r.text;
+					out += ", \"" + sub + "\"";
+				}
+				return out;
+			}
 			case CommandType::Clear:       return c.argument.empty() ? "clear" : "clear " + c.argument;
 			case CommandType::ClearText:   return "clearText";
 			case CommandType::ClearImages: return "clearImages";
@@ -483,17 +505,56 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 
 	switch(cmd.type){
 		case CommandType::Text:
-			// Prefer the parsed run list (populated by ParseTextRuns, including
-			// the single-run case for bare strings). Fall back to the raw string
-			// if a consumer ever constructs a Command without going through the
-			// parser.
+		case CommandType::TextBf:
+		case CommandType::TextIt:
+			// (1.6.1) Style-keyword variants share the Text dispatch; the
+			// parser already stamped bold/italic flags onto the produced
+			// runs (see ParseSingleCommand), so the slave-side path needs
+			// no further work.
 			if(!cmd.runs.empty()){
 				slaveUI.PushTextRuns(cmd.runs, cmd.mods, cmd.groupName);
 			} else{
 				slaveUI.PushText(cmd.argument, cmd.mods, cmd.groupName);
 			}
 			break;
+		case CommandType::TextD:{
+			// (1.6.1) Primary line — same as `text`. Pushed first so it
+			// participates in the centred-stack default layout normally.
+			if(!cmd.runs.empty()){
+				slaveUI.PushTextRuns(cmd.runs, cmd.mods, cmd.groupName);
+			} else if(!cmd.argument.empty()){
+				slaveUI.PushText(cmd.argument, cmd.mods, cmd.groupName);
+			}
+
+			// Secondary translation line — only emitted if the parser
+			// actually produced runs for it. Project options drive the
+			// italic / colour / transparency / posY defaults; per-run
+			// inline modifiers (`color(...)`, `bold(...)`, etc.) inside
+			// the secondary string still win for that segment.
+			if(!cmd.subtitleRuns.empty()){
+				RenderModifiers subMods;
+				subMods.posY = engine.GetSubtitlePosY();
+				subMods.posX = 50.0f; // satisfy HasPosition() — overridden by subtitleAnchor
+				subMods.transparency = engine.GetSubtitleTransparency();
+				Colour subCol = engine.GetSubtitleColour();
+				bool defaultItalic = engine.GetSubtitleItalic();
+
+				std::vector<TextRun> subRuns = cmd.subtitleRuns;
+				for(auto& r : subRuns){
+					// Apply project italic default unless the run already
+					// has italic from inline `it(...)`.
+					if(defaultItalic) r.italic = true;
+					// Per-run colour wins; otherwise pick up the project
+					// default. Alpha 0 is "not set" by convention.
+					if(r.colour.a == 0) r.colour = subCol;
+				}
+				slaveUI.PushSubtitleRuns(subRuns, subMods, cmd.groupName);
+			}
+			break;
+		}
 		case CommandType::TextCont:
+		case CommandType::TextBfCont:
+		case CommandType::TextItCont:
 			if(!cmd.runs.empty()){
 				slaveUI.AppendToLastText(cmd.runs, cmd.mods, cmd.groupName);
 			} else if(!cmd.argument.empty()){
@@ -501,6 +562,10 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 				r.text = cmd.argument;
 				if(cmd.mods.textColour.a > 0) r.colour = cmd.mods.textColour;
 				r.transparency = cmd.mods.transparency;
+				// Inherit style from the keyword; per-run inline wrappers
+				// already stamp themselves onto cmd.runs in the parser path.
+				r.bold   = (cmd.type == CommandType::TextBfCont);
+				r.italic = (cmd.type == CommandType::TextItCont);
 				slaveUI.AppendToLastText({r}, cmd.mods, cmd.groupName);
 			}
 			break;

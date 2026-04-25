@@ -62,6 +62,21 @@ public:
 	int GetSceneFontSize() const;
 	bool GetEffectiveCapitalize() const;
 
+	// (1.6.1) Cascade for the four font-style face paths. The regular
+	// path falls back to the Config-level path if scene/project leave it
+	// empty; the styled paths return empty when nothing is configured for
+	// that variant — TextRenderer treats empty as "use regular".
+	std::string GetEffectiveFontPath(bool bold, bool italic) const;
+
+	// (1.6.1) Project-level subtitle defaults for `textD`. These are
+	// project-only (no scene override yet); built-in defaults live on
+	// RevySchema. Read every time a subtitle is pushed so live edits to
+	// schema.toml take effect on the next ReloadScenes.
+	bool   GetSubtitleItalic() const;
+	Colour GetSubtitleColour() const;
+	float  GetSubtitleTransparency() const;
+	float  GetSubtitlePosY() const;
+
 	// (1.4) Resolve the effective particle tuning for `type` by walking
 	// scene → project → built-in defaults. Only fields the author explicitly
 	// set override the level below; everything else falls through.

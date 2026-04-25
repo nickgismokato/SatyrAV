@@ -17,8 +17,12 @@ void Config::EnsureDefaults(){
 	if(configPath.empty()){
 		configPath = Platform::GetDefaultConfigPath();
 	}
+	if(fontsDir.empty()){
+		fontsDir = Platform::GetDefaultFontsDir();
+	}
 	// Ensure directories exist
 	Platform::EnsureDirectoryExists(projectsDir);
+	Platform::EnsureDirectoryExists(fontsDir);
 	auto configDir = configPath.substr(0, configPath.find_last_of("/\\"));
 	if(!configDir.empty()){
 		Platform::EnsureDirectoryExists(configDir);
@@ -31,6 +35,9 @@ void Config::Load(const std::string& path){
 		auto tbl = toml::parse_file(path);
 		fontSize       = tbl["font"]["size"].value_or(25);
 		fontPath       = tbl["font"]["path"].value_or(std::string(""));
+		fontPathItalic     = tbl["font"]["italic"].value_or(std::string(""));
+		fontPathBold       = tbl["font"]["bold"].value_or(std::string(""));
+		fontPathBoldItalic = tbl["font"]["bold_italic"].value_or(std::string(""));
 		masterWidth    = tbl["display"]["width"].value_or(1280);
 		masterHeight   = tbl["display"]["height"].value_or(720);
 		fullscreen     = tbl["display"]["fullscreen"].value_or(false);
@@ -40,6 +47,7 @@ void Config::Load(const std::string& path){
 		captureDisplayIndex = tbl["display"]["capture_display"].value_or(0);
 		projectsDir    = tbl["paths"]["projects"].value_or(std::string(""));
 		lastProject    = tbl["paths"]["last_project"].value_or(std::string(""));
+		fontsDir       = tbl["paths"]["fonts"].value_or(std::string(""));
 		videoPreloadBudgetMB   = tbl["video"]["preload_budget_mb"].value_or(4096);
 		videoPreloadMaxSeconds = tbl["video"]["preload_max_seconds"].value_or(60);
 	} catch(const toml::parse_error&){
@@ -68,7 +76,10 @@ void Config::Save(const std::string& path){
 	// take no escapes, so backslashes pass through verbatim.
 	out << "[font]\n";
 	out << "size = " << fontSize << "\n";
-	out << "path = '" << fontPath << "'\n\n";
+	out << "path = '" << fontPath << "'\n";
+	out << "italic = '" << fontPathItalic << "'\n";
+	out << "bold = '" << fontPathBold << "'\n";
+	out << "bold_italic = '" << fontPathBoldItalic << "'\n\n";
 	out << "[display]\n";
 	out << "width = " << masterWidth << "\n";
 	out << "height = " << masterHeight << "\n";
@@ -79,10 +90,34 @@ void Config::Save(const std::string& path){
 	out << "capture_display = " << captureDisplayIndex << "\n\n";
 	out << "[paths]\n";
 	out << "projects = '" << projectsDir << "'\n";
-	out << "last_project = '" << lastProject << "'\n\n";
+	out << "last_project = '" << lastProject << "'\n";
+	out << "fonts = '" << fontsDir << "'\n\n";
 	out << "[video]\n";
 	out << "preload_budget_mb = " << videoPreloadBudgetMB << "\n";
 	out << "preload_max_seconds = " << videoPreloadMaxSeconds << "\n";
+}
+
+std::string Config::ResolveFontPath(const std::string& name) const{
+	if(name.empty()) return name;
+	// Absolute path? Leave it. We treat anything containing a path
+	// separator (or a Windows drive-letter like "C:\") as already-resolved.
+	bool hasSep = name.find('/') != std::string::npos
+		|| name.find('\\') != std::string::npos;
+	bool hasDrive = name.size() >= 2 && name[1] == ':';
+	if(hasSep || hasDrive) return name;
+	if(fontsDir.empty()) return name;
+
+	// Pick the platform's preferred separator so the renderer's `fopen`
+	// path lookups don't surprise anyone debugging from a log file.
+#ifdef _WIN32
+	const char sep = '\\';
+#else
+	const char sep = '/';
+#endif
+	std::string out = fontsDir;
+	if(!out.empty() && out.back() != '/' && out.back() != '\\') out += sep;
+	out += name;
+	return out;
 }
 
 } // namespace SatyrAV

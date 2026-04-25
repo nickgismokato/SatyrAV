@@ -21,6 +21,12 @@ struct SlaveTextEntry{
 	// Group tag — empty = ungrouped. Grouped entries survive plain `clear`
 	// and are only dropped by `clear <name>`, `clearText`, or `clearAll`.
 	std::string groupName;
+
+	// (1.6.1) Subtitle anchor — when true, layout overrides the X axis to
+	// keep the line horizontally centred on the canvas while honouring
+	// `mods.posY` for vertical placement. Used by `textD`'s secondary
+	// translation line. Independent of grouping/clear semantics.
+	bool subtitleAnchor = false;
 };
 
 struct SlaveImageEntry{
@@ -63,6 +69,13 @@ public:
 	// Append runs to the most recently pushed text entry. If no prior entry
 	// exists, behaves like PushTextRuns. Used by `textCont`.
 	void AppendToLastText(const std::vector<TextRun>& runs, const RenderModifiers& mods,
+		const std::string& groupName = "");
+	// (1.6.1) Push a subtitle entry — same plumbing as PushTextRuns but the
+	// resulting entry has `subtitleAnchor=true`, so DrawText centres it
+	// horizontally and uses `mods.posY` (in percent of canvas) for the
+	// vertical position regardless of the default centred-stack layout.
+	// Used by `textD`'s second argument.
+	void PushSubtitleRuns(const std::vector<TextRun>& runs, const RenderModifiers& mods,
 		const std::string& groupName = "");
 	// Remove all ungrouped text entries (preserves traditional `clear` behaviour).
 	void ClearText();

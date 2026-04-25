@@ -71,6 +71,10 @@ private:
 	void OnSlaveCommand(const Command& cmd);
 	void UpdateDebugInfo();
 	void PreloadForCurrentScene();
+	// (1.6.1) Push the engine's effective font size, outline, font-style
+	// face paths, background colour, and capitalize flag to the renderers
+	// for the current scene. Called from every site that changes scene.
+	void ApplySceneOptionsCascade();
 
 	// Debug tracking
 	std::string lastCommandStr;

@@ -50,6 +50,21 @@ const char* RevyTypeName(RevyType type);
 enum class CommandType{
 	Text,
 	TextCont,       // (1.4) — append to the most recently pushed text entry
+	// (1.6.1) Style-default variants of Text / TextCont. Parser sets
+	// `bold` / `italic` on every produced run; dispatch is identical to
+	// the unstyled forms. Inline `bold(...)` / `it(...)` wrappers stack on
+	// top, so a run can be bold-italic via either route.
+	TextBf,
+	TextIt,
+	TextBfCont,
+	TextItCont,
+	// (1.6.1) `textD "primary", "secondary"` — primary renders as a normal
+	// centred text entry; secondary renders as a separate bottom-anchored
+	// entry with italic-grey defaults from project options. If only one
+	// argument is given the parser collapses to plain `Text`. Both pieces
+	// support the full `+` concat / `bold(...)` / `it(...)` / `color(...)`
+	// machinery; the secondary text lives in `Command::subtitleRuns`.
+	TextD,
 	Clear,
 	ClearText,
 	ClearImages,
@@ -155,6 +170,13 @@ struct RenderModifiers{
 	// reflected velocity component.
 	bool  bounceEdges         = false;
 
+	// (1.6.1) Per-segment text style flags set by inline `bold(...)` /
+	// `it(...)` wrappers in a `text` argument. ParseTextRuns copies these
+	// onto each produced TextRun; the slave renderer picks the matching
+	// font face. Ignored by every non-text command type.
+	bool bold   = false;
+	bool italic = false;
+
 	// (1.4) Per-system tunables resolved at dispatch time from the
 	// scene → project → default cascade. Only consulted when
 	// `particleType != None`.
@@ -205,6 +227,14 @@ struct TextRun{
 	std::string text;
 	Colour colour = {0, 0, 0, 0};
 	float transparency = 1.0f;
+	// (1.6.1) Per-segment style. Set by line-level keywords (`textbf` /
+	// `textit` mark every produced run) or by inline wrappers (`bold(...)`
+	// / `it(...)`) inside a `text "..." + ... ` concatenation. The slave
+	// renderer picks the matching font face — regular / italic / bold /
+	// bold-italic — falling back to regular if the project hasn't
+	// configured the corresponding font path.
+	bool bold = false;
+	bool italic = false;
 };
 
 struct Command{
@@ -221,6 +251,13 @@ struct Command{
 	// text. Always populated for Text and TextCont commands (single run
 	// when no `+` was used). Empty for every other command type.
 	std::vector<TextRun> runs;
+
+	// (1.6.1) Subtitle/translation runs for `textD`. Empty for every
+	// other command type. Same per-run modifier surface as `runs` — the
+	// dispatcher pushes them as a separate bottom-anchored entry with
+	// project-configured italic/colour/transparency defaults applied
+	// before any per-run override.
+	std::vector<TextRun> subtitleRuns;
 
 	// For loop commands
 	int loopCount     = 0;
@@ -262,6 +299,11 @@ struct Scene{
 	// Per-scene options (0 / empty = use project/global fallback)
 	int fontSize = 0;
 	std::string fontPath;
+	// (1.6.1) Per-style font faces. Empty = inherit from project/global, or
+	// fall back to regular at draw time if no variant is configured.
+	std::string fontPathItalic;
+	std::string fontPathBold;
+	std::string fontPathBoldItalic;
 	Colour fontColour = {0, 0, 0, 0}; // alpha 0 = not set
 	bool capitalize = false;
 
@@ -284,10 +326,24 @@ struct RevySchema{
 
 	// Project-level options
 	std::string fontPath;
+	// (1.6.1) Project-level italic/bold font faces. Empty = use the
+	// global Config-level path, falling back to regular at draw time.
+	std::string fontPathItalic;
+	std::string fontPathBold;
+	std::string fontPathBoldItalic;
 	Colour fontColour = {0, 0, 0, 0};
 	Colour backgroundColor = Colours::BLACK;
 	int textOutline = 4;
 	bool capitalize = false; // outline thickness in points, 0 = disabled
+
+	// (1.6.1) Project-level defaults for `textD` subtitle rendering.
+	// These can be tuned live via the project's `schema.toml` `[Options]`
+	// table while we figure out the right look. The colour defaults to
+	// a light grey; the position is a percent from the top of the canvas.
+	bool   subtitleItalic       = true;
+	Colour subtitleColour       = {0xAA, 0xAA, 0xAA, 0xFF};
+	float  subtitleTransparency = 1.0f;     // 1.0 = fully opaque
+	float  subtitlePosY         = 90.0f;    // percent of canvas height
 
 	// Per-project targeted display rect (width==0 means "not yet set —
 	// initialise to fill the physical display on first load").

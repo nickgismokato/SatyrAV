@@ -98,20 +98,9 @@ The 1.6 cycle is large, so it ships as four sub-versions. Order is dependency- a
 
 Foundation pass. Slave render correctness + accumulated cheap bugs. See [CHANGELOG.md](CHANGELOG.md) for details.
 
-### 1.6.1 — Text & subtitles
+### 1.6.1 — shipped
 
-Self-contained text features. No backend churn.
-
-- (**Critical**) Add a bottom text + middle text `textD` which add a italic text at the bottom of the screen. Takes two inputs: the actual text you would normally write with `text "<text>"` and a secondary text.
-	- Used to write english subtitles. For example:
-	```txt
-	textD "Vi har started nu!", "We have started now!"
-	```
-	- The secondary text should be italic and also be at the bottom of the screen. Final vertical offset TBD.
-	- Used to display english text at the bottom of the screen to have "translations" for the few english students in the audience.
-	- If only the first text is given, it should work like the normal `text` command.
-	- The bottom text should be in italic as default (*can be undone in project options*) and be in a grey colour, maybe at 95% transparency. The latter is not important.
-- Add option for *Italic* and **Bold** text by using `textbf` and `textit` commands.
+Real italic / bold typography on the slave; `textD` translation/subtitle command; shared `FONTS` directory; bundled DejaVu Sans family. See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ### 1.6.2 — Load Project page rework
 

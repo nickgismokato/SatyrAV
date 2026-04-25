@@ -254,6 +254,35 @@ static std::string ParseModifiers(const std::string& input, RenderModifiers& mod
 		}
 	}
 
+	// (1.6.1) bold(content) — wrap a segment to render in the bold face.
+	// Composes with `it(...)` and `color(...)` like any other modifier.
+	if(s.rfind("bold(", 0) == 0){
+		auto close = FindMatchingParen(s, 4);
+		if(close != std::string::npos){
+			std::string inner = s.substr(5, close - 5);
+			auto args = SplitArgs(inner);
+			if(args.size() >= 1){
+				mods.bold = true;
+				return ParseModifiers(args[0], mods);
+			}
+		}
+	}
+
+	// (1.6.1) it(content) — italic counterpart of bold(). Short name
+	// chosen to match the user's preferred LaTeX-flavoured spelling
+	// (`\it`) and to keep concat lines compact: `text "A " + it("B")`.
+	if(s.rfind("it(", 0) == 0){
+		auto close = FindMatchingParen(s, 2);
+		if(close != std::string::npos){
+			std::string inner = s.substr(3, close - 3);
+			auto args = SplitArgs(inner);
+			if(args.size() >= 1){
+				mods.italic = true;
+				return ParseModifiers(args[0], mods);
+			}
+		}
+	}
+
 	// rotate(degrees, content)
 	if(s.rfind("rotate(", 0) == 0){
 		auto close = FindMatchingParen(s, 6);
@@ -513,6 +542,11 @@ static std::vector<TextRun> ParseTextRuns(const std::string& argRaw,
 		run.text = content;
 		if(segMods.textColour.a > 0) run.colour = segMods.textColour;
 		run.transparency = segMods.transparency;
+		// (1.6.1) Inline `bold(...)` / `it(...)` set the per-run style
+		// flags via segMods.bold/italic. Line-level keywords (textbf etc.)
+		// OR additional flags onto every run after this loop returns.
+		run.bold   = segMods.bold;
+		run.italic = segMods.italic;
 		runs.push_back(std::move(run));
 
 		// Fold line-level fields into lineMods with leftmost-wins.
@@ -582,6 +616,11 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 
 	if(keyword == "text")              cmd.type = CommandType::Text;
 	else if(keyword == "textCont")     cmd.type = CommandType::TextCont;
+	else if(keyword == "textbf")       cmd.type = CommandType::TextBf;
+	else if(keyword == "textit")       cmd.type = CommandType::TextIt;
+	else if(keyword == "textbfCont")   cmd.type = CommandType::TextBfCont;
+	else if(keyword == "textitCont")   cmd.type = CommandType::TextItCont;
+	else if(keyword == "textD")        cmd.type = CommandType::TextD;
 	else if(keyword == "clear")        cmd.type = CommandType::Clear;
 	else if(keyword == "clearText")    cmd.type = CommandType::ClearText;
 	else if(keyword == "clearImages")  cmd.type = CommandType::ClearImages;
@@ -605,11 +644,58 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 		|| cmd.type == CommandType::ClearAll){
 		// These take no arguments — any trailing text is ignored.
 		cmd.argument = "";
-	} else if(cmd.type == CommandType::Text || cmd.type == CommandType::TextCont){
-		// Text and textCont always go through the run-producing path so the
-		// `+` concatenation operator is supported uniformly. Single-segment
-		// lines produce a single run (identical behaviour to pre-1.4).
+	} else if(cmd.type == CommandType::TextD){
+		// (1.6.1) Split argRaw on top-level commas — SplitArgs already
+		// respects quoted strings and parens, so nested `color(RED, "x,y")`
+		// inside one of the pieces stays intact. Whitespace around the
+		// comma is irrelevant.
+		auto pieces = SplitArgs(argRaw);
+		std::string primaryRaw = pieces.empty() ? std::string() : pieces[0];
+		std::string secondaryRaw = pieces.size() >= 2 ? pieces[1] : std::string();
+
+		// Always parse the primary side via the run-producer so `+` and
+		// inline modifiers work like in `text`.
+		cmd.runs = ParseTextRuns(primaryRaw, cmd.mods);
+
+		if(!secondaryRaw.empty()){
+			RenderModifiers subtitleMods; // standalone — not folded into line mods
+			cmd.subtitleRuns = ParseTextRuns(secondaryRaw, subtitleMods);
+		} else{
+			// No second arg given — collapse to a plain Text command. The
+			// dispatcher will then take the standard text path. We keep the
+			// CommandType::TextD identity so the master command list can
+			// still display the original `textD` keyword if desired, but
+			// dispatch checks `subtitleRuns.empty()` and falls through.
+		}
+
+		std::string concat;
+		for(auto& r : cmd.runs) concat += r.text;
+		cmd.argument = concat;
+	} else if(cmd.type == CommandType::Text || cmd.type == CommandType::TextCont
+		|| cmd.type == CommandType::TextBf || cmd.type == CommandType::TextIt
+		|| cmd.type == CommandType::TextBfCont || cmd.type == CommandType::TextItCont){
+		// Text and its style/cont variants always go through the run-producing
+		// path so the `+` concatenation operator is supported uniformly.
+		// Single-segment lines produce a single run (identical behaviour to
+		// pre-1.4 for `text`).
 		cmd.runs = ParseTextRuns(argRaw, cmd.mods);
+
+		// (1.6.1) Style-keyword variants set a line-level default that ORs
+		// onto every produced run. Inline `bold(...)` / `it(...)` already
+		// set per-run flags during ParseTextRuns; this just adds the line
+		// default so every run inherits the keyword's style. So
+		//   `textbf "A " + it("B")` → both bold; B is bold-italic.
+		bool lineBold = (cmd.type == CommandType::TextBf
+			|| cmd.type == CommandType::TextBfCont);
+		bool lineItalic = (cmd.type == CommandType::TextIt
+			|| cmd.type == CommandType::TextItCont);
+		if(lineBold || lineItalic){
+			for(auto& r : cmd.runs){
+				r.bold   = r.bold   || lineBold;
+				r.italic = r.italic || lineItalic;
+			}
+		}
+
 		// Keep `argument` filled with the concatenated plain text so debug
 		// output, logs, and any legacy consumer that reads `argument` still
 		// see something sensible.
@@ -871,6 +957,12 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 						try{ scene.fontSize = std::stoi(val); } catch(...){}
 					} else if(key == "font"){
 						scene.fontPath = val;
+					} else if(key == "fontItalic"){
+						scene.fontPathItalic = val;
+					} else if(key == "fontBold"){
+						scene.fontPathBold = val;
+					} else if(key == "fontBoldItalic"){
+						scene.fontPathBoldItalic = val;
 					} else if(key == "cap"){
 						scene.capitalize = (val == "true" || val == "1");
 					} else{

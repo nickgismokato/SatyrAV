@@ -14,6 +14,19 @@ static std::string CommandToString(const Command& cmd){
 	switch(cmd.type){
 		case CommandType::Text:        return "text \"" + cmd.argument + "\"";
 		case CommandType::TextCont:    return "textCont \"" + cmd.argument + "\"";
+		case CommandType::TextBf:      return "textbf \"" + cmd.argument + "\"";
+		case CommandType::TextIt:      return "textit \"" + cmd.argument + "\"";
+		case CommandType::TextBfCont:  return "textbfCont \"" + cmd.argument + "\"";
+		case CommandType::TextItCont:  return "textitCont \"" + cmd.argument + "\"";
+		case CommandType::TextD:{
+			std::string out = "textD \"" + cmd.argument + "\"";
+			if(!cmd.subtitleRuns.empty()){
+				std::string sub;
+				for(auto& r : cmd.subtitleRuns) sub += r.text;
+				out += ", \"" + sub + "\"";
+			}
+			return out;
+		}
 		case CommandType::Clear:       return cmd.argument.empty() ? "clear" : "clear " + cmd.argument;
 		case CommandType::ClearText:   return "clearText";
 		case CommandType::ClearImages: return "clearImages";
