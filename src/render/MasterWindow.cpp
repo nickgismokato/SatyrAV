@@ -1,5 +1,7 @@
 #include "render/MasterWindow.hpp"
 #include <algorithm>
+#include <vector>
+#include <string>
 
 namespace SatyrAV{
 
@@ -161,9 +163,67 @@ void MasterWindow::DrawNavigator(Renderer& r, TextRenderer& text,
 	}
 
 	// ── Command column (shows commands of primed scene) ──────
+	//
+	// (1.6) Long commands wrap onto continuation rows instead of being
+	// truncated with "...". Each command consumes one or more rows; the
+	// loop tracks a real y cursor and stops once we run out of vertical
+	// space. The primed-row highlight spans every wrapped row, and the
+	// line-number column only prints on the first row of the command.
 	if(primedAkt >= 0 && primedScene >= 0){
 		int cmdCount = engine.GetCommandCountForScene(primedAkt, primedScene);
-		// Calculate scroll offset
+		// Available pixels for the command text on each row, after the
+		// line-number gutter. Real glyph widths come from MeasureWidth so
+		// we don't have to guess a per-character fudge factor.
+		int rowPxBudget = cmdColW - 35 - 5;
+		if(rowPxBudget < 20) rowPxBudget = 20;
+
+		auto wrapCommand = [&text, rowPxBudget](const std::string& s){
+			std::vector<std::string> rows;
+			if(s.empty()){ rows.emplace_back(); return rows; }
+			if(text.MeasureWidth(s) <= rowPxBudget){
+				rows.push_back(s);
+				return rows;
+			}
+			size_t pos = 0;
+			while(pos < s.size()){
+				// Find the longest prefix from `pos` that fits in the budget.
+				// Doubling-then-binary-search keeps measurement calls bounded
+				// at O(log N) per row instead of scanning char-by-char.
+				size_t lo = 1;
+				size_t hi = s.size() - pos;
+				if(text.MeasureWidth(s.substr(pos, hi)) <= rowPxBudget){
+					rows.push_back(s.substr(pos, hi));
+					pos += hi;
+					break;
+				}
+				while(lo < hi){
+					size_t mid = lo + (hi - lo + 1) / 2;
+					if(text.MeasureWidth(s.substr(pos, mid)) <= rowPxBudget){
+						lo = mid;
+					} else{
+						hi = mid - 1;
+					}
+				}
+				size_t take = lo;
+				// Prefer breaking at the last whitespace inside the slice
+				// so words don't split (only if there's more to render).
+				if(pos + take < s.size()){
+					size_t breakAt = s.find_last_of(' ', pos + take);
+					if(breakAt != std::string::npos && breakAt > pos){
+						take = breakAt - pos;
+					}
+				}
+				if(take == 0) take = 1; // pathological narrow column safety
+				rows.push_back(s.substr(pos, take));
+				pos += take;
+				if(pos < s.size() && s[pos] == ' ') pos++;
+			}
+			return rows;
+		};
+
+		// Scroll: keep primedCmd visible. Compute how many wrapped rows
+		// each command above primedCmd consumes so we can scroll by rows
+		// rather than indices and avoid clipping a wrapped primed entry.
 		int cmdScroll = 0;
 		if(primedCmd > maxLines / 2){
 			cmdScroll = primedCmd - maxLines / 2;
@@ -176,51 +236,57 @@ void MasterWindow::DrawNavigator(Renderer& r, TextRenderer& text,
 			text.DrawText(renderer, "...", cmdColX + 5, startY - lineH + 2, Colours::WHITE);
 		}
 
-		// Count executable commands (non-comments) in [0, cmdScroll) so we can
-		// resume the displayed line-number counter when the view is scrolled.
 		int execCounter = 0;
 		for(int idx = 0; idx < cmdScroll; idx++){
 			auto* c = engine.GetCommand(primedAkt, primedScene, idx);
 			if(c && c->type != CommandType::Comment) execCounter++;
 		}
 
-		for(int i = 0; i < maxLines && (cmdScroll + i) < cmdCount; i++){
-			int idx = cmdScroll + i;
-			int y = startY + i * lineH;
-
-			if(idx == primedCmd){
-				r.DrawRect(renderer, cmdColX, y, cmdColW, lineH, Colours::HIGHLIGHT);
-			}
+		int yCursor = startY;
+		int yLimit = startY + maxLines * lineH;
+		bool overflowed = false;
+		for(int idx = cmdScroll; idx < cmdCount; idx++){
+			if(yCursor >= yLimit){ overflowed = true; break; }
 
 			auto* cmd = engine.GetCommand(primedAkt, primedScene, idx);
 			bool isComment = cmd && cmd->type == CommandType::Comment;
 
-			// Line number — executable rows only; comments leave the column blank.
+			std::string cmdText = cmd ? CommandToString(*cmd) : "???";
+			auto rows = wrapCommand(cmdText);
+			int rowCount = (int)rows.size();
+			int blockH = rowCount * lineH;
+
+			if(idx == primedCmd){
+				int hlH = std::min(blockH, yLimit - yCursor);
+				r.DrawRect(renderer, cmdColX, yCursor, cmdColW, hlH, Colours::HIGHLIGHT);
+			}
+
 			if(!isComment){
 				execCounter++;
 				std::string num = std::to_string(execCounter);
-				text.DrawText(renderer, num, cmdColX + 3, y + 2, {0x55, 0x55, 0x55, 0xFF});
+				text.DrawText(renderer, num, cmdColX + 3, yCursor + 2,
+					{0x55, 0x55, 0x55, 0xFF});
 			}
 
-			// Command text
-			std::string cmdText = cmd ? CommandToString(*cmd) : "???";
-			// Truncate to fit column
-			int maxChars = (cmdColW - 45) / 7;
-			if((int)cmdText.size() > maxChars && maxChars > 3){
-				cmdText = cmdText.substr(0, maxChars - 3) + "...";
-			}
 			Colour c;
 			if(isComment){
-				c = {0x70, 0x80, 0x90, 0xFF}; // dim slate for comments
+				c = {0x70, 0x80, 0x90, 0xFF};
 			} else{
 				c = (idx == primedCmd && activeColumn == 2)
 					? Colours::ORANGE : Colours::WHITE;
 			}
-			text.DrawText(renderer, cmdText, cmdColX + 35, y + 2, c);
+
+			for(int ri = 0; ri < rowCount; ri++){
+				int rowY = yCursor + ri * lineH;
+				if(rowY >= yLimit){ overflowed = true; break; }
+				text.DrawText(renderer, rows[ri], cmdColX + 35, rowY + 2, c);
+			}
+
+			yCursor += blockH;
 		}
 
-		if(cmdScroll + maxLines < cmdCount){
-			text.DrawText(renderer, "...", cmdColX + 5, startY + maxLines * lineH + 2, Colours::WHITE);
+		if(overflowed || yCursor >= yLimit){
+			text.DrawText(renderer, "...", cmdColX + 5, yLimit + 2, Colours::WHITE);
 		}
 	}
 }

@@ -23,7 +23,7 @@ enum class InputAction{
 	Debug,
 	Quit,
 	Tab,
-	PrevCommand,
+	StepBack,
 	ReloadScenes,
 	TextInput,
 	Backspace

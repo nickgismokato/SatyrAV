@@ -25,7 +25,7 @@ void HelpPopup::Draw(Renderer& r, TextRenderer& text){
 	text.DrawText(renderer, "  D              Toggle debug menu", x, y, txt); y += lineH;
 	text.DrawText(renderer, "  ESC            Go back / quit", x, y, txt); y += lineH;
 	text.DrawText(renderer, "  ENTER          Select / confirm", x, y, txt); y += lineH;
-	text.DrawText(renderer, "  SHIFT+ENTER    Previous command", x, y, txt); y += lineH;
+	text.DrawText(renderer, "  SHIFT+ENTER    Step back (cursor only — no undo)", x, y, txt); y += lineH;
 	text.DrawText(renderer, "  TAB            Next field (in forms)", x, y, txt); y += lineH;
 	text.DrawText(renderer, "  UP/DOWN        Navigate", x, y, txt); y += lineH;
 	y += 6;

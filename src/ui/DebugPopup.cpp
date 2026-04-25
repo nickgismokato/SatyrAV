@@ -16,7 +16,7 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	int leftLines = 12; // version + scene(3) + command(4) + display(3)
 	int rightLines = 10; // fonts(4) + cache(3) + blank(3)
 	int maxLines = (leftLines > rightLines) ? leftLines : rightLines;
-	int totalH = maxLines * lineH + 60;
+	int totalH = maxLines * lineH + 60 + lineH + 8; // + footer hint row
 
 	DrawBox(r, text, "Debug", totalW, totalH);
 	auto* renderer = r.GetMaster();
@@ -82,6 +82,13 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	std::string vbuf = "  Frames: " + std::to_string(info.videoBufferedFrames)
 		+ " / " + std::to_string(info.videoRingSize);
 	text.DrawText(renderer, vbuf, rx, y, txt);
+
+	// (1.6) Footer hint — sub-menus reachable from this popup.
+	int footerY = boxY + totalH - lineH - 10;
+	Colour hint = {0x90, 0xA0, 0xB0, 0xFF};
+	text.DrawTextCentered(renderer,
+		"Press S to edit Display rect",
+		boxX + totalW / 2, footerY, hint);
 }
 
 } // namespace SatyrAV

@@ -154,6 +154,7 @@ public:
 	void StopVideo();
 	void ToggleVideoPause();
 	bool IsVideoPlaying() const;
+	bool HasVideo() const;
 	void UpdateVideoFrame(SDL_Renderer* renderer);
 	SDL_Texture* GetVideoTexture() const;
 	int GetVideoWidth() const;

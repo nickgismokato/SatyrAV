@@ -37,6 +37,16 @@ public:
 	int GetSlaveWidth() const;
 	int GetSlaveHeight() const;
 
+	// (1.6) Rect-authoring-space dims — i.e. the coordinate system that
+	// `TargetedDisplay` and `pos`/`size` modifiers are interpreted against.
+	// In production fullscreen this is the slave display's bounds; in
+	// windowed-dev mode this is `intendedSlaveW/H` (the configured slave
+	// display's bounds), NOT the live window size. Use this anywhere a
+	// caller needs to seed/reset rect coords or measure rect-relative
+	// quantities so windowed and fullscreen behave identically.
+	int GetCanvasWidth() const;
+	int GetCanvasHeight() const;
+
 	// Targeted-display offscreen target — all slave content layers
 	// (background, video, image, particles, text) render into this
 	// texture, which is then composited into the physical slave via

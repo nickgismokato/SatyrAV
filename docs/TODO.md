@@ -14,6 +14,9 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 - Expose HTTP/WebSocket endpoint to send out message of which Scene and akt we are currently on.
 - Create full physics model for particle systems, accelerated with hardware
 - A full scanner of a project to see if any scenes inside its `.ngk` files have wrong options/notations/commands. A full scanner to check for existence of assets should also be implemented.
+- (**Critical — moved from 1.6**) Transparent-layer handling for `.png` files. Today the alpha channel in a PNG is composited onto the slave background as normal. Add a per-project `[Options]` toggle (default **off**) that switches the slave to a transparent composite path — the underlying pixels show through PNG alpha instead of being filled by the scene background.
+	- *Why deferred from 1.6:* SDL2 has no per-pixel-alpha window flag; `SDL_WINDOW_TRANSPARENT` is SDL3-only. A SDL2 implementation would require hand-rolling a D3D11 + DirectComposition swapchain to replace SDL2's slave renderer (and a separate ARGB-visual path on Linux/X11). After the 2.0.0 SDL3 migration this becomes a one-flag change on window creation, so it rides naturally with 2.1.
+	- Still needs investigation of how this interacts with the targeted-display black-fill and with the capture-mirror window (capture cards drop alpha; may need a chroma-key or NDI-with-alpha output path).
 
 ---
 
@@ -87,46 +90,56 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 	- Command: `countdown(SECONDS)`
 ---
 
-## Planned for 1.6.0
+## Planned for 1.6 (split into sub-versions)
 
-- (**Critical**) Add wordwrap/newline for very large commands. Currently it just cut through the window and cannot be read. 
-- (**Critical**) Transparent-layer handling for `.png` files. Today the alpha channel in a PNG is composited onto the slave background as normal. Add a per-project `[Options]` toggle (default **off**) that switches the slave to a transparent composite path — the underlying pixels show through PNG alpha instead of being filled by the scene background. Needs investigation of how this interacts with the targeted-display black-fill and with SDL's window transparency flags.
-- (**Critical**) Redo the `Load Project` page to be more organized, having dedicated filters and search feature.
-- Overview Debug:
-	- This should give an overview for a project if it is missing files, a scene has an invalid command or option.
-	- Use the key `O` inside the debug menu to open it.
-- Make debug menu have a clear discription that you can use `S` and `O` to open other menus.
-- (**Critical**) Make the pausing of a video with `K`, freeze the last frame and hold it instead of just shutting down completely.
-- Add a global logger for `SatyrAV` and put it in a `log` folder parallel to the `project` folder
-- Create a custom extension for VSCode for `.ngk`.
-- (**Critical**) Add a bottom text + middle text `textD` which add a italic text at the bottom of the screen. This should take two inputs. The actual text you would normally write with the command `text "<text>"` and a secondary text.
-	- This will be used to write english subtitles. For example:
+The 1.6 cycle is large, so it ships as four sub-versions. Order is dependency- and risk-driven, not pure priority. PNG transparency (originally Critical for 1.6) has been moved to **2.1.0** because SDL2 has no per-pixel-alpha window path; see that section for the full rationale.
+
+### 1.6.0 — shipped
+
+Foundation pass. Slave render correctness + accumulated cheap bugs. See [CHANGELOG.md](CHANGELOG.md) for details.
+
+### 1.6.1 — Text & subtitles
+
+Self-contained text features. No backend churn.
+
+- (**Critical**) Add a bottom text + middle text `textD` which add a italic text at the bottom of the screen. Takes two inputs: the actual text you would normally write with `text "<text>"` and a secondary text.
+	- Used to write english subtitles. For example:
 	```txt
 	textD "Vi har started nu!", "We have started now!"
 	```
-	- The secondary text should be italic and also be at the bottom of the screen. I will figure out how low from the bottom.
-	- This will be used to display english text at the bottom of the screen to have "translations" for our AV for the few english students in the audience. 
-	- If only the first text is given, it should just works like the normal `text` command.
+	- The secondary text should be italic and also be at the bottom of the screen. Final vertical offset TBD.
+	- Used to display english text at the bottom of the screen to have "translations" for the few english students in the audience.
+	- If only the first text is given, it should work like the normal `text` command.
 	- The bottom text should be in italic as default (*can be undone in project options*) and be in a grey colour, maybe at 95% transparency. The latter is not important.
 - Add option for *Italic* and **Bold** text by using `textbf` and `textit` commands.
+
+### 1.6.2 — Load Project page rework
+
+UI-heavy, isolated to one screen.
+
+- (**Critical**) Redo the `Load Project` page to be more organized, having dedicated filters and search feature.
+
+### 1.6.3 — Audio + diagnostics + tooling
+
+Final 1.6 sub-version. Combines audio routing, project-overview tooling, and the VSCode extension.
+
 - (**Critical**) Add option to choose which audio device you want to output sound from.
 	- A list of all audio devices should be in the `Options` page. It should essentially look like how our Secondary Display option looks like currently.
-- Add option to make your function keys `F1-F12` works as a audio controller to play audio.
-	- Essentially in you project file `Schema.toml` there should be an option to assign function keys to play audio. Like if you want to have a door knock/bell as an audio to easily play with a single button throughout all acts and scenes.
+- Add option to make function keys `F1-F12` work as audio hotkeys.
+	- In the project file `schema.toml` there should be an option to assign function keys to play audio. Like a door knock/bell to easily play with a single button throughout all acts and scenes.
+- Overview Debug:
+	- Gives an overview for a project if it is missing files, a scene has an invalid command or option.
+	- Use the key `O` inside the debug menu to open it.
+- Add a global logger for `SatyrAV` and put it in a `log` folder parallel to the `project` folder.
+- Create a custom extension for VSCode for `.ngk`. Lives in a new `VSCodeExt/` folder at repo root.
 
 ---
 
 ## Known bugs
 
-Most critical first:
+Most critical first. Bugs scheduled into a specific sub-version are listed there instead of here.
 
 - Scaling via the Debug menu will make the third output screen/monitor have less resolution when zooming in too much.
 	- Essentially, making the secondary target display too small, will make the output for the third monitor more "pixelated". This, I think, is because of how the resolution is rendered from the second to the third screen. The optimal rendering would be that the third screen display the secondary screen "pre" target display, essentially the resolution of the secondary display.
 - Maybe only one image can be shown at a time. This need to be tested.
 - Not a bug, but we have to check what bit our movies is compatible with. 8/10 and 16 bit should all be suported.
-- Windowed mode of the `Slave Display` isn't truly a scale of one to one with the full screen.
-	- When pressing `C`, it does default but doesn't actually fully exand. It depends on the scale of the window.
-	- Some pictures will not fill out the window.
-	- The `pos` command gets a little "*wonky*" when having the windows not in a $x:y$ aspect ratio where $x\geq y$.
-- `docs/building.md` need to be updated. We don't need to move our files anymore, but should still be there as a troubleshoot step.
- - `Shift+ENTER` doesn't undo last command. It simply just jump back to the last command.

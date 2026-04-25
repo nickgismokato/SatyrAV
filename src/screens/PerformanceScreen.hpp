@@ -58,7 +58,10 @@ private:
 	void JumpToTop();
 	void JumpToBottom();
 	void ExecuteCommand();
-	void PreviousCommand();
+	// Step the prime cursor backward one executable command. Does NOT undo
+	// side effects (audio/video/text already shown stay live); see TODO note
+	// against `Shift+ENTER` — true undo was deferred in 1.6.0.
+	void StepBack();
 	void AdvanceToNextScene();
 	// Re-parse every scene .ngk from disk (U key). Keeps the current
 	// position and the in-memory cache; media/particles are left running

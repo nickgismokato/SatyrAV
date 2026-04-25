@@ -47,7 +47,7 @@ InputAction InputHandler::TranslateKey(SDL_Keycode key, uint16_t mod){
 	if(key == Keys::NAV_LEFT)   return InputAction::NavLeft;
 	if(key == Keys::NAV_RIGHT)  return InputAction::NavRight;
 	if(key == Keys::EXECUTE){
-		if(shift) return InputAction::PrevCommand;
+		if(shift) return InputAction::StepBack;
 		return InputAction::Execute;
 	}
 	if(key == Keys::STOP_VIDEO) return InputAction::ToggleVideo;

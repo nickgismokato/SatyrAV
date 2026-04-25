@@ -2,6 +2,29 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 1.6.0 — shipped
+
+First sub-version of the 1.6 cycle. Foundation pass: slave render correctness and the cheap accumulated bugs. Subtitle/text features (1.6.1), Load Project rework (1.6.2), and audio routing + diagnostics + tooling (1.6.3) follow. PNG transparency was originally planned for 1.6 but moved to 2.1 — SDL2 has no per-pixel-alpha window flag, and a workaround would mean hand-rolling D3D11 + DirectComposition; it falls out for free once the 2.0 SDL3 migration lands.
+
+### Added
+- `MediaPlayer::HasVideo()` in [MediaPlayer.cpp](src/render/MediaPlayer.cpp). True while a video is loaded — including when paused. Distinct from `IsVideoPlaying()`, which gates on `!videoPaused`.
+- `Renderer::GetCanvasWidth/Height()` in [Renderer.cpp](src/render/Renderer.cpp). Returns the rect-authoring-space dims — `intendedSlaveW/H` in windowed-dev mode, slave bounds in fullscreen — so callers that work in `TargetedDisplay` coords don't pick up the live windowed-slave size by mistake.
+- Footer hint in the debug popup: "Press S to edit Display rect" ([DebugPopup.cpp](src/ui/DebugPopup.cpp)). Documents the existing `D`→`S` chord; the planned `O` Overview Debug lands in 1.6.3.
+- Troubleshooting section in [docs/building.md](docs/building.md) covering DLL placement, asset path, `config.toml` path quoting (1.5.1), the SDL2 cmake-prefix rewrite step, and blank-slave diagnosis.
+
+### Changed
+- `K`-pause now freezes the last decoded frame on the slave instead of going black. [SlaveWindow.cpp::DrawMedia](src/render/SlaveWindow.cpp) gates the video-texture draw on `HasVideo()` rather than `IsVideoPlaying()`. The YUV ring upload in `UpdateVideoFrame` is already paused-aware (skips uploads while paused), so the texture retains its last frame and the slave keeps presenting it. `K` again resumes from that frame.
+- Long commands in the master command list wrap onto continuation rows instead of being truncated with `...`. [MasterWindow.cpp::DrawNavigator](src/render/MasterWindow.cpp) tracks a real y cursor, sizes the primed-row highlight to span every wrapped row, and only prints the line number on the first row. Wrap uses `TextRenderer::MeasureWidth` with binary-search fitting and word-aware breaks (the previous `cmdColW / 7` char-budget heuristic underestimated proportional-font widths and never wrapped in practice).
+- Renamed `Shift+ENTER` action from `PrevCommand` to `StepBack` across [InputHandler](src/input/InputHandler.hpp), [PerformanceScreen](src/screens/PerformanceScreen.cpp), and the [HelpPopup](src/ui/HelpPopup.cpp). Help text now reads "Step back (cursor only — no undo)". The action only rewinds the prime cursor; in-flight audio/video/text remain live. True undo (snapshot/replay or per-command inverses) was deferred — not currently a production need.
+
+### Bugfixes
+- Windowed-slave display rect now behaves identically to fullscreen. Root cause: [DisplaySizePopup](src/ui/DisplaySizePopup.cpp) and the auto-rect-default in [PerformanceScreen::SetProject](src/screens/PerformanceScreen.cpp) used live slave-window dims, but `TargetedDisplay` rects are interpreted in production-slave (`intendedSlaveW/H`) pixel space. Three visible symptoms all resolved by switching the relevant call sites to `GetCanvasWidth/Height`:
+  - `C` reset fills the full virtual slave instead of the live window's dims (a sub-rect inside the letterbox).
+  - Images fill the visible (non-black-bar) area — previously the rect was undersized so the inner fit-to-rect compounded with the outer letterbox into a double-letterbox.
+  - `pos` percentages are window-aspect-independent. In a portrait window, a `C` reset previously inherited the portrait dims and mapped `pos%` against them; now the rect is canvas-sized and `pos%` lands in the same relative spot regardless of the dev window's aspect.
+
+---
+
 ## Version 1.5.1 - shipped
 ### Bugfixes
 - Fixed `Naeste`&rarr;`Næste` inside `MasterWindow.cpp`

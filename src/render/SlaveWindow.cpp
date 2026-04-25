@@ -143,8 +143,10 @@ void SlaveWindow::DrawMedia(Renderer& r, MediaPlayer& media){
 	int slaveW = r.GetTargetWidth();
 	int slaveH = r.GetTargetHeight();
 
-	// Video takes full screen (behind text)
-	if(media.IsVideoPlaying()){
+	// Video takes full screen (behind text). Use HasVideo() (not
+	// IsVideoPlaying()) so a paused video keeps presenting its last
+	// decoded frame on `K` instead of disappearing.
+	if(media.HasVideo()){
 		auto* tex = media.GetVideoTexture();
 		if(tex){
 			RenderModifiers noMods;

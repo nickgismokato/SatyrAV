@@ -41,14 +41,18 @@ void PerformanceScreen::SetProject(const ProjectData& project){
 	targetedDisplay = project.schema.targetedDisplay;
 
 	// If the project has never had a targeted rect saved, default to
-	// filling the physical slave display. This keeps existing projects
-	// visually identical until the user actively edits the rect.
+	// filling the production-slave canvas (intendedSlave dims in windowed
+	// mode, slave bounds in fullscreen). Using canvas dims here keeps
+	// the rect's coord space consistent with how it's interpreted by
+	// CompositeTargetedDisplay — otherwise a windowed-mode default would
+	// inherit the live window size, which would shrink/distort once the
+	// composite letterboxes back into intendedSlave space.
 	auto& r = app->GetRenderer();
 	if(targetedDisplay.width <= 0 || targetedDisplay.height <= 0){
-		targetedDisplay.width   = r.GetSlaveWidth();
-		targetedDisplay.height  = r.GetSlaveHeight();
-		targetedDisplay.centerX = r.GetSlaveWidth() / 2;
-		targetedDisplay.centerY = r.GetSlaveHeight() / 2;
+		targetedDisplay.width   = r.GetCanvasWidth();
+		targetedDisplay.height  = r.GetCanvasHeight();
+		targetedDisplay.centerX = r.GetCanvasWidth() / 2;
+		targetedDisplay.centerY = r.GetCanvasHeight() / 2;
 		targetedDisplay.rotation = 0.0f;
 	}
 	engine.LoadProject(project);
@@ -65,7 +69,7 @@ void PerformanceScreen::HandleInput(InputAction action){
 		case InputAction::JumpTop:    JumpToTop(); break;
 		case InputAction::JumpBottom: JumpToBottom(); break;
 		case InputAction::Execute:    ExecuteCommand(); break;
-		case InputAction::PrevCommand: PreviousCommand(); break;
+		case InputAction::StepBack:   StepBack(); break;
 		case InputAction::ToggleVideo: media.ToggleVideoPause(); break;
 		case InputAction::ToggleMusic: media.ToggleAudioPause(); break;
 		case InputAction::ReloadScenes: ReloadScenes(); break;
@@ -114,8 +118,8 @@ void PerformanceScreen::Draw(Renderer& r, TextRenderer& text){
 	// which is then composited into the physical slave (with the area outside
 	// the targeted rect painted solid black).
 	if(r.GetSlave()){
-		int tw = targetedDisplay.width  > 0 ? targetedDisplay.width  : r.GetSlaveWidth();
-		int th = targetedDisplay.height > 0 ? targetedDisplay.height : r.GetSlaveHeight();
+		int tw = targetedDisplay.width  > 0 ? targetedDisplay.width  : r.GetCanvasWidth();
+		int th = targetedDisplay.height > 0 ? targetedDisplay.height : r.GetCanvasHeight();
 		if(r.EnsureSlaveTarget(tw, th)){
 			r.BeginSlaveContent();
 			// (1.5) Canvas-relative text: scale slave glyph rendering by
@@ -246,9 +250,9 @@ void PerformanceScreen::PreloadForCurrentScene(){
 	// Video decode output is sized to the targeted rect so decode cost
 	// scales with what's actually visible, not the physical projector.
 	int tw = targetedDisplay.width  > 0 ? targetedDisplay.width
-		: app->GetRenderer().GetSlaveWidth();
+		: app->GetRenderer().GetCanvasWidth();
 	int th = targetedDisplay.height > 0 ? targetedDisplay.height
-		: app->GetRenderer().GetSlaveHeight();
+		: app->GetRenderer().GetCanvasHeight();
 	media.PreloadVideosForScenes(videoPriority, slaveR, tw, th);
 }
 
@@ -357,7 +361,7 @@ void PerformanceScreen::ExecuteCommand(){
 	}
 }
 
-void PerformanceScreen::PreviousCommand(){
+void PerformanceScreen::StepBack(){
 	if(activeColumn != 2) return;
 
 	int prevExec = engine.PrevExecutableIndex(primedAkt, primedScene, primedCmd - 1);
@@ -536,9 +540,9 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 			if(ext == ".mp4" || ext == ".avi" || ext == ".mkv" ||
 				ext == ".webm" || ext == ".mov"){
 				int tw = targetedDisplay.width  > 0 ? targetedDisplay.width
-					: app->GetRenderer().GetSlaveWidth();
+					: app->GetRenderer().GetCanvasWidth();
 				int th = targetedDisplay.height > 0 ? targetedDisplay.height
-					: app->GetRenderer().GetSlaveHeight();
+					: app->GetRenderer().GetCanvasHeight();
 				media.PlayVideo(fullPath, renderer, tw, th);
 			} else{
 				media.PlayAudio(fullPath);
@@ -595,9 +599,9 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 				// Spawn bounds follow the targeted rect so particles stay
 				// within the visible area.
 				int tw = targetedDisplay.width  > 0 ? targetedDisplay.width
-					: app->GetRenderer().GetSlaveWidth();
+					: app->GetRenderer().GetCanvasWidth();
 				int th = targetedDisplay.height > 0 ? targetedDisplay.height
-					: app->GetRenderer().GetSlaveHeight();
+					: app->GetRenderer().GetCanvasHeight();
 
 				// (1.4) Resolve the effective tuning cascade for this type
 				// and stamp it onto a local copy of the command modifiers

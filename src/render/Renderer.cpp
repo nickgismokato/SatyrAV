@@ -194,6 +194,16 @@ int Renderer::GetSlaveHeight() const{
 	return slaveH;
 }
 
+int Renderer::GetCanvasWidth() const{
+	if(windowedMode && intendedSlaveW > 0) return intendedSlaveW;
+	return GetSlaveWidth();
+}
+
+int Renderer::GetCanvasHeight() const{
+	if(windowedMode && intendedSlaveH > 0) return intendedSlaveH;
+	return GetSlaveHeight();
+}
+
 int Renderer::GetTargetWidth() const{
 	return (targetActive && targetW > 0) ? targetW : slaveW;
 }

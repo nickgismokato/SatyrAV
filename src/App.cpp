@@ -188,8 +188,8 @@ void App::Run(){
 						&perfScreen->GetTargetedDisplay(),
 						&perfScreen->GetSlaveWindow(),
 						renderer.GetSlave(),
-						renderer.GetSlaveWidth(),
-						renderer.GetSlaveHeight(),
+						renderer.GetCanvasWidth(),
+						renderer.GetCanvasHeight(),
 						perfScreen->GetProjectPath());
 					debugPopup.Hide();
 				}

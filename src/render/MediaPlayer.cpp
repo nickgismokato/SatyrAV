@@ -822,6 +822,14 @@ bool MediaPlayer::IsVideoPlaying() const{
 	return active != nullptr && active->started && !videoPaused;
 }
 
+// (1.6) True while a video is loaded — including when paused. Lets the
+// slave keep drawing the last decoded frame on `K` instead of falling
+// back to black. The texture retains its last YUV upload because
+// `Update()` skips `SDL_UpdateYUVTexture` while paused.
+bool MediaPlayer::HasVideo() const{
+	return active != nullptr && active->started && active->texture != nullptr;
+}
+
 SDL_Texture* MediaPlayer::GetVideoTexture() const{ return active ? active->texture : nullptr; }
 int MediaPlayer::GetVideoWidth() const{ return active ? active->outWidth : 0; }
 int MediaPlayer::GetVideoHeight() const{ return active ? active->outHeight : 0; }
