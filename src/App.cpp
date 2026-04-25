@@ -226,15 +226,21 @@ void App::Run(){
 
 			InputAction action = input.Poll(event);
 
-			// Global popup toggles — H and D toggle popups
-			if(action == InputAction::Help){
-				helpPopup.inProject = inProject;
-				helpPopup.Toggle();
-				continue;
-			}
-			if(action == InputAction::Debug){
-				debugPopup.Toggle();
-				continue;
+			// Global popup toggles — H and D toggle popups. Suppressed
+			// while a text field has focus so typing letters doesn't
+			// trip them (the search field on LoadProject and the creator
+			// field on NewProject are the obvious offenders). The popup
+			// keys are only meaningful outside of text input anyway.
+			if(!input.IsTextInputMode()){
+				if(action == InputAction::Help){
+					helpPopup.inProject = inProject;
+					helpPopup.Toggle();
+					continue;
+				}
+				if(action == InputAction::Debug){
+					debugPopup.Toggle();
+					continue;
+				}
 			}
 
 			// Program works normally even with popups open

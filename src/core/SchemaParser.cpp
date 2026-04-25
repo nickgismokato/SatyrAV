@@ -124,6 +124,25 @@ RevySchema SchemaParser::ParseFile(const std::string& schemaPath){
 		schema.subtitlePosY = (float)tbl["Options"]["SubtitlePosY"].value_or(90.0);
 
 		schema.revyName = tbl["RevyData"]["Revy"].value_or(std::string("Unnamed Revy"));
+		// (1.6.2) Creator is optional — older projects don't have it.
+		schema.creatorName = tbl["RevyData"]["Creator"].value_or(std::string(""));
+		// Try to extract a trailing 4-digit year from `Revy`, e.g.
+		// "MatRevyJubi 2025" → year 2025. Falls back to 0 when no
+		// year is present, which the LoadProject sort treats as "unknown".
+		{
+			const auto& nm = schema.revyName;
+			if(nm.size() >= 4){
+				size_t end = nm.size();
+				size_t start = end > 4 ? end - 4 : 0;
+				bool allDigits = true;
+				for(size_t i = start; i < end; i++){
+					if(nm[i] < '0' || nm[i] > '9'){ allDigits = false; break; }
+				}
+				if(allDigits){
+					try{ schema.year = std::stoi(nm.substr(start, 4)); } catch(...){}
+				}
+			}
+		}
 		schema.aktCount = tbl["Structure"]["akter"].value_or(0);
 
 		// [Display] — targeted display rect. Missing keys leave zeros,

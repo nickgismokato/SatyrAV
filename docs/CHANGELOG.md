@@ -2,6 +2,27 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 1.6.2 — shipped
+
+Third sub-version of the 1.6 cycle. Load Project page redesigned around metadata: live search, Revy-type filter, sort, and grouped two-column rendering with creator authorship. Schema gains a `Creator` field so authorship is persisted. One pre-existing UX wart fixed along the way (typing `H`/`D` in any text field no longer trips the popup toggles).
+
+### Added
+- New `Load Project` screen layout in [LoadProjectScreen.{hpp,cpp}](src/screens/LoadProjectScreen.cpp). Full rewrite around a `ProjectInfo` struct populated from a single-pass `schema.toml` scan (no `.ngk` parsing, so the load is fast even on large project archives). New interleaved `LoadRow` model — group headers and project rows in one vector; navigation skips headers automatically. `MoveSelection`, `JumpSelectionToTop`/`Bottom`, plus a custom multi-column table render replace the old flat `ListView`.
+- Live search field — case-insensitive substring match against the project's full Revy name, applied on every keystroke.
+- `Revy` filter dropdown — auto-built from the live scan as `"All"` plus every distinct group alphabetically. Selecting `Kemi` (or any other revy) collapses the table to that revy only. Up/Down arrows flip the option live without expanding; ENTER toggles the panel. Selection survives a re-scan when the group still exists.
+- `Sort` dropdown — `Year` (default, descending), `Recent` (folder mtime descending), `Name` (A→Z). Sort applies *within* each group so the section layout stays stable across modes.
+- Grouped table rendering: each group gets a header row (`MatRevy`, `KemiRevy`, …) and projects underneath as two columns — full Revy name on the left, creator on the right (right-aligned). Empty creator (legacy projects authored before 1.6.2) renders as a dim em-dash so the column stays visually consistent.
+- TAB cycles focus between Search → Filter → Sort → List. ESC defocuses to the list, then to MainMenu when already there. ENTER on the search field jumps to the list. Visible focus via existing widget border-colour flip.
+- New `creatorName` and `year` (parsed) fields on [RevySchema](src/core/Types.hpp). [SchemaParser.cpp](src/core/SchemaParser.cpp) reads `[RevyData].Creator` (default empty) and extracts a trailing 4-digit year from `[RevyData].Revy` for sorting purposes. [Project.cpp::GenerateDefaultSchema](src/core/Project.cpp) writes `Creator = "<name>"` so new projects persist authorship; [Project.cpp::Load](src/core/Project.cpp) mirrors `creator` and `year` up to `ProjectData` so existing top-level callers see the persisted values.
+
+### Changed
+- Group key derivation strips both a trailing 4-digit year (e.g. `MatRevy 2025` → `MatRevy`) and a trailing `Jubi` suffix (e.g. `MatRevyJubi` → `MatRevy`), so jubilee editions and regular years share a single group.
+
+### Bugfixes
+- Pressing `H` or `D` while a text field has focus no longer trips the global Help/Debug popup toggles. The handler in [App.cpp](src/App.cpp) now suppresses those shortcuts while `InputHandler::IsTextInputMode()` is true. Affected the new Load Project search field most visibly, but the same trap existed on the New Project creator field since 1.0.
+
+---
+
 ## Version 1.6.1 — shipped
 
 Second sub-version of the 1.6 cycle. Real italic / bold typography on the slave display, plus a `textD` translation/subtitle command for bilingual revues. Built around four loaded font faces (regular / italic / bold / bold-italic) with a scene → project → global cascade and a shared `FONTS` directory so projects can reference fonts by short filename.

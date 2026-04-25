@@ -102,11 +102,9 @@ Foundation pass. Slave render correctness + accumulated cheap bugs. See [CHANGEL
 
 Real italic / bold typography on the slave; `textD` translation/subtitle command; shared `FONTS` directory; bundled DejaVu Sans family. See [CHANGELOG.md](CHANGELOG.md) for details.
 
-### 1.6.2 — Load Project page rework
+### 1.6.2 — shipped
 
-UI-heavy, isolated to one screen.
-
-- (**Critical**) Redo the `Load Project` page to be more organized, having dedicated filters and search feature.
+Load Project page redesign — search, Revy-type filter, sort, grouped table with creator column. See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ### 1.6.3 — Audio + diagnostics + tooling
 

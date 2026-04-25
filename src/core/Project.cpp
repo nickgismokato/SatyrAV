@@ -54,6 +54,13 @@ ProjectData Project::Load(const std::string& projectPath){
 	if(!fs::exists(schemaPath)) return data;
 
 	data.schema = SchemaParser::ParseFile(schemaPath);
+	// (1.6.2) Mirror creator up to ProjectData so callers reading the
+	// top-level field see the persisted value. revyName/year stay split
+	// across `data` (bare name + int year, set at create-time) and
+	// `schema` (combined "Name YYYY" string + parsed int) intentionally
+	// — the LoadProject screen reads the schema fields directly.
+	data.creatorName = data.schema.creatorName;
+	if(data.schema.year > 0) data.year = data.schema.year;
 
 	// Load all scene files
 	for(auto& akt : data.schema.akts){
@@ -115,7 +122,11 @@ void Project::GenerateDefaultSchema(const std::string& path, const ProjectData& 
 	out << "[RevyData]\n";
 	// data.revyName already includes the Jubi suffix and/or custom name
 	// chosen by the user in the New Project screen.
-	out << "Revy = \"" << data.revyName << " " << data.year << "\"\n\n";
+	out << "Revy = \"" << data.revyName << " " << data.year << "\"\n";
+	// (1.6.2) Persist the creator so the Load Project screen can show
+	// authorship in its second column. Empty string is acceptable for
+	// users who skip the field; older projects can backfill by hand.
+	out << "Creator = \"" << data.creatorName << "\"\n\n";
 	out << "[Structure]\n";
 	out << "akter = 1\n";
 	out << "[Structure.Akt1]\n";

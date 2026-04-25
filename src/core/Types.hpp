@@ -320,6 +320,11 @@ struct Akt{
 
 struct RevySchema{
 	std::string revyName;
+	// (1.6.2) Creator name from `[RevyData].Creator`. Empty for projects
+	// authored before 1.6.2 — the LoadProject screen renders blank in
+	// that case rather than fabricating a value.
+	std::string creatorName;
+	int year = 0;
 	int fontSize = 25;
 	int aktCount = 0;
 	std::vector<Akt> akts;
