@@ -28,6 +28,10 @@ void OptionsScreen::OnEnter(){
 	// the right slave display.
 	captureDropdown.label = "Capture Mirror";
 
+	// (1.6.3) Audio output device.
+	audioDeviceDropdown.label = "Audio Output";
+	PopulateAudioDevices();
+
 	// Load current values
 	auto& config = Config::Instance();
 	fontSizeField.SetText(std::to_string(config.fontSize));
@@ -48,6 +52,18 @@ void OptionsScreen::OnEnter(){
 		}
 	}
 	captureDropdown.SetSelectedIndex(captureOpt);
+
+	// (1.6.3) Map saved audio device name → dropdown option. Empty = "Default".
+	int audioOpt = 0;
+	if(!config.audioDeviceName.empty()){
+		for(size_t i = 1; i < audioDeviceNames.size(); i++){
+			if(audioDeviceNames[i] == config.audioDeviceName){
+				audioOpt = (int)i;
+				break;
+			}
+		}
+	}
+	audioDeviceDropdown.SetSelectedIndex(audioOpt);
 
 	// Set font colour dropdown to match saved config
 	if(config.fontColour.r == Colours::WHITE.r && config.fontColour.g == Colours::WHITE.g){
@@ -74,6 +90,26 @@ void OptionsScreen::PopulateDisplays(){
 	}
 	if(names.empty()) names.push_back("0: No display found");
 	displayDropdown.SetOptions(names);
+}
+
+void OptionsScreen::PopulateAudioDevices(){
+	// (1.6.3) Enumerate playback devices. SDL_GetNumAudioDevices(0) →
+	// output count; index 0 in the dropdown maps to the empty string
+	// (system default), keeping older configs that have no [audio] block
+	// working unchanged.
+	audioDeviceNames.clear();
+	std::vector<std::string> labels;
+	audioDeviceNames.push_back("");
+	labels.push_back("Default");
+
+	int count = SDL_GetNumAudioDevices(0);
+	for(int i = 0; i < count; i++){
+		const char* nm = SDL_GetAudioDeviceName(i, 0);
+		if(!nm) continue;
+		audioDeviceNames.emplace_back(nm);
+		labels.emplace_back(nm);
+	}
+	audioDeviceDropdown.SetOptions(labels);
 }
 
 void OptionsScreen::PopulateCaptureOptions(){
@@ -129,6 +165,7 @@ void OptionsScreen::HandleInput(InputAction action){
 	if(focusedField == 3) activeDropdown = &displayDropdown;
 	if(focusedField == 4) activeDropdown = &slaveModeDropdown;
 	if(focusedField == 5) activeDropdown = &captureDropdown;
+	if(focusedField == 6) activeDropdown = &audioDeviceDropdown;
 
 	if(activeDropdown && activeDropdown->IsExpanded()){
 		switch(action){
@@ -157,6 +194,7 @@ void OptionsScreen::HandleInput(InputAction action){
 		displayDropdown.Close();
 		slaveModeDropdown.Close();
 		captureDropdown.Close();
+		audioDeviceDropdown.Close();
 		UpdateFocus();
 	} else if(action == InputAction::NavDown || action == InputAction::Tab){
 		focusedField = (focusedField + 1) % FIELD_COUNT;
@@ -164,6 +202,7 @@ void OptionsScreen::HandleInput(InputAction action){
 		displayDropdown.Close();
 		slaveModeDropdown.Close();
 		captureDropdown.Close();
+		audioDeviceDropdown.Close();
 		UpdateFocus();
 	}
 }
@@ -175,6 +214,7 @@ void OptionsScreen::UpdateFocus(){
 	displayDropdown.focused    = (focusedField == 3);
 	slaveModeDropdown.focused  = (focusedField == 4);
 	captureDropdown.focused    = (focusedField == 5);
+	audioDeviceDropdown.focused = (focusedField == 6);
 
 	bool needsText = (focusedField == 1 || focusedField == 2);
 	app->GetInput().SetTextInputMode(needsText);
@@ -205,6 +245,12 @@ void OptionsScreen::SaveConfig(){
 	} else{
 		config.captureEnabled = true;
 		config.captureDisplayIndex = captureOptionToDisplay[capOpt];
+	}
+
+	// (1.6.3) Audio device — option 0 = "" (default), else the selected name.
+	int audOpt = audioDeviceDropdown.GetSelectedIndex();
+	if(audOpt >= 0 && audOpt < (int)audioDeviceNames.size()){
+		config.audioDeviceName = audioDeviceNames[audOpt];
 	}
 
 	config.Save();
@@ -295,6 +341,11 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 	}
 
 	y += 80;
+	audioDeviceDropdown.x = fieldX; audioDeviceDropdown.y = y;
+	audioDeviceDropdown.w = fieldW;
+	audioDeviceDropdown.Draw(r, text);
+
+	y += 80;
 	Colour btnC = (focusedField == FIELD_COUNT - 1) ? Colours::ORANGE : Colours::WHITE;
 	text.DrawTextCentered(renderer, "[ Save ]", centerX, y, btnC);
 
@@ -303,6 +354,7 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 	displayDropdown.DrawOverlay(r, text);
 	slaveModeDropdown.DrawOverlay(r, text);
 	captureDropdown.DrawOverlay(r, text);
+	audioDeviceDropdown.DrawOverlay(r, text);
 
 }
 

@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <unordered_map>
+#include <functional>
 
 namespace SatyrAV{
 
@@ -630,7 +631,19 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 	else if(keyword == "stopParticleCont") cmd.type = CommandType::StopParticleCont;
 	else if(keyword == "show")         cmd.type = CommandType::Show;
 	else if(keyword == "comment")      cmd.type = CommandType::Comment;
-	else                               cmd.type = CommandType::Text;
+	else{
+		cmd.type = CommandType::Text;
+		// (1.6.3) Heuristic: a leading bareword (no quote, no `+`, no
+		// `#`) that didn't match any keyword is almost certainly a typo
+		// — flag it so the Overview Debug popup can surface it. Strings
+		// that genuinely start with text (quoted or with leading non-
+		// alpha) skip this path and behave as before.
+		if(!keyword.empty()){
+			char c0 = keyword.front();
+			bool isBareWord = (c0 != '"' && c0 != '\'' && c0 != '+' && c0 != '#');
+			if(isBareWord) cmd.unknownKeyword = keyword;
+		}
+	}
 
 	// Parse modifiers from the argument
 	if(cmd.type == CommandType::Comment){
@@ -1123,6 +1136,24 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 			default: break;
 		}
 	}
+
+	// (1.6.3) Lift any per-command `unknownKeyword` markers into the
+	// scene's warnings list so Overview Debug can render them without
+	// re-walking commands. Done after parsing so deeply-nested commands
+	// (compound bodies, loop bodies, group bodies) all get covered by
+	// recursing through subCommands and loopBody.
+	std::function<void(const Command&)> walk;
+	walk = [&](const Command& c){
+		if(!c.unknownKeyword.empty()){
+			Scene::Warning w;
+			w.lineNumber = c.lineNumber;
+			w.message = "Unknown keyword: '" + c.unknownKeyword + "'";
+			scene.warnings.push_back(std::move(w));
+		}
+		for(const auto& sub : c.subCommands) walk(sub);
+		for(const auto& sub : c.loopBody)    walk(sub);
+	};
+	for(const auto& c : scene.commands) walk(c);
 
 	return scene;
 }

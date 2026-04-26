@@ -140,7 +140,13 @@ void Project::GenerateDefaultSchema(const std::string& path, const ProjectData& 
 	out << "# Height   = 1080\n";
 	out << "# CenterX  = 960\n";
 	out << "# CenterY  = 540\n";
-	out << "# Rotation = 0.0\n";
+	out << "# Rotation = 0.0\n\n";
+	out << "# (1.6.3) [Hotkeys] — bind F1..F12 to audio files for one-tap playback\n";
+	out << "# during a performance (e.g. doorbell, gunshot, applause). Files are\n";
+	out << "# resolved against this project's `sound/` folder.\n";
+	out << "# [Hotkeys]\n";
+	out << "# F1  = \"knock.mp3\"\n";
+	out << "# F12 = \"applause.mp3\"\n";
 }
 
 void Project::GenerateExampleScene(const std::string& path){

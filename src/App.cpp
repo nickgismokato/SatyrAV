@@ -2,6 +2,8 @@
 #include "core/Config.hpp"
 #include "core/Platform.hpp"
 #include "core/AssetPath.hpp"
+#include "core/Logger.hpp"
+#include "core/Version.hpp"
 #include "screens/SplashScreen.hpp"
 #include "screens/MainMenuScreen.hpp"
 #include "screens/NewProjectScreen.hpp"
@@ -23,6 +25,12 @@ bool App::Init(){
 
 	auto& config = Config::Instance();
 	config.Load(Platform::GetDefaultConfigPath());
+
+	// (1.6.3) Bring up the logger before anything else logs. Init is
+	// idempotent and quietly degrades to stderr-only when the logs dir
+	// can't be written to.
+	Logger::Instance().Init(Platform::GetDefaultLogsDir());
+	Logger::Instance().Infof("SatyrAV v%s starting", SATYR_AV_VERSION);
 
 	if(!renderer.InitMaster(config.masterWidth, config.masterHeight)){
 		return false;
@@ -177,16 +185,19 @@ void App::Run(){
 				helpPopup.HandleMouseDown(event.button.x, event.button.y);
 				debugPopup.HandleMouseDown(event.button.x, event.button.y);
 				sizePopup.HandleMouseDown(event.button.x, event.button.y);
+				overviewPopup.HandleMouseDown(event.button.x, event.button.y);
 			}
 			if(event.type == SDL_MOUSEBUTTONUP){
 				helpPopup.HandleMouseUp();
 				debugPopup.HandleMouseUp();
 				sizePopup.HandleMouseUp();
+				overviewPopup.HandleMouseUp();
 			}
 			if(event.type == SDL_MOUSEMOTION){
 				helpPopup.HandleMouseMove(event.motion.x, event.motion.y);
 				debugPopup.HandleMouseMove(event.motion.x, event.motion.y);
 				sizePopup.HandleMouseMove(event.motion.x, event.motion.y);
+				overviewPopup.HandleMouseMove(event.motion.x, event.motion.y);
 			}
 
 			// ── Size popup has absolute input priority while visible. ──
@@ -220,6 +231,40 @@ void App::Run(){
 						renderer.GetCanvasHeight(),
 						perfScreen->GetProjectPath());
 					debugPopup.Hide();
+				}
+				continue;
+			}
+
+			// ── (1.6.3) Open overview popup: O while debug popup is open. ──
+			// Mirrors the D→S chord for the rect editor. Walks every scene
+			// of the active project and reports parser warnings + missing
+			// media files.
+			if(event.type == SDL_KEYDOWN &&
+				event.key.keysym.sym == SDLK_o &&
+				debugPopup.IsVisible() &&
+				inProject){
+				auto* perfScreen = static_cast<PerformanceScreen*>(
+					screens[ScreenID::Performance].get());
+				if(perfScreen){
+					overviewPopup.Open(perfScreen->GetCueEngine(),
+						perfScreen->GetProjectPath());
+					debugPopup.Hide();
+				}
+				continue;
+			}
+
+			// ── Overview popup is modal while visible. ESC closes; UP/DOWN
+			// scrolls; everything else is swallowed so the underlying
+			// screen doesn't react.
+			if(overviewPopup.IsVisible()){
+				if(event.type == SDL_KEYDOWN){
+					if(event.key.keysym.sym == Keys::QUIT){
+						overviewPopup.Close();
+					} else if(event.key.keysym.sym == SDLK_UP){
+						overviewPopup.ScrollUp();
+					} else if(event.key.keysym.sym == SDLK_DOWN){
+						overviewPopup.ScrollDown();
+					}
 				}
 				continue;
 			}
@@ -258,6 +303,7 @@ void App::Run(){
 			helpPopup.Draw(renderer, textRenderer);
 			debugPopup.Draw(renderer, textRenderer);
 			sizePopup.Draw(renderer, textRenderer);
+			overviewPopup.Draw(renderer, textRenderer);
 
 			// Single present for the entire frame
 			renderer.PresentMaster();
@@ -274,6 +320,8 @@ void App::Run(){
 void App::Quit(){ running = false; }
 
 void App::Shutdown(){
+	Logger::Instance().Infof("SatyrAV shutting down cleanly");
+	Logger::Instance().Shutdown();
 	textRenderer.Shutdown();
 	renderer.Shutdown();
 	SDL_Quit();

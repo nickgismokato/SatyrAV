@@ -26,7 +26,12 @@ enum class InputAction{
 	StepBack,
 	ReloadScenes,
 	TextInput,
-	Backspace
+	Backspace,
+	// (1.6.3) F1..F12 collapsed into one action with an integer payload
+	// on InputHandler. Project-level `[Hotkeys]` table maps the number
+	// to an audio file. Saves enumerating twelve actions and twelve
+	// switch cases at every dispatch site.
+	FunctionKey
 };
 
 class InputHandler{
@@ -40,9 +45,14 @@ public:
 	// The last character(s) entered via SDL_TEXTINPUT (valid after TextInput action)
 	const std::string& GetLastTextInput() const;
 
+	// (1.6.3) Last F-number pressed; valid only on the same Poll() that
+	// returned InputAction::FunctionKey. Range 1..12.
+	int GetLastFunctionKey() const;
+
 private:
 	bool textInputMode = false;
 	std::string lastTextInput;
+	int  lastFunctionKey = 0;
 
 	InputAction TranslateKey(SDL_Keycode key, uint16_t mod);
 };

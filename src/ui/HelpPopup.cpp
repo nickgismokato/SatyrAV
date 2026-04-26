@@ -7,7 +7,7 @@ void HelpPopup::Draw(Renderer& r, TextRenderer& text){
 	if(!visible) return;
 
 	int lineH = text.GetLineHeight() + 2;
-	int lines = inProject ? 19 : 14;
+	int lines = inProject ? 20 : 14;
 	int contentH = lines * lineH + 60;
 	int contentW = 520;
 
@@ -42,6 +42,7 @@ void HelpPopup::Draw(Renderer& r, TextRenderer& text){
 		text.DrawText(renderer, "  K              Toggle video pause", x, y, txt); y += lineH;
 		text.DrawText(renderer, "  M              Toggle music pause", x, y, txt); y += lineH;
 		text.DrawText(renderer, "  U              Reload scene files from disk", x, y, txt); y += lineH;
+		text.DrawText(renderer, "  F1-F12         Project audio hotkeys ([Hotkeys] in schema)", x, y, txt); y += lineH;
 	} else{
 		text.DrawText(renderer, "Menus", x, y, hdr); y += lineH;
 		text.DrawText(renderer, "  UP/DOWN        Select option", x, y, txt); y += lineH;

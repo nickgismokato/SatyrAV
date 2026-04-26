@@ -5,11 +5,24 @@ namespace SatyrAV{
 
 InputAction InputHandler::Poll(SDL_Event& event){
 	lastTextInput.clear();
+	lastFunctionKey = 0;
 
 	// TAB and ESC always work, even in text input mode
 	if(event.type == SDL_KEYDOWN){
 		if(event.key.keysym.sym == Keys::TAB) return InputAction::Tab;
 		if(event.key.keysym.sym == Keys::QUIT) return InputAction::Quit;
+		// (1.6.3) F1..F12 — encode the number on the side channel and
+		// surface a single InputAction::FunctionKey to the screen.
+		// Suppressed in text-input mode so a function-key press inside
+		// a text field doesn't accidentally fire a hotkey while the
+		// user is typing.
+		if(!textInputMode){
+			SDL_Keycode k = event.key.keysym.sym;
+			if(k >= SDLK_F1 && k <= SDLK_F12){
+				lastFunctionKey = (int)(k - SDLK_F1) + 1;
+				return InputAction::FunctionKey;
+			}
+		}
 	}
 
 	// Text input events — only when text mode is active
@@ -73,6 +86,10 @@ void InputHandler::SetTextInputMode(bool enabled){
 
 const std::string& InputHandler::GetLastTextInput() const{
 	return lastTextInput;
+}
+
+int InputHandler::GetLastFunctionKey() const{
+	return lastFunctionKey;
 }
 
 } // namespace SatyrAV

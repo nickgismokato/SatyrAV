@@ -77,6 +77,11 @@ public:
 	float  GetSubtitleTransparency() const;
 	float  GetSubtitlePosY() const;
 
+	// (1.6.3) Function-key audio hotkey. Returns the configured filename
+	// for F<num> (1..12), or empty string when nothing is bound. Resolved
+	// against the project's media folders by the dispatcher.
+	std::string GetFunctionKeyAudio(int num) const;
+
 	// (1.4) Resolve the effective particle tuning for `type` by walking
 	// scene → project → built-in defaults. Only fields the author explicitly
 	// set override the level below; everything else falls through.

@@ -2,7 +2,27 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
-## Version 1.6.2 — shipped
+## Version 1.6.3 — shipped
+
+Final sub-version of the 1.6 cycle. Audio routing, project audio hotkeys, parser-warning surfacing via a new Overview Debug popup, a process-wide log file, and a baseline VSCode extension for `.ngk` syntax highlighting.
+
+### Added
+- **Audio output device picker.** New `Config::audioDeviceName` (string; empty = system default) persisted as `[audio] device` in `config.toml`. [MediaPlayer::OpenAudioDeviceFor](src/render/MediaPlayer.cpp) honours it via `SDL_OpenAudioDevice(name, ...)`, with a single-retry fallback to `nullptr` if the saved device is unplugged at boot. [OptionsScreen](src/screens/OptionsScreen.cpp) gets a new `Audio Output` dropdown enumerating `SDL_GetNumAudioDevices(0)` / `SDL_GetAudioDeviceName(i, 0)`; option 0 is `Default`. Lets production setups route SatyrAV sound to a specific HDMI / USB interface independent of the system default.
+- **F1–F12 audio hotkeys** for one-tap playback during a performance. New `[Hotkeys]` table in `schema.toml` (`F1 = "knock.mp3"`, …) parsed into `RevySchema::functionKeyAudio`. `InputAction::FunctionKey` collapses all twelve keys into one action with a numeric side channel on `InputHandler` (`GetLastFunctionKey()`); suppressed in text-input mode so typing in a search field doesn't fire a hotkey. [CueEngine::GetFunctionKeyAudio](src/core/CueEngine.cpp) returns the bound filename; [PerformanceScreen](src/screens/PerformanceScreen.cpp) resolves through the same path lookup as `play` (so `"knock.mp3"` picks up `<project>/sound/knock.mp3`). New projects get a commented `[Hotkeys]` example block via [Project::GenerateDefaultSchema](src/core/Project.cpp). Help popup advertises the new row.
+- **Hotkey toggle behaviour.** Pressing the *same* F-key while its audio is still playing stops the sound instead of restarting it — useful for long ambient cues (knocking, alarm) where the performer wants one key to drive both start and stop. Different F-key while one is playing replaces the running sound transparently. Tracked via a single `currentHotkeyNum` field on the screen.
+- **Global logger.** New [core/Logger.{hpp,cpp}](src/core/Logger.cpp) singleton: per-day rotating file at `<SatyrAV>/log/satyrav-YYYY-MM-DD.log`, mirrored to stderr so dev-time visibility is unchanged. Mutex-guarded so the decode-thread sites in `MediaPlayer` can log safely. printf-style `Debugf`/`Infof`/`Warnf`/`Errorf` API; per-process file-level filter (default `Info`). New `Platform::GetDefaultLogsDir()` resolves `~/Documents/SatyrAV/log` on Windows / `~/satyrav/log` elsewhere. Initialised right after `Config::Load` and torn down in `App::Shutdown` with explicit `starting`/`shutting down cleanly` markers.
+- **Overview Debug popup** (`D → O` chord while a project is open, mirroring `D → S` for the rect editor). New [ui/OverviewPopup.{hpp,cpp}](src/ui/OverviewPopup.cpp) walks every scene of the active project on open and reports per-scene parser warnings, the count of executable commands, and any `show` / `play` references that don't resolve to a file on disk. Modal — ESC closes, UP/DOWN scrolls, everything else is swallowed. Cached at open time so projects with many scenes don't re-scan per frame.
+- **Parser warnings surfaced in Scene state.** [SceneParser.cpp::ParseSingleCommand](src/core/SceneParser.cpp) now flags bareword keywords that don't match any known command (typo of `txet "..."` for `text`, etc.) by setting `Command::unknownKeyword`; the per-scene parse loop lifts those into `Scene::warnings` recursively (covers compound + loop bodies). Behaviour fallback is unchanged — a flagged command still parses as `Text` so the scene runs — but the warning is now visible to the author via Overview Debug.
+- **VSCode `.ngk` syntax extension.** New `VSCodeExt/` folder at repo root with `package.json`, `language-configuration.json`, `syntaxes/ngk.tmLanguage.json`, `README.md`, `.vscodeignore`. Grammar covers section headers, every command keyword (incl. all 1.6.1 text variants and `textD`), modifier wrappers (incl. `bold` / `it`), particle types, distribution constants, group / loop block keywords, strings, numbers, line comments. README documents three install paths — copy-folder (recommended, no toolchain), F5 dev-load, and `vsce package` (with workarounds for Node 18 hitting `vsce` 3.x's Node-20 requirement).
+
+### Changed
+- Debug popup footer hint now reads `Press S: Display rect    O: Overview Debug` to advertise the new chord alongside the existing one.
+- New `[Hotkeys]` example block emitted by `GenerateDefaultSchema` so users discover the feature when poking around a fresh project's `schema.toml`.
+
+### Bugfixes
+- `MediaPlayer::OpenAudioDeviceFor` now retries with `nullptr` (system default) when the configured device name is no longer present — a USB interface unplugged between sessions would previously fail the open and silence all audio until the user fixed `config.toml` by hand.
+
+---
 
 Third sub-version of the 1.6 cycle. Load Project page redesigned around metadata: live search, Revy-type filter, sort, and grouped two-column rendering with creator authorship. Schema gains a `Creator` field so authorship is persisted. One pre-existing UX wart fixed along the way (typing `H`/`D` in any text field no longer trips the popup toggles).
 

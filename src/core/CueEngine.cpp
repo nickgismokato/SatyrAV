@@ -234,6 +234,12 @@ bool CueEngine::GetEffectiveCapitalize() const{
 	return projectData.schema.capitalize;
 }
 
+std::string CueEngine::GetFunctionKeyAudio(int num) const{
+	auto& m = projectData.schema.functionKeyAudio;
+	auto it = m.find(num);
+	return it != m.end() ? it->second : std::string();
+}
+
 bool   CueEngine::GetSubtitleItalic() const       { return projectData.schema.subtitleItalic; }
 Colour CueEngine::GetSubtitleColour() const       { return projectData.schema.subtitleColour; }
 float  CueEngine::GetSubtitleTransparency() const { return projectData.schema.subtitleTransparency; }

@@ -12,7 +12,7 @@ Full reference for every command, modifier, and section available in a SatyrAV `
 
 Commands are grouped by role: scene-file sections, executable commands, modifiers, and structural blocks (`loop`, `run`, `group`, `macro`).
 
-> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, and *(1.5)* indicate the version they were introduced. Everything unmarked was already in 1.0.
+> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, and *(1.6.3)* indicate the version they were introduced. Everything unmarked was already in 1.0.
 
 ---
 
@@ -26,7 +26,8 @@ Per-scene settings that override project-level defaults.
 - **Keys:**
     - `bc` — background colour (`black`, `blue`, `red`, `green`, `white`). Default: black.
     - `FontSize` — slave font size in points. Overrides the project `FontSize`.
-    - `font` — path (relative to project root) to a `.ttf` font file.
+    - `font` — path (relative to project root, or a bare filename resolved against the shared `FONTS/` directory *(1.6.1)*) to a `.ttf` font file.
+    - `fontItalic`, `fontBold`, `fontBoldItalic` *(1.6.1)* — paths to the italic / bold / bold-italic typeface variants. Used by `textbf`, `textit`, and inline `bold(...)` / `it(...)`. Empty or missing → falls back to project / global config, then to regular.
     - `cap` — `true` or `false` to capitalize every text line.
     - `<TYPE>.SPEED`, `<TYPE>.DENS` (or `.DENSITY`), `<TYPE>.X.DIST = NAME(p1, p2)` *(1.4)*, `<TYPE>.VX.DIST`, `<TYPE>.VY.DIST` *(1.5)* — per-particle-type tunables. See [Particle tunables in `[Options]`](#particle-tunables-in-options-14) for details.
 - **Example:**
@@ -80,6 +81,21 @@ Defines reusable command blocks that can be expanded anywhere in `[Commands]` vi
     macro Chorus
     ```
 
+### `[Hotkeys]` *(1.6.3)*
+
+Project-level audio hotkeys bound to `F1`–`F12`. Pressing the key during a performance plays the configured audio file via the standalone-audio path; pressing the **same** key again while its sound is still playing **stops** it (toggle behaviour, useful for long ambient cues).
+
+- **Syntax:**
+    ```toml
+    [Hotkeys]
+    F1  = "knock.mp3"
+    F2  = "doorbell.mp3"
+    F12 = "applause.mp3"
+    ```
+- **Resolver:** filenames resolve against the project's `sound/` folder (and the project root, `pictures/`, `movies/` as a fallback) — the same lookup `play` uses.
+- **Notes:** Hotkeys are project-only. F-keys are ignored while a text field is focused (search field, creator field, etc.) so typing in those inputs doesn't fire a cue.
+- **Help popup:** the `H` popup lists `F1-F12` once you're inside a project.
+
 ### `[Commands]`
 
 The sequence of cues. Each line is one cue; the operator presses ENTER to advance.
@@ -112,6 +128,49 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
     text "Hello, "
     textCont "World!"
     # Slave now shows: Hello, World!
+    ```
+
+### `textbf` / `textit` *(1.6.1)*
+
+- **Syntax:** `textbf "MESSAGE"` and `textit "MESSAGE"` — both support the `+` operator and inline modifiers identically to `text`.
+- **Behaviour:** Identical to `text` but stamps a default style onto every produced run — `textbf` sets `bold`, `textit` sets `italic`. Per-segment inline `bold(...)` / `it(...)` wrappers OR onto the line default, so `textbf "A " + it("B")` renders A as bold and B as bold-italic.
+- **Font requirement:** Real italic / bold typeface files must be configured (in `config.toml` `[font]`, in `[Options].FontItalic`/`FontBold`/`FontBoldItalic`, or via the bundled DejaVu Sans family that ships in `assets/fonts/`). If a slot isn't loaded, the renderer falls back via bold-italic → bold → italic → regular so the line still appears, just without the missing emphasis.
+- **Example:**
+    ```txt
+    textbf "Important!"
+    textit "Whispered aside"
+    textbf "Heads up: " + it("Don't miss this.")
+    ```
+
+### `textbfCont` / `textitCont` *(1.6.1)*
+
+- **Syntax:** `textbfCont "MESSAGE"` and `textitCont "MESSAGE"`.
+- **Behaviour:** Same as `textCont` (append to the most recently pushed text entry, falling back to a new line if there's nothing to extend) but the appended runs inherit the keyword's bold / italic style.
+- **Example:**
+    ```txt
+    text "The verdict is "
+    textbfCont "guilty."
+    # Slave shows: The verdict is guilty.   (with "guilty." in bold)
+    ```
+
+### `textD "PRIMARY", "SECONDARY"` *(1.6.1)*
+
+- **Syntax:** Two quoted strings separated by a comma. Whitespace around the comma is irrelevant. Either side accepts the full `+` / `bold(...)` / `it(...)` / `color(...)` machinery.
+- **Behaviour:** Pushes the primary text as a normal centred-stack entry (identical to `text`) **and** pushes the secondary text as a separate bottom-anchored subtitle with project-configured italic / colour / transparency / position defaults applied. Intended for bilingual revues — the primary line is the language the audience hears, the secondary line is the translation.
+- **Single-arg form:** if only one quoted string is given, `textD` collapses to plain `Text` semantics (no subtitle entry pushed).
+- **Subtitle stacking:** multiple `textD` cues stack — the most-recently pushed subtitle sits at the configured `SubtitlePosY`; older subtitles move one line up each. `clearText` / `clear` / `clearAll` clear subtitles along with regular text since they share the same entry list.
+- **Project defaults** (in `[Options]`):
+    - `SubtitleItalic` — bool, default `true`.
+    - `SubtitleColour` — named colour or `#RRGGBB`, default `#AAAAAA` (light grey).
+    - `SubtitleTransparency` — percent (0 = opaque, 100 = invisible), default `0`.
+    - `SubtitlePosY` — percent of canvas height where the bottom edge of the newest subtitle sits, default `90.0`.
+- **Per-run override:** inline modifiers inside the secondary string still win — e.g. `color(YELLOW, "Watch out!")` keeps the project's italic default but overrides the colour.
+- **Example:**
+    ```txt
+    textD "Vi har started nu!", "We have started now!"
+    textD "Mor er hjemme.",      "Mum is home."
+    textD "Tak for i aften!"
+    # The single-arg call behaves like `text` — no subtitle.
     ```
 
 ### `clear`
@@ -345,6 +404,17 @@ Modifiers wrap around command arguments. They can be nested freely. For `text` t
 
 - **Arguments:** `PERCENT` — 0 (opaque) … 100 (invisible).
 - **Example:** `show trans(50, image.png)`
+
+### `bold(content)` *(1.6.1)*
+
+- **Behaviour:** Marks a single text segment as bold. Composes with `color(...)`, `trans(...)`, and `it(...)` like any other modifier — order doesn't matter. Only meaningful on `text` / `textCont` / `textD` runs (or their styled variants); ignored elsewhere.
+- **Example:** `text "Plain " + bold("BANG!") + " then plain again"`
+
+### `it(content)` *(1.6.1)*
+
+- **Behaviour:** Italic counterpart of `bold(...)`. The short name matches the LaTeX-flavoured `\it` spelling and keeps `+` lines compact.
+- **Stacking:** `bold(it("X"))` (or `it(bold("X"))`) renders bold-italic.
+- **Example:** `text "He whispered " + it("very softly") + " behind her."`
 
 ### `rotate(DEG, content)`
 

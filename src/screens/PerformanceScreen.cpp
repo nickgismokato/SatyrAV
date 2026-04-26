@@ -73,6 +73,32 @@ void PerformanceScreen::HandleInput(InputAction action){
 		case InputAction::ToggleVideo: media.ToggleVideoPause(); break;
 		case InputAction::ToggleMusic: media.ToggleAudioPause(); break;
 		case InputAction::ReloadScenes: ReloadScenes(); break;
+		case InputAction::FunctionKey:{
+			// (1.6.3) F1..F12 audio hotkey. Same key pressed twice while
+			// the same hotkey audio is still playing → stop (toggle).
+			// Useful for long ambient loops (knocking, alarm) where the
+			// performer drives both start and stop with one key. A
+			// different F-key while one is already playing replaces the
+			// running sound, since `PlayAudio` closes the existing
+			// standalone audio before opening the new one.
+			int num = app->GetInput().GetLastFunctionKey();
+			std::string fname = engine.GetFunctionKeyAudio(num);
+			if(fname.empty()) break;
+			std::string full = ResolvePath(projectBasePath, fname);
+
+			if(currentHotkeyNum == num && media.IsAudioPlaying()){
+				media.StopAudio(full);
+				lastCommandStr = "F" + std::to_string(num) + ": stop " + fname;
+				lastCommandPath = full;
+				currentHotkeyNum = 0;
+			} else{
+				media.PlayAudio(full);
+				lastCommandStr = "F" + std::to_string(num) + ": play " + fname;
+				lastCommandPath = full;
+				currentHotkeyNum = num;
+			}
+			break;
+		}
 		case InputAction::Quit:
 			app->SwitchScreen(ScreenID::MainMenu);
 			break;

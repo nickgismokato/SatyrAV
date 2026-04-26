@@ -14,7 +14,10 @@ Per-scene settings that override project-level defaults. All are optional.
 [Options]
 bc = black          # Background colour: black, blue, red, green, white
 FontSize = 30       # Font size for slave display text
-font = path/to/font.ttf  # Custom font file
+font = path/to/font.ttf  # Regular face — relative path or bare FONTS/ filename (1.6.1)
+fontItalic = DejaVuSans-Oblique.ttf       # (1.6.1) Italic face for textit / it(...)
+fontBold   = DejaVuSans-Bold.ttf          # (1.6.1) Bold face for textbf / bold(...)
+fontBoldItalic = DejaVuSans-BoldOblique.ttf # (1.6.1) Combined face — used when a run is both bold + italic
 cap = true          # Capitalize all text output
 
 # (1.4) Per-particle-type tunables — scene overrides project defaults.
@@ -39,6 +42,19 @@ pictures/logo.png
 sound/intro.mp3
 movies/background.mkv
 ```
+
+### [Hotkeys] *(1.6.3, project schema only)*
+
+Bindings for the `F1`–`F12` audio hotkeys. Lives in `schema.toml`, not in scene files. Filenames resolve against `sound/` (with the same fallback chain as `play`).
+
+```toml
+[Hotkeys]
+F1  = "knock.mp3"        # short knock
+F2  = "knock-loop.mp3"   # long looping knock — press F2 to start, F2 again to stop
+F12 = "applause.mp3"
+```
+
+Press a key during a performance to play; press the **same** key again while its sound is still going to stop it (toggle behaviour, useful for long ambient loops). Pressing a different F-key while one is already playing replaces the running sound.
 
 ### [Macro] *(1.3)*
 
@@ -66,6 +82,11 @@ text "message"           Display text on the slave screen
 text "line 1\nline 2"    Multi-line text (literal \n in the string)
 text A + B               Styled concatenation — side-by-side runs          (1.4)
 textCont "more"          Append to the previous text line                  (1.4)
+textbf "message"         Bold text (uses fontBold face)                    (1.6.1)
+textit "message"         Italic text (uses fontItalic face)                (1.6.1)
+textbfCont "message"     Append, inheriting bold style                     (1.6.1)
+textitCont "message"     Append, inheriting italic style                   (1.6.1)
+textD "primary","sub"    Primary line + bottom-anchored italic translation (1.6.1)
 clear                    Clear ungrouped text, image, and particles (groups survive)
 clear NAME               Drop every entry tagged with group NAME          (1.3)
 clearText                Drop the text layer across every group           (1.3)
@@ -111,6 +132,18 @@ Set transparency. 0 = fully opaque, 100 = invisible.
 ```
 show trans(50, image.png)
 ```
+
+### bold(content) / it(content) *(1.6.1)*
+
+Per-segment style for `text` runs. Compose with `color`, `trans`, and each other in any order. Only meaningful inside text commands; ignored elsewhere.
+
+```
+text "Plain " + bold("BANG!") + " then plain"
+text "He whispered " + it("very softly")
+text bold(it("Bold AND italic"))
+```
+
+Line-level keywords (`textbf` / `textit`) set a default style on every run; per-segment `bold(...)` / `it(...)` OR onto that default. So `textbf "A " + it("B")` renders A bold and B bold-italic.
 
 ### rotate(degrees, content)
 
@@ -245,7 +278,7 @@ show move(S, [25, 25], 800, spin(180, heart.png))
 
 ### `+` concatenation *(1.4)*
 
-Inside `text` and `textCont`, multiple styled segments can be joined on a single line with `+`. Each segment carries its own `color()` / `trans()`; line-level modifiers (`pos`, `move`, `rotate`, `spin`, `size`) apply to the whole line, and when more than one segment sets the same one, the **leftmost** value wins.
+Inside `text`, `textCont`, `textbf`, `textit`, `textbfCont`, `textitCont`, and either side of `textD`, multiple styled segments can be joined on a single line with `+`. Each segment carries its own `color()` / `trans()` / `bold()` / `it()`; line-level modifiers (`pos`, `move`, `rotate`, `spin`, `size`) apply to the whole line, and when more than one segment sets the same one, the **leftmost** value wins.
 
 ```
 text color(RED, "Hello, ") + color(BLUE, "World!")

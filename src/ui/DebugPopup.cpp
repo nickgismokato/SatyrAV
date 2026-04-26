@@ -87,7 +87,7 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	int footerY = boxY + totalH - lineH - 10;
 	Colour hint = {0x90, 0xA0, 0xB0, 0xFF};
 	text.DrawTextCentered(renderer,
-		"Press S to edit Display rect",
+		"Press S: Display rect    O: Overview Debug",
 		boxX + totalW / 2, footerY, hint);
 }
 

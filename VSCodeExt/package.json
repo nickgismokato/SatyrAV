@@ -1,0 +1,28 @@
+{
+	"name": "satyrav-ngk",
+	"displayName": "SatyrAV NGK",
+	"description": "Syntax highlighting for SatyrAV scene files (.ngk).",
+	"version": "0.1.0",
+	"publisher": "satyrav",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"categories": ["Programming Languages"],
+	"contributes": {
+		"languages": [
+			{
+				"id": "ngk",
+				"aliases": ["NGK", "ngk"],
+				"extensions": [".ngk"],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "ngk",
+				"scopeName": "source.ngk",
+				"path": "./syntaxes/ngk.tmLanguage.json"
+			}
+		]
+	}
+}

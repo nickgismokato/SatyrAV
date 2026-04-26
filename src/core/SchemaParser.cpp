@@ -156,6 +156,20 @@ RevySchema SchemaParser::ParseFile(const std::string& schemaPath){
 		// (1.4) Project-level particle tunables from [Particle.<TYPE>] tables.
 		ParseParticleTuningsFromToml(tbl, schema);
 
+		// (1.6.3) F1..F12 audio hotkeys from [Hotkeys].
+		//   [Hotkeys]
+		//   F1 = "knock.mp3"
+		//   F12 = "applause.mp3"
+		// Missing keys are silently dropped. Values are stored as-is and
+		// resolved against the project's media folders at dispatch time.
+		if(auto hotkeys = tbl["Hotkeys"].as_table()){
+			for(int n = 1; n <= 12; n++){
+				std::string key = "F" + std::to_string(n);
+				auto v = (*hotkeys)[key].value_or(std::string(""));
+				if(!v.empty()) schema.functionKeyAudio[n] = v;
+			}
+		}
+
 		for(int i = 1; i <= schema.aktCount; i++){
 			std::string key = "Structure.Akt" + std::to_string(i);
 			Akt akt;

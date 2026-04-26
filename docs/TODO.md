@@ -106,19 +106,9 @@ Real italic / bold typography on the slave; `textD` translation/subtitle command
 
 Load Project page redesign — search, Revy-type filter, sort, grouped table with creator column. See [CHANGELOG.md](CHANGELOG.md) for details.
 
-### 1.6.3 — Audio + diagnostics + tooling
+### 1.6.3 — shipped
 
-Final 1.6 sub-version. Combines audio routing, project-overview tooling, and the VSCode extension.
-
-- (**Critical**) Add option to choose which audio device you want to output sound from.
-	- A list of all audio devices should be in the `Options` page. It should essentially look like how our Secondary Display option looks like currently.
-- Add option to make function keys `F1-F12` work as audio hotkeys.
-	- In the project file `schema.toml` there should be an option to assign function keys to play audio. Like a door knock/bell to easily play with a single button throughout all acts and scenes.
-- Overview Debug:
-	- Gives an overview for a project if it is missing files, a scene has an invalid command or option.
-	- Use the key `O` inside the debug menu to open it.
-- Add a global logger for `SatyrAV` and put it in a `log` folder parallel to the `project` folder.
-- Create a custom extension for VSCode for `.ngk`. Lives in a new `VSCodeExt/` folder at repo root.
+Audio device picker, F1–F12 audio hotkeys (with toggle behaviour), global logger, Overview Debug popup with parser warnings, and a baseline VSCode `.ngk` syntax extension. See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ---
 

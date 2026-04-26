@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../../satyrInventoryManagmentSystem"
+		},
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../../../SatyrAV/projects"
+		}
+	],
+	"settings": {
+		"java.compile.nullAnalysis.mode": "disabled"
+	}
+}

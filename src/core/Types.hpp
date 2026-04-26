@@ -271,6 +271,13 @@ struct Command{
 	// resulting command (and every sub-command of a Compound) is tagged with
 	// the group name so the slave can later clear that group selectively.
 	std::string groupName;
+
+	// (1.6.3) Set to the offending keyword when the parser fell through to
+	// `Text` because it didn't recognise the leading bareword. Empty when
+	// the command was either real text (started with a quote / `+`) or a
+	// recognised keyword. The Overview Debug popup walks scenes and lifts
+	// this into the warnings list so authors can spot typos.
+	std::string unknownKeyword;
 };
 
 // (1.4) Per-particle-type tunables. Storage lives on Scene and RevySchema;
@@ -310,6 +317,15 @@ struct Scene{
 	// (1.4) Per-type particle tunables. Missing entries fall back to
 	// project-level tunings, then to built-in defaults.
 	std::unordered_map<int, ParticleTuning> particleTunings;
+
+	// (1.6.3) Parser warnings raised while reading this scene's `.ngk`.
+	// Populated for unknown keywords and other recoverable issues so the
+	// Overview Debug popup can surface them. Empty on a clean parse.
+	struct Warning{
+		int lineNumber = 0;
+		std::string message;
+	};
+	std::vector<Warning> warnings;
 };
 
 struct Akt{
@@ -357,6 +373,12 @@ struct RevySchema{
 	// (1.4) Project-level particle tunables, keyed by ParticleType cast
 	// to int. Per-scene `[Options]` can override any of the fields.
 	std::unordered_map<int, ParticleTuning> particleTunings;
+
+	// (1.6.3) Function-key audio hotkeys. Key = 1..12 (the F-number),
+	// value = audio file path (resolved against the project's `sound/`
+	// folder at dispatch time). Empty / missing entry = the F-key does
+	// nothing in this project. Read from the schema's `[Hotkeys]` table.
+	std::unordered_map<int, std::string> functionKeyAudio;
 };
 
 struct ProjectData{

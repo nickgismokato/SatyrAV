@@ -26,6 +26,8 @@ public:
 	TargetedDisplay& GetTargetedDisplay(){ return targetedDisplay; }
 	SlaveWindow& GetSlaveWindow(){ return slaveUI; }
 	const std::string& GetProjectPath() const{ return projectBasePath; }
+	// (1.6.3) Read-only access for the Overview Debug popup.
+	const CueEngine& GetCueEngine() const{ return engine; }
 
 private:
 	CueEngine engine;
@@ -79,6 +81,14 @@ private:
 	// Debug tracking
 	std::string lastCommandStr;
 	std::string lastCommandPath;
+
+	// (1.6.3) Currently-playing hotkey audio. Tracked so a second press
+	// of the same F-key stops the sound instead of restarting it — useful
+	// for long ambient cues (a knocking loop, an alarm) where the user
+	// wants the same key to cover both "start" and "stop". 0 = no hotkey
+	// audio active. Reset to 0 when the audio is stopped (manually or by
+	// running out naturally — see IsAudioPlaying check at dispatch).
+	int currentHotkeyNum = 0;
 };
 
 } // namespace SatyrAV

@@ -7,19 +7,33 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `[Options]`
 - `[Preload]`
 - `[Macro]`
+- `[Hotkeys]` *(1.6.3, project schema only)*
 - `[Commands]`
 
 ## `[Options]` keys
 
 - `bc = black | blue | red | green | white`
 - `FontSize = <int>`
-- `font = <path/to.ttf>`
+- `font = <path/to.ttf>` (or bare filename → `FONTS/` *(1.6.1)*)
+- `fontItalic = <path>`, `fontBold = <path>`, `fontBoldItalic = <path>` *(1.6.1)*
 - `cap = true | false`
 - `<TYPE>.SPEED = <float>`
 - `<TYPE>.DENS = <float>` (alias `<TYPE>.DENSITY`)
 - `<TYPE>.X.DIST = NAME(p1, p2)`
 - `<TYPE>.VX.DIST = NAME(p1, p2)`
 - `<TYPE>.VY.DIST = NAME(p1, p2)`
+
+### Project-level `[Options]` (in `schema.toml` only)
+
+- `Font`, `FontItalic`, `FontBold`, `FontBoldItalic` — paths or bare filenames *(1.6.1)*
+- `SubtitleItalic = true | false` — default italic for `textD` subtitles *(1.6.1)*
+- `SubtitleColour = "#RRGGBB" | <name>` — default `#AAAAAA` *(1.6.1)*
+- `SubtitleTransparency = <0–100>` — percent, default 0 *(1.6.1)*
+- `SubtitlePosY = <0–100>` — percent of canvas, default 90 *(1.6.1)*
+
+## `[Hotkeys]` keys *(1.6.3, schema.toml only)*
+
+- `F1 = "<file>"` … `F12 = "<file>"` — bind any subset of F-keys to audio files in `sound/`
 
 ## `schema.toml` particle keys — `[Particle.<TYPE>]`
 
@@ -43,6 +57,11 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `text SEG + SEG + ...`
 - `textCont "MSG"`
 - `textCont SEG + SEG + ...`
+- `textbf "MSG"` *(1.6.1)*
+- `textit "MSG"` *(1.6.1)*
+- `textbfCont "MSG"` *(1.6.1)*
+- `textitCont "MSG"` *(1.6.1)*
+- `textD "PRIMARY", "SECONDARY"` *(1.6.1)* — secondary optional; comma-split, whitespace-tolerant
 - `clear`
 - `clear NAME`
 - `clearText`
@@ -69,6 +88,8 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 
 - `color(COLOUR, content)`
 - `trans(PERCENT, content)`
+- `bold(content)` *(1.6.1, text only)*
+- `it(content)` *(1.6.1, text only)*
 - `rotate(DEG, content)`
 - `pos([X, Y], content)`
 - `size([W, H], content)`

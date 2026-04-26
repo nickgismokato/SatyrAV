@@ -12,6 +12,7 @@ SatyrAV is an AV cue controller for SaTyR revyer (Danish student revue theater p
 - [Video pipeline](video-pipeline.md) — how video playback works internally (FFmpeg, threading, sync)
 - [Building](building.md) — compiling for Linux and cross-compiling for Windows
 - [Controls](controls.md) — keyboard shortcuts and navigation
+- [VSCode extension](../VSCodeExt/README.md) *(1.6.3)* — syntax highlighting for `.ngk` files
 - [Changelog](CHANGELOG.md) — full version history
 - [Roadmap](TODO.md) — planned features and known bugs
 

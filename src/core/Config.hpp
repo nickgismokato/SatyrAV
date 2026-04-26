@@ -41,6 +41,15 @@ public:
 	bool captureEnabled      = false;
 	int  captureDisplayIndex = 0;
 
+	// (1.6.3) Output audio device. Empty string = default device (matches
+	// pre-1.6.3 behaviour where SDL_OpenAudioDevice was called with
+	// `device = nullptr`). Non-empty = a device name as returned by
+	// SDL_GetAudioDeviceName(i, 0). The Options screen lists every
+	// detected output device so the user can pick a specific HDMI/USB
+	// interface for production setups where sound and video go to
+	// different boxes.
+	std::string audioDeviceName = "";
+
 	// Paths
 	std::string projectsDir  = "";
 	std::string lastProject  = "";

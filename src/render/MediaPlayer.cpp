@@ -513,7 +513,21 @@ bool MediaPlayer::OpenAudioDeviceFor(int sampleRate, int channels, AudioMode mod
 	want.callback = AudioCallback;
 	want.userdata = buf;
 
-	audioDeviceID = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
+	// (1.6.3) Honour `Config::audioDeviceName`. Empty = system default
+	// (passes nullptr through to SDL — pre-1.6.3 behaviour). If the named
+	// device is gone (unplugged USB interface, switched HDMI output)
+	// we retry once with nullptr so audio still plays rather than silently
+	// failing the whole open.
+	const auto& cfg = Config::Instance();
+	const char* devName = cfg.audioDeviceName.empty()
+		? nullptr : cfg.audioDeviceName.c_str();
+	audioDeviceID = SDL_OpenAudioDevice(devName, 0, &want, &have, 0);
+	if(audioDeviceID == 0 && devName){
+		fprintf(stderr,
+			"MediaPlayer: configured device '%s' unavailable (%s); falling back to default\n",
+			devName, SDL_GetError());
+		audioDeviceID = SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0);
+	}
 	if(audioDeviceID == 0){
 		fprintf(stderr, "MediaPlayer: SDL audio open failed: %s\n", SDL_GetError());
 		return false;

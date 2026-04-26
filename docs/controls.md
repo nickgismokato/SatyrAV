@@ -38,7 +38,7 @@
 | Key | Action |
 |-----|--------|
 | ENTER | Execute current command |
-| SHIFT+ENTER | Go to previous command |
+| SHIFT+ENTER | Step back one command (cursor only — does not undo side effects from already-executed commands) |
 
 ### Scene transitions
 
@@ -48,8 +48,23 @@ At the last command in a scene, pressing ENTER executes the command. A status ba
 
 | Key | Action |
 |-----|--------|
-| K | Toggle video pause |
+| K | Toggle video pause. (1.6.0+) Pause now freezes the last decoded frame on the slave instead of going black; press `K` again to resume from that frame. |
 | M | Toggle audio/music pause |
+
+### Audio hotkeys (1.6.3+)
+
+| Key | Action |
+|-----|--------|
+| F1–F12 | Project audio hotkeys. Each key plays an audio file declared in the project's `[Hotkeys]` table in `schema.toml`. Pressing the same key again while its sound is still playing **stops** it (toggle behaviour) — useful for long ambient cues like a knocking loop where the performer drives both start and stop with one key. Pressing a different F-key while one is playing replaces the current sound. F-keys are ignored while a text field is focused. |
+
+Example `schema.toml` entry:
+
+```toml
+[Hotkeys]
+F1  = "knock.mp3"
+F2  = "doorbell.mp3"
+F12 = "applause.mp3"
+```
 
 ### Scene files
 
@@ -61,4 +76,15 @@ Useful when iterating on scene content from an external editor: save the `.ngk`,
 
 ## Popups
 
-Both the help and debug popups are draggable — click and drag the title bar. The program continues running underneath. Press H or D again to close, or press the same key to toggle.
+The help and debug popups are draggable — click and drag the title bar. The program continues running underneath. Press H or D again to close, or press the same key to toggle.
+
+(1.6.2+) Pressing `H` or `D` while a text field is focused (e.g. the Load Project search field, the New Project creator field) types the letter into the field instead of toggling the popup.
+
+### Sub-popups from Debug (D)
+
+While the Debug popup is open and a project is loaded:
+
+| Chord | Action |
+|-------|--------|
+| D → S | Open the Display Rect editor — interactively move/scale/rotate the targeted-display rect with `WASD`/`Z`/`X`/`Q`/`E` (hold `SHIFT` for fine precision). `C` resets to default. `ESC` saves and closes. |
+| D → O | (1.6.3+) Open the Overview Debug popup — walks every scene in the active project and lists parser warnings (unknown keywords) and missing media files referenced by `show` / `play` commands. `UP`/`DOWN` scrolls; `ESC` closes. Modal — input to the underlying screen is suppressed while open. |

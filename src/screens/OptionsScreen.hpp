@@ -31,13 +31,21 @@ private:
 	// Option 0 ("Off") maps to -1.
 	std::vector<int> captureOptionToDisplay;
 
+	// (1.6.3) Audio output device. Option 0 = "Default" (system default,
+	// stored as empty string in config). Subsequent options enumerate
+	// every detected output device by name.
+	Dropdown audioDeviceDropdown;
+	std::vector<std::string> audioDeviceNames; // option idx → SDL device name
+
 	int focusedField = 0;
-	static constexpr int FIELD_COUNT = 7; // 6 fields + save button
+	// (1.6.3) +1 for the audio device dropdown.
+	static constexpr int FIELD_COUNT = 8; // 7 fields + save button
 
 	void SaveConfig();
 	void UpdateFocus();
 	void PopulateDisplays();
 	void PopulateCaptureOptions();
+	void PopulateAudioDevices();
 };
 
 } // namespace SatyrAV

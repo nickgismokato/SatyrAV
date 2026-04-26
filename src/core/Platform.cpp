@@ -52,6 +52,14 @@ std::string Platform::GetDefaultFontsDir(){
 #endif
 }
 
+std::string Platform::GetDefaultLogsDir(){
+#ifdef _WIN32
+	return GetHomeDir() + "\\Documents\\SatyrAV\\log";
+#else
+	return GetHomeDir() + "/satyrav/log";
+#endif
+}
+
 void Platform::EnsureDirectoryExists(const std::string& path){
 	if(!fs::exists(path)){
 		fs::create_directories(path);

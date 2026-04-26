@@ -6,6 +6,7 @@
 #include "ui/HelpPopup.hpp"
 #include "ui/DebugPopup.hpp"
 #include "ui/DisplaySizePopup.hpp"
+#include "ui/OverviewPopup.hpp"
 #include <unordered_map>
 #include <memory>
 
@@ -38,6 +39,9 @@ private:
 	HelpPopup helpPopup;
 	DebugPopup debugPopup;
 	DisplaySizePopup sizePopup;
+	// (1.6.3) Overview Debug — modal scene-health popup, opened with the
+	// `D → O` chord while a project is loaded.
+	OverviewPopup overviewPopup;
 
 	std::unordered_map<ScreenID, std::unique_ptr<Screen>> screens;
 	Screen* currentScreen = nullptr;
