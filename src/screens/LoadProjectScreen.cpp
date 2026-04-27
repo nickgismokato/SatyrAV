@@ -64,6 +64,12 @@ void LoadProjectScreen::OnEnter(){
 	searchField.maxLength = 64;
 	searchField.Clear();
 
+	// (1.6.4) Force-close both dropdowns on entry. Without this an ESC
+	// while either was open leaves `expanded=true`, so the next visit
+	// shows the menu open until the user re-navigates onto it.
+	sortDropdown.Close();
+	filterDropdown.Close();
+
 	sortDropdown.label = "Sort";
 	sortDropdown.SetOptions({"Year", "Recent", "Name"});
 

@@ -2,6 +2,18 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 1.6.4 — shipped
+
+Bug-fix release. Four critical UX bugs cleared up: command-list scroll could clip the last command when an earlier visible row word-wrapped, slave text never wrapped at all, dropdown menus came back already-open after ESC + return, and re-entering a project showed the previous session's slave content rendered against the wrong (global) font size.
+
+### Bugfixes
+- **Command-list scroll now wrap-aware.** [MasterWindow::DrawNavigator](src/render/MasterWindow.cpp) computed its bottom-scroll clamp as `cmdCount - maxLines` — i.e. one row per command — so any visible command that wrapped onto a continuation row pushed the last command off the bottom of the panel. The clamp now walks backward from the last command, accumulating wrapped row counts, and uses the smallest index whose "from-here-to-end" total still fits as the maximum legal `cmdScroll`. Worked through the example in the bug report (20 commands, command 3 wraps to 2 rows): pre-fix, command 20 was unreachable; post-fix, the scroll backs up one row further when needed and command 20 is fully visible.
+- **Word-wrap on the slave display.** Long lines on the slave used to render past the right edge of the targeted display because `SlaveWindow::DrawText` had no wrapping path at all. Added [`WrapEntryLines`/`TokenizeForWrap`/`MeasureLine`](src/render/SlaveWindow.cpp) — greedy fit on word boundaries against a budget of `targetWidth - 2 * margin` (margin ≈ 2.5%), preserving per-run bold/italic/colour/transparency across the wrap. Mid-word breaks are explicitly avoided: a single word longer than the budget keeps its style and overflows visually rather than being chopped. The draw loop was reshaped around per-entry visual lines so default-stack, `pos()`, animated `move()`, and `textD` subtitle anchoring all see the wrapped layout. Subtitle stacking (1.6.1) was extended to multi-line entries — the most-recently-pushed subtitle's *last* line still sits at `SubtitlePosY`, every earlier line (within or before that entry) moves one line height higher.
+- **Dropdown menus no longer freeze open after ESC + return.** [OptionsScreen::OnEnter](src/screens/OptionsScreen.cpp), [LoadProjectScreen::OnEnter](src/screens/LoadProjectScreen.cpp), and [NewProjectScreen::OnEnter](src/screens/NewProjectScreen.cpp) now `Close()` every dropdown they own. Previously the dropdown's `expanded=true` flag survived the screen exit (because `Quit` switched screens immediately, without closing the active dropdown), so the next visit drew the panel already-open until the user moved focus onto it. Affects all five dropdowns on the Options screen, both dropdowns on Load Project, and the Revy-type dropdown on New Project.
+- **Slave content no longer carries over between project sessions.** [PerformanceScreen::OnEnter / OnExit](src/screens/PerformanceScreen.cpp) now call `slaveUI.ClearAll()` + `slaveUI.StopParticlesAll()` + `media.StopAll()`. The bug surfaced as a font-size regression: text rendered at the project font size persisted on the slave through the project exit, then was redrawn against the global font size set by `OnEnter`. Clearing on both sides means the slave is always blank at the moment a project re-opens — covers text, images, GIF animations, particles, audio, and video — and the next scene's `ApplySceneOptionsCascade` is the only thing that ever puts content back.
+
+---
+
 ## Version 1.6.3 — shipped
 
 Final sub-version of the 1.6 cycle. Audio routing, project audio hotkeys, parser-warning surfacing via a new Overview Debug popup, a process-wide log file, and a baseline VSCode extension for `.ngk` syntax highlighting.

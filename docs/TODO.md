@@ -110,19 +110,16 @@ Load Project page redesign — search, Revy-type filter, sort, grouped table wit
 
 Audio device picker, F1–F12 audio hotkeys (with toggle behaviour), global logger, Overview Debug popup with parser warnings, and a baseline VSCode `.ngk` syntax extension. See [CHANGELOG.md](CHANGELOG.md) for details.
 
+### 1.6.4 — shipped
+
+Bug-fix release. Wrap-aware command-list scrolling, word-wrap on the slave display, dropdowns no longer freeze open after ESC + return, and project re-entry now starts the slave from a clean state. See [CHANGELOG.md](CHANGELOG.md) for details.
+
 ---
 
 ## Known bugs
 
 Most critical first. Bugs scheduled into a specific sub-version are listed there instead of here.
 
-- If the word-wrapping on the command list is happening, the actual count you can move you list is $n-1$. 
-	- **EXAMPLE:** So let us say we had a 20 line command and the command 3 is word wrapped to fill an extra line. Then the total of amount of lines you can see is up to line 19, since the count stops there. You will never be able to see line 20.
-	- You would still be able to go down to the next lines, but the command list won't show it.
-- Word-wrapping doesn't happen for the slave screen.
-- If in the menu an open anything or is one anything, then immediately pressing esc to return to main menu and then go back inside will make the object freze when loaded.
-	- An example would be if we where to go down to choose secondary screen, opened it to see what we have, immediately press escape and go back, then the drop-down menu would still be open. Only by changing active location within the option (*the hovering*) would it become normal again.
-- If a project has been opened and some text has been rendered on the slave screen at font size $x$, then pressing escape to leave project and go back into the project, the slave screen would still show the text but with the global font size $y$ instead of the project font size $x$.
 - Scaling via the Debug menu will make the third output screen/monitor have less resolution when zooming in too much.
 	- Essentially, making the secondary target display too small, will make the output for the third monitor more "pixelated". This, I think, is because of how the resolution is rendered from the second to the third screen. The optimal rendering would be that the third screen display the secondary screen "pre" target display, essentially the resolution of the secondary display.
 - Maybe only one image can be shown at a time. This need to be tested.

@@ -234,6 +234,13 @@ void MasterWindow::DrawNavigator(Renderer& r, TextRenderer& text,
 			return rows;
 		};
 
+		// Helper — wrapped row count for command #idx.
+		auto rowsForCmd = [&](int idx) -> int{
+			auto* c = engine.GetCommand(primedAkt, primedScene, idx);
+			std::string s = c ? CommandToString(*c) : "???";
+			return (int)wrapCommand(s).size();
+		};
+
 		// Scroll: keep primedCmd visible. Compute how many wrapped rows
 		// each command above primedCmd consumes so we can scroll by rows
 		// rather than indices and avoid clipping a wrapped primed entry.
@@ -241,9 +248,36 @@ void MasterWindow::DrawNavigator(Renderer& r, TextRenderer& text,
 		if(primedCmd > maxLines / 2){
 			cmdScroll = primedCmd - maxLines / 2;
 		}
-		if(cmdScroll + maxLines > cmdCount){
-			cmdScroll = std::max(0, cmdCount - maxLines);
+		// (1.6.4) Wrap-aware bottom clamp. The pre-1.6.4 version clamped
+		// at `cmdCount - maxLines`, treating one row per command. With any
+		// wrapped command in the visible window the loop ran out of
+		// vertical space before reaching the last command, so the user
+		// could never see it (e.g. 20 commands, command 3 wraps to 2
+		// rows → command 20 fell off the bottom).
+		//
+		// Walk backward from the last command, accumulating wrapped row
+		// counts until we exceed maxLines, and use that as the maximum
+		// allowed cmdScroll. minCmdScroll is the smallest index whose
+		// "from here to end" row total still fits.
+		int minCmdScroll = cmdCount;
+		{
+			int rowsUsed = 0;
+			for(int idx = cmdCount - 1; idx >= 0; idx--){
+				int rc = rowsForCmd(idx);
+				if(rowsUsed + rc > maxLines){
+					// Including this command's full block would overflow;
+					// stop here so the previously-recorded minCmdScroll
+					// (the index above) is the tightest legal scroll.
+					break;
+				}
+				rowsUsed += rc;
+				minCmdScroll = idx;
+			}
 		}
+		if(cmdScroll > minCmdScroll){
+			cmdScroll = minCmdScroll;
+		}
+		if(cmdScroll < 0) cmdScroll = 0;
 
 		if(cmdScroll > 0){
 			text.DrawText(renderer, "...", cmdColX + 5, startY - lineH + 2, Colours::WHITE);

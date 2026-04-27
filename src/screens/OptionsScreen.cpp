@@ -7,6 +7,16 @@ namespace SatyrAV{
 void OptionsScreen::OnEnter(){
 	focusedField = 0;
 
+	// (1.6.4) Reset every dropdown's expanded flag on entry. Without this,
+	// leaving the screen with ESC while a dropdown was still open left
+	// `expanded=true` on the member, so the next visit drew the open
+	// menu until the user re-hovered the field.
+	fontColourDropdown.Close();
+	displayDropdown.Close();
+	slaveModeDropdown.Close();
+	captureDropdown.Close();
+	audioDeviceDropdown.Close();
+
 	fontColourDropdown.label = "Font Colour";
 	fontColourDropdown.SetOptions({"Orange", "White", "Lime Green"});
 

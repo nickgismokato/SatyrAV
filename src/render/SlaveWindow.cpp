@@ -38,6 +38,134 @@ static Colour ResolveRunColour(const TextRun& run, const RenderModifiers& mods){
 	return Colours::WHITE;
 }
 
+// (1.6.4) Slave word-wrap. Splits each run into whitespace / non-whitespace
+// tokens and greedily fills lines up to `maxWidth`. Wraps only on word
+// boundaries — a single word longer than `maxWidth` is placed on its own
+// line and is allowed to visually overflow rather than break mid-word
+// (per the project's wrapping policy). Returns at least one line so the
+// rest of the draw path can iterate uniformly. The returned runs preserve
+// per-run style flags so bold/italic/colour follow the wrap boundary.
+namespace{
+	struct WrapToken{
+		TextRun base; // style carrier; .text is unused
+		std::string text;
+		bool isSpace = false;
+		int width = 0;
+	};
+
+	std::vector<WrapToken> TokenizeForWrap(
+		const std::vector<TextRun>& runs, TextRenderer& text){
+		std::vector<WrapToken> toks;
+		for(const auto& r : runs){
+			const std::string& s = r.text;
+			size_t i = 0;
+			while(i < s.size()){
+				bool sp = (s[i] == ' ' || s[i] == '\t');
+				size_t j = i + 1;
+				while(j < s.size()){
+					bool sp2 = (s[j] == ' ' || s[j] == '\t');
+					if(sp2 != sp) break;
+					j++;
+				}
+				WrapToken t;
+				t.base = r;
+				t.text = s.substr(i, j - i);
+				t.isSpace = sp;
+				int tw = 0, th = 0;
+				text.MeasureSlave(t.text, tw, th, r.bold, r.italic);
+				t.width = tw;
+				toks.push_back(std::move(t));
+				i = j;
+			}
+		}
+		return toks;
+	}
+
+	// Coalesce a token onto the line's last run when style matches; otherwise
+	// open a fresh run. Coalescing keeps the run vector compact, which makes
+	// the per-line draw walk cheaper and avoids spurious style boundaries
+	// inside a continuous segment.
+	static bool RunStyleMatches(const TextRun& a, const TextRun& b){
+		return a.bold == b.bold && a.italic == b.italic &&
+			a.colour.r == b.colour.r && a.colour.g == b.colour.g &&
+			a.colour.b == b.colour.b && a.colour.a == b.colour.a &&
+			a.transparency == b.transparency;
+	}
+
+	std::vector<std::vector<TextRun>> WrapEntryLines(
+		const std::vector<TextRun>& runs, int maxWidth, TextRenderer& text){
+		std::vector<std::vector<TextRun>> lines;
+		if(runs.empty() || maxWidth <= 0){
+			lines.push_back(runs);
+			return lines;
+		}
+		auto toks = TokenizeForWrap(runs, text);
+		std::vector<TextRun> cur;
+		int curW = 0;
+
+		auto append = [&](const WrapToken& t){
+			if(!cur.empty() && RunStyleMatches(cur.back(), t.base)){
+				cur.back().text += t.text;
+			} else{
+				TextRun r = t.base;
+				r.text = t.text;
+				cur.push_back(std::move(r));
+			}
+		};
+
+		for(const auto& t : toks){
+			// Drop leading whitespace on an empty line — the gap was the
+			// reason we wrapped, so reproducing it on the next line would
+			// inset the wrapped text by one space-width.
+			if(cur.empty() && t.isSpace) continue;
+
+			if(curW + t.width <= maxWidth){
+				append(t);
+				curW += t.width;
+				continue;
+			}
+
+			// Token doesn't fit. Flush the current line if it's not empty.
+			if(!cur.empty()){
+				lines.push_back(std::move(cur));
+				cur.clear();
+				curW = 0;
+			}
+
+			if(t.isSpace){
+				// Whitespace at a break point is consumed.
+				continue;
+			}
+
+			// Non-space token starting a fresh line. Even if it's wider than
+			// maxWidth we place it as-is — wrap policy is word-boundary only,
+			// so an overlong single word visually overflows rather than
+			// being chopped mid-word.
+			append(t);
+			curW = t.width;
+		}
+		if(!cur.empty()) lines.push_back(std::move(cur));
+		if(lines.empty()) lines.push_back({});
+		return lines;
+	}
+
+	// Per-line measurement: width = sum of run widths (each measured with
+	// its own style face), height = max run height. Mirrors the inline
+	// loop the draw path uses to advance the cursor.
+	void MeasureLine(const std::vector<TextRun>& runs, TextRenderer& text,
+		int& outW, int& outH, std::vector<int>& runWidthsOut){
+		outW = 0; outH = 0;
+		runWidthsOut.assign(runs.size(), 0);
+		for(size_t k = 0; k < runs.size(); k++){
+			int rw = 0, rh = 0;
+			text.MeasureSlave(runs[k].text, rw, rh, runs[k].bold, runs[k].italic);
+			runWidthsOut[k] = rw;
+			outW += rw;
+			if(rh > outH) outH = rh;
+		}
+	}
+} // namespace
+
 void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 	auto* renderer = r.GetSlave();
 	if(!renderer) return;
@@ -46,27 +174,69 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 	int slaveH = r.GetTargetHeight();
 	int slaveLineH = text.GetSlaveLineHeight();
 
-	// Calculate total height for default-positioned, non-animated text.
-	// Animated (move) entries float independently and don't take a slot.
-	// (1.6.1) Subtitle entries also opt out — they have their own bottom
-	// anchor and would otherwise displace the centred-stack baseline.
-	int defaultCount = 0;
-	for(auto& entry : textEntries){
-		bool animated = entry.mods.hasMove;
-		if(!entry.mods.HasPosition() && !animated && !entry.subtitleAnchor) defaultCount++;
+	// (1.6.4) Word-wrap budget: the targeted-display width minus a small
+	// horizontal margin on each side so glyphs don't run flush to the
+	// edge. 2.5% per side ≈ 5% total. Lines wider than this are split on
+	// word boundaries; single words wider than the budget are kept intact
+	// and allowed to overflow (no mid-word breaks).
+	int wrapMargin = std::max(20, slaveW / 40);
+	int wrapWidth = slaveW - 2 * wrapMargin;
+	if(wrapWidth < 1) wrapWidth = slaveW; // pathological narrow target
+
+	// ── Pre-pass: wrap every entry into visual lines and measure each. ──
+	// `entryLines[i]` is the wrapped run-list per visual line for entry i;
+	// `lineWidths[i][k]` and `runWidthsPerLine[i][k]` cache the metrics so
+	// the layout and draw passes don't re-measure.
+	std::vector<std::vector<std::vector<TextRun>>> entryLines(textEntries.size());
+	std::vector<std::vector<int>> lineWidths(textEntries.size());
+	std::vector<std::vector<int>> lineHeights(textEntries.size());
+	std::vector<std::vector<std::vector<int>>> runWidthsPerLine(textEntries.size());
+	for(size_t i = 0; i < textEntries.size(); i++){
+		auto& entry = textEntries[i];
+		if(entry.runs.empty()){
+			entryLines[i].push_back({});
+			lineWidths[i].push_back(0);
+			lineHeights[i].push_back(slaveLineH);
+			runWidthsPerLine[i].push_back({});
+			continue;
+		}
+		entryLines[i] = WrapEntryLines(entry.runs, wrapWidth, text);
+		for(auto& line : entryLines[i]){
+			int lw = 0, lh = 0;
+			std::vector<int> rws;
+			MeasureLine(line, text, lw, lh, rws);
+			lineWidths[i].push_back(lw);
+			lineHeights[i].push_back(lh > 0 ? lh : slaveLineH);
+			runWidthsPerLine[i].push_back(std::move(rws));
+		}
 	}
-	int totalH = defaultCount * slaveLineH;
+
+	// Total visual lines occupied by default-positioned, non-animated text.
+	// Animated and subtitle entries float independently and don't take
+	// slots in the centred stack. With wrap, one entry can contribute
+	// several lines here.
+	int defaultLineCount = 0;
+	for(size_t i = 0; i < textEntries.size(); i++){
+		auto& entry = textEntries[i];
+		bool animated = entry.mods.hasMove;
+		if(!entry.mods.HasPosition() && !animated && !entry.subtitleAnchor){
+			defaultLineCount += (int)entryLines[i].size();
+		}
+	}
+	int totalH = defaultLineCount * slaveLineH;
 	int defaultY = slaveH / 2 - totalH / 2;
 
-	// (1.6.1) Pre-pass: assign a per-subtitle bottom-Y so multiple
-	// `textD` entries stack instead of overlapping. The most-recently
-	// pushed subtitle sits at the posY anchor; older ones move one
-	// `slaveLineH` higher per rank. The anchor itself is taken from the
-	// LAST subtitle's `mods.posY` so a project-options change picks up
-	// without requiring a clearText. Indices are written into a parallel
-	// vector keyed by entry index so the draw loop below can read them
-	// without re-deriving the order.
-	std::vector<int> subtitleBottomY(textEntries.size(), 0);
+	// (1.6.1, 1.6.4) Subtitle bottom-Y assignment, wrap-aware. Each
+	// subtitle entry can wrap to multiple visual lines; the stack is
+	// flattened so the most-recently-pushed entry's *last* line sits at
+	// the anchor and every earlier line (within or before that entry) is
+	// one slaveLineH higher. The anchor is taken from the LAST subtitle's
+	// `mods.posY` so a project-options change picks up without requiring
+	// a clearText.
+	std::vector<std::vector<int>> subtitleBottomY(textEntries.size());
+	for(size_t i = 0; i < textEntries.size(); i++){
+		subtitleBottomY[i].assign(entryLines[i].size(), 0);
+	}
 	{
 		std::vector<size_t> subIdx;
 		subIdx.reserve(textEntries.size());
@@ -77,10 +247,14 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 			const auto& last = textEntries[subIdx.back()];
 			float anchorPct = last.mods.HasPosition() ? last.mods.posY : 90.0f;
 			int anchorY = (int)(anchorPct / 100.0f * (float)slaveH);
-			int n = (int)subIdx.size();
-			for(int j = 0; j < n; j++){
-				int rankFromBottom = n - 1 - j; // 0 = newest, sits at anchor
-				subtitleBottomY[subIdx[j]] = anchorY - rankFromBottom * slaveLineH;
+			int rank = 0;
+			for(int j = (int)subIdx.size() - 1; j >= 0; j--){
+				size_t ei = subIdx[j];
+				auto& bv = subtitleBottomY[ei];
+				for(int li = (int)bv.size() - 1; li >= 0; li--){
+					bv[li] = anchorY - rank * slaveLineH;
+					rank++;
+				}
 			}
 		}
 	}
@@ -89,20 +263,15 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 		auto& entry = textEntries[entryIdx];
 		if(entry.runs.empty()) continue;
 
-		// ── Measure the full line (sum of every run's width, max of heights). ──
-		// (1.6.1) Each run carries its own bold/italic flags from the parser,
-		// so MeasureSlave/DrawTextSlave must pick the matching face. Bold
-		// widens glyphs; using the regular face here would shift later runs.
-		int textW = 0, textH = 0;
-		std::vector<int> runWidths(entry.runs.size(), 0);
-		for(size_t k = 0; k < entry.runs.size(); k++){
-			int rw = 0, rh = 0;
-			const TextRun& r = entry.runs[k];
-			text.MeasureSlave(r.text, rw, rh, r.bold, r.italic);
-			runWidths[k] = rw;
-			textW += rw;
-			if(rh > textH) textH = rh;
-		}
+		const auto& lines = entryLines[entryIdx];
+		const auto& widths = lineWidths[entryIdx];
+		const auto& heights = lineHeights[entryIdx];
+		const auto& runWs = runWidthsPerLine[entryIdx];
+		if(lines.empty()) continue;
+
+		int blockMaxW = 0;
+		for(int w : widths) if(w > blockMaxW) blockMaxW = w;
+		int blockH = (int)lines.size() * slaveLineH;
 
 		// ── Compute rotation: static rotate() + accumulated spin(). ──
 		float rotation = entry.mods.rotation;
@@ -111,10 +280,13 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 			rotation += entry.currentSpin;
 		}
 
-		// ── Compute position: animated move() wins over pos(); else stack. ──
-		// In all three branches drawX/drawY denote the top-left of the first
-		// run; the renderer walks runs left-to-right from there.
-		int drawX, drawY;
+		// ── Compute the entry's anchor position. drawX/drawY denote the
+		// top-left of the entry's bounding block; per-line draw positions
+		// are derived from this anchor below. ──
+		int blockX = 0, blockY = 0;
+		// "centerEachLine" controls whether each visual line is centred
+		// around blockX (block-centre) or left-aligned at blockX.
+		bool centerEachLine = false;
 
 		if(entry.mods.hasMove && entry.mods.moveDurationSec > 0.0f){
 			float now = SDL_GetTicks() / 1000.0f;
@@ -123,58 +295,71 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 
 			int fromX, fromY, toX, toY;
 			if(entry.mods.moveFromSide != 0){
-				SideToPixel(entry.mods.moveFromSide, textW, textH, slaveW, slaveH, fromX, fromY);
+				SideToPixel(entry.mods.moveFromSide, blockMaxW, blockH, slaveW, slaveH, fromX, fromY);
 			} else{
-				// Percent coords are resolved as the top-left of the text bounds,
-				// matching how pos() already works elsewhere.
 				fromX = (int)(entry.mods.moveFromX / 100.0f * (float)slaveW);
 				fromY = (int)(entry.mods.moveFromY / 100.0f * (float)slaveH);
 			}
 			if(entry.mods.moveToSide != 0){
-				SideToPixel(entry.mods.moveToSide, textW, textH, slaveW, slaveH, toX, toY);
+				SideToPixel(entry.mods.moveToSide, blockMaxW, blockH, slaveW, slaveH, toX, toY);
 			} else{
 				toX = (int)(entry.mods.moveToX / 100.0f * (float)slaveW);
 				toY = (int)(entry.mods.moveToY / 100.0f * (float)slaveH);
 			}
-			drawX = (int)((1.0f - t) * (float)fromX + t * (float)toX);
-			drawY = (int)((1.0f - t) * (float)fromY + t * (float)toY);
+			blockX = (int)((1.0f - t) * (float)fromX + t * (float)toX);
+			blockY = (int)((1.0f - t) * (float)fromY + t * (float)toY);
 		} else if(entry.subtitleAnchor){
-			// (1.6.1) `textD` subtitle row: horizontally centred. The
-			// vertical position was assigned in the subtitleBottomY
-			// pre-pass above so multiple textD entries stack upward
-			// from the configured anchor instead of overlapping.
-			drawX = slaveW / 2 - textW / 2;
-			drawY = subtitleBottomY[entryIdx] - textH;
+			// Subtitle: each visual line is centred on the canvas, with
+			// per-line bottom-Y already computed above.
+			centerEachLine = true;
+			blockX = slaveW / 2;
+			blockY = 0; // unused — vertical comes from subtitleBottomY
 		} else if(entry.mods.HasPosition()){
-			drawX = (int)(entry.mods.posX / 100.0f * (float)slaveW);
-			drawY = (int)(entry.mods.posY / 100.0f * (float)slaveH);
+			blockX = (int)(entry.mods.posX / 100.0f * (float)slaveW);
+			blockY = (int)(entry.mods.posY / 100.0f * (float)slaveH);
 		} else{
-			// Default: centred stack. Anchor the line so the sum of runs is
-			// centred, then walk runs left-to-right.
-			drawX = slaveW / 2 - textW / 2;
-			drawY = defaultY;
-			defaultY += slaveLineH;
+			// Default: centred stack. Each visual line is centred around
+			// the canvas centre; vertical advances per line.
+			centerEachLine = true;
+			blockX = slaveW / 2;
+			blockY = defaultY;
+			defaultY += blockH;
 		}
 
-		// ── Draw — rotated path if any rotation is present. ──
-		// For rotated multi-run lines we draw each run separately using the
-		// rotated glyph path. Runs sit side-by-side in the line's local frame;
-		// when the whole line rotates, each run rotates around its own anchor.
-		// This is a reasonable first pass — a future refinement could rotate
-		// around the line's centroid so runs pivot as a rigid group.
-		int cursorX = drawX;
-		for(size_t k = 0; k < entry.runs.size(); k++){
-			const TextRun& run = entry.runs[k];
-			Colour c = ResolveRunColour(run, entry.mods);
+		for(size_t li = 0; li < lines.size(); li++){
+			const auto& lineRuns = lines[li];
+			if(lineRuns.empty()) continue;
+			int lineW = widths[li];
+			int lineH = heights[li];
 
-			if(rotation != 0.0f){
-				text.DrawTextSlaveRotated(renderer, run.text, cursorX, drawY, c,
-					rotation, run.bold, run.italic);
+			int lineX, lineY;
+			if(entry.subtitleAnchor){
+				// Subtitle lines centre on canvas; vertical from per-line
+				// bottom anchor minus this line's height.
+				lineX = slaveW / 2 - lineW / 2;
+				lineY = subtitleBottomY[entryIdx][li] - lineH;
+			} else if(centerEachLine){
+				lineX = blockX - lineW / 2;
+				lineY = blockY + (int)li * slaveLineH;
 			} else{
-				text.DrawTextSlave(renderer, run.text, cursorX, drawY, c,
-					run.bold, run.italic);
+				lineX = blockX;
+				lineY = blockY + (int)li * slaveLineH;
 			}
-			cursorX += runWidths[k];
+
+			int cursorX = lineX;
+			for(size_t k = 0; k < lineRuns.size(); k++){
+				const TextRun& run = lineRuns[k];
+				Colour c = ResolveRunColour(run, entry.mods);
+
+				if(rotation != 0.0f){
+					text.DrawTextSlaveRotated(renderer, run.text, cursorX, lineY, c,
+						rotation, run.bold, run.italic);
+				} else{
+					text.DrawTextSlave(renderer, run.text, cursorX, lineY, c,
+						run.bold, run.italic);
+				}
+				cursorX += runWs[li][k];
+			}
 		}
 	}
 }

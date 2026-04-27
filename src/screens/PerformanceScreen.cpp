@@ -23,6 +23,17 @@ void PerformanceScreen::OnEnter(){
 	auto& config = Config::Instance();
 	app->GetTextRenderer().SetSlaveFontSize(config.fontSize);
 
+	// (1.6.4) Drop any text / images / particles left over from a previous
+	// project session. The slaveUI member is reused across project opens, so
+	// without this the previous project's text would survive an ESC + re-
+	// enter and be redrawn against the fresh global font size — looking
+	// like the project font size silently reverted. ClearAll preserves
+	// smooth-stopping particle systems by design (see SlaveWindow), but
+	// nothing should be smooth-stopping immediately after project entry.
+	slaveUI.ClearAll();
+	slaveUI.StopParticlesAll();
+	media.StopAll();
+
 	activeColumn = 0;
 	primedAkt = -1;
 	primedScene = -1;
@@ -30,9 +41,14 @@ void PerformanceScreen::OnEnter(){
 }
 
 void PerformanceScreen::OnExit(){
+	// (1.6.4) Drop slave content explicitly here too — protects against
+	// future code paths that bring slaveUI back into view without first
+	// going through OnEnter (e.g. a future "preview" or "edit" mode that
+	// also draws the slave layers).
+	slaveUI.ClearAll();
+	slaveUI.StopParticlesAll();
 	media.Shutdown();
 	cache.Clear();
-	slaveUI.StopParticles();
 	app->GetRenderer().CloseSlave();
 }
 

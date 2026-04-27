@@ -9,6 +9,10 @@ void NewProjectScreen::OnEnter(){
 	focusedIndex = 0;
 	isJubi = false;
 
+	// (1.6.4) Drop any expanded state left over from a previous visit so a
+	// dropdown doesn't reappear already-open after ESC + return.
+	revyTypeDropdown.Close();
+
 	revyTypeDropdown.label = "Revy";
 	revyTypeDropdown.SetOptions({
 		"MatRevy", "BioRevy", "KemiRevy", "MBKRevy",
