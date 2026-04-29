@@ -2,6 +2,15 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 1.6.5 — shipped
+
+Single bug-fix release: ungrouped `show` calls now stack on screen instead of replacing each other.
+
+### Bugfixes
+- **Multiple `show` images coexist on screen.** [SlaveWindow::ShowImage / ShowAnimation](src/render/SlaveWindow.cpp) used to wipe every existing ungrouped image before pushing the new entry, so a scene with `show pic1.png` followed by `show pic2.png` only ever showed the last one. Both paths now skip the pre-push erase and append unconditionally — same coexist semantics ungrouped particle systems got in 1.5. Grouped shows are unchanged (still append). `clear` and `clearImages` still drop every ungrouped image at once, so nothing about teardown changes.
+
+---
+
 ## Version 1.6.4 — shipped
 
 Bug-fix release. Four critical UX bugs cleared up: command-list scroll could clip the last command when an earlier visible row word-wrapped, slave text never wrapped at all, dropdown menus came back already-open after ESC + return, and re-entering a project showed the previous session's slave content rendered against the wrong (global) font size.

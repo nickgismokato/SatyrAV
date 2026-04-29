@@ -84,8 +84,9 @@ public:
 	void SetBackgroundColour(Colour c);
 	void SetCapitalize(bool cap);
 
-	// Image with modifiers. Ungrouped shows replace any existing ungrouped
-	// image; grouped shows always append so a group can stack multiple images.
+	// Image with modifiers. Both ungrouped and grouped shows append, so a
+	// scene can stack multiple `show` calls on screen. `clear` /
+	// `clearImages` still drop every ungrouped image at once.
 	void ShowImage(SDL_Texture* tex, int w, int h, const RenderModifiers& mods,
 		const std::string& groupName = "");
 	// (1.4) Animated GIF variant. `frames` and `delaysMs` must be the same

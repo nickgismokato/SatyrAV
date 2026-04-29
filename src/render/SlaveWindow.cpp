@@ -575,15 +575,8 @@ void SlaveWindow::SetCapitalize(bool cap){
 
 void SlaveWindow::ShowImage(SDL_Texture* tex, int w, int h,
 	const RenderModifiers& mods, const std::string& groupName){
-	// Ungrouped shows replace any existing ungrouped image so the old
-	// single-image semantics are preserved. Grouped shows always append.
-	if(groupName.empty()){
-		imageEntries.erase(
-			std::remove_if(imageEntries.begin(), imageEntries.end(),
-				[](const SlaveImageEntry& e){ return e.groupName.empty(); }),
-			imageEntries.end());
-	}
-
+	// (1.6.5) Ungrouped images now coexist — successive `show` calls stack
+	// instead of replacing. `clear` / `clearImages` still drop them all.
 	SlaveImageEntry entry;
 	entry.tex = tex; // Not owned — comes from cache or MediaPlayer
 	entry.w = w;
@@ -598,14 +591,8 @@ void SlaveWindow::ShowImage(SDL_Texture* tex, int w, int h,
 void SlaveWindow::ShowAnimation(const std::vector<SDL_Texture*>& frames,
 	const std::vector<int>& delaysMs, int w, int h,
 	const RenderModifiers& mods, const std::string& groupName){
-	// Ungrouped-replaces-ungrouped rule, identical to ShowImage.
-	if(groupName.empty()){
-		imageEntries.erase(
-			std::remove_if(imageEntries.begin(), imageEntries.end(),
-				[](const SlaveImageEntry& e){ return e.groupName.empty(); }),
-			imageEntries.end());
-	}
-
+	// (1.6.5) Same coexist-on-show rule as ShowImage — ungrouped animations
+	// stack with whatever images/animations are already on screen.
 	SlaveImageEntry entry;
 	entry.tex = frames.empty() ? nullptr : frames.front();
 	entry.w = w;
