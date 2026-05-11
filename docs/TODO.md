@@ -10,6 +10,16 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 
 ## Planned for 2.1.0
 
+- (**Critical**) Add an output file like a `.srt` or `.ass` file that creates a time log when a show is running. This can help with time alignment in post production.
+	- This is a style example:
+		```txt
+		01/12-2026 | 19:30:126 | Started MatRevy2026
+		01/12-2026 | 19:32:634 | Akt 1 | Scene TeXIntro | play TeXIntro.mp4
+		01/12-2026 | 19:57:238 | Akt 1 | Scene RandomSketch | show funnyImage.png
+		...
+		```
+	- The file should be named the project name and the date it has been created and then a number (or something similar) if you have started the show more than once during the day.
+	- The exact details of what it should show has not been decided. A design run through may be needed. But essentially everytime we change a scene or show something, like an image, movie or text.
 - OSC Receiver, i.e. listen for OSC messages from lightning desk to control cues. Mainly interested in QLab and maybe GrandMA. 
 - Expose HTTP/WebSocket endpoint to send out message of which Scene and akt we are currently on.
 - Create full physics model for particle systems, accelerated with hardware
@@ -44,6 +54,8 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 
 ## Planned for 1.7.0
 
+- Add a way to have quotations in text commands such that we can display it.
+	- Maybe take inspiration from python and use mixed, so we can use `´Some text´` or `"Some text"`
 - Make a hierarchy for pictures such that you can command what pictures should be in front and what shouldn't.
 	- Currently the last displayed image will automatically be in front of all previous pictures.
 - Make a fastforward-goback scroller for videos.
@@ -120,6 +132,8 @@ Bug-fix release. Wrap-aware command-list scrolling, word-wrap on the slave displ
 
 Most critical first. Bugs scheduled into a specific sub-version are listed there instead of here.
 
+- `.ngk` files cannot be read/recognized if it contains `æøå` in its name.
+- Run doesn't work as intended in macro environment. 
 - Scaling via the Debug menu will make the third output screen/monitor have less resolution when zooming in too much.
 	- Essentially, making the secondary target display too small, will make the output for the third monitor more "pixelated". This, I think, is because of how the resolution is rendered from the second to the third screen. The optimal rendering would be that the third screen display the secondary screen "pre" target display, essentially the resolution of the secondary display.
 - Maybe only one image can be shown at a time. This need to be tested.
