@@ -1,4 +1,5 @@
 #include "core/SceneParser.hpp"
+#include "core/Platform.hpp"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -15,6 +16,21 @@ static std::string Trim(const std::string& s){
 	if(lt == std::string::npos) return "";
 	auto rt = s.find_last_not_of(" \t");
 	return s.substr(lt, rt - lt + 1);
+}
+
+// (1.6.6) Find the start of a `#` line-comment, ignoring `#` characters
+// that sit inside a double-quoted string. Pre-1.6.6 the parser used a
+// plain `line.find('#')`, which truncated `text "Look at #1"` to
+// `text "Look at ` and lost the rest of the cue. Returns std::string::npos
+// when the line has no comment.
+static size_t FindCommentStart(const std::string& line){
+	bool inQuote = false;
+	for(size_t i = 0; i < line.size(); i++){
+		char c = line[i];
+		if(c == '"') inQuote = !inQuote;
+		else if(c == '#' && !inQuote) return i;
+	}
+	return std::string::npos;
 }
 
 // ── Modifier parser ─────────────────────────────────────────
@@ -718,6 +734,48 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 	} else if(cmd.type == CommandType::StopParticleCont){
 		// Optional group name as a bareword; no modifier parsing.
 		cmd.argument = Trim(argRaw);
+	} else if(cmd.type == CommandType::Play){
+		// (1.6.6) `play FILE [FADE_IN_MS, FADE_OUT_MS]`. The fade spec is a
+		// trailing `<int>, <int>` pair separated from the filename by
+		// whitespace. Bare `play FILE` keeps the pre-1.6.6 behaviour
+		// (0/0 fades). Only video dispatch reads the fade fields; audio
+		// ignores them.
+		std::string rest = Trim(argRaw);
+		auto comma = rest.find(',');
+		if(comma != std::string::npos){
+			// Anchor on the comma, trim its trailing whitespace, walk
+			// backward through the fade-in digits to find their start,
+			// then require at least one whitespace between the digits and
+			// the filename so a filename ending in digits is not eaten.
+			size_t end = comma;
+			while(end > 0 && (rest[end - 1] == ' ' || rest[end - 1] == '\t')) end--;
+			size_t fadeStart = end;
+			while(fadeStart > 0 && rest[fadeStart - 1] >= '0'
+				&& rest[fadeStart - 1] <= '9'){
+				fadeStart--;
+			}
+			bool hasGap = fadeStart > 0 && fadeStart < end
+				&& (rest[fadeStart - 1] == ' ' || rest[fadeStart - 1] == '\t');
+			std::string fadeOutStr = Trim(rest.substr(comma + 1));
+			bool fadeOutDigits = !fadeOutStr.empty();
+			for(char c : fadeOutStr){
+				if(c < '0' || c > '9'){ fadeOutDigits = false; break; }
+			}
+			if(hasGap && fadeOutDigits){
+				std::string fadeInStr = rest.substr(fadeStart, end - fadeStart);
+				try{ cmd.fadeInMs  = std::stoi(fadeInStr);  } catch(...){ cmd.fadeInMs = 0; }
+				try{ cmd.fadeOutMs = std::stoi(fadeOutStr); } catch(...){ cmd.fadeOutMs = 0; }
+				if(cmd.fadeInMs  < 0) cmd.fadeInMs  = 0;
+				if(cmd.fadeOutMs < 0) cmd.fadeOutMs = 0;
+				size_t fileEnd = fadeStart - 1;
+				while(fileEnd > 0 && (rest[fileEnd - 1] == ' '
+					|| rest[fileEnd - 1] == '\t')){
+					fileEnd--;
+				}
+				rest = rest.substr(0, fileEnd);
+			}
+		}
+		cmd.argument = StripQuotes(Trim(rest));
 	} else if(!argRaw.empty() && cmd.type != CommandType::Stop){
 		cmd.argument = ParseModifiers(argRaw, cmd.mods);
 	} else{
@@ -826,7 +884,7 @@ static void ProcessLogicalCommand(
 			i++;
 			while(i < allLines.size()){
 				std::string bodyLine = allLines[i];
-				auto cp = bodyLine.find('#');
+				auto cp = FindCommentStart(bodyLine);
 				if(cp != std::string::npos) bodyLine = bodyLine.substr(0, cp);
 				bodyLine = Trim(bodyLine);
 				if(bodyLine == "}") break;
@@ -878,7 +936,7 @@ static void ProcessLogicalCommand(
 			i++;
 			while(i < allLines.size()){
 				std::string bodyLine = allLines[i];
-				auto cp = bodyLine.find('#');
+				auto cp = FindCommentStart(bodyLine);
 				if(cp != std::string::npos) bodyLine = bodyLine.substr(0, cp);
 				bodyLine = Trim(bodyLine);
 				if(bodyLine == "}") break;
@@ -913,7 +971,11 @@ static void ProcessLogicalCommand(
 Scene SceneParser::ParseFile(const std::string& scenePath){
 	Scene scene;
 
-	std::ifstream file(scenePath);
+	// (1.6.6) Open through Platform::Utf8ToPath so scene filenames
+	// containing non-ASCII UTF-8 bytes (e.g. æøå) resolve correctly on
+	// Windows, where the narrow-string std::ifstream overload would
+	// otherwise interpret the path through the system codepage.
+	std::ifstream file(Platform::Utf8ToPath(scenePath));
 	if(!file.is_open()) return scene;
 
 	auto pos = scenePath.find_last_of("/\\");
@@ -939,7 +1001,7 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 		std::string line = allLines[i];
 		int lineNumber = (int)i + 1;
 
-		auto commentPos = line.find('#');
+		auto commentPos = FindCommentStart(line);
 		std::string comment;
 		if(commentPos != std::string::npos){
 			comment = Trim(line.substr(commentPos + 1));
@@ -1052,7 +1114,7 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 				i++;
 				while(i < allLines.size()){
 					std::string bodyLine = allLines[i];
-					auto cp = bodyLine.find('#');
+					auto cp = FindCommentStart(bodyLine);
 					if(cp != std::string::npos) bodyLine = bodyLine.substr(0, cp);
 					bodyLine = Trim(bodyLine);
 					if(bodyLine == "}") break;
@@ -1105,7 +1167,7 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 						i++;
 						while(i < allLines.size()){
 							std::string bodyLine = allLines[i];
-							auto cp = bodyLine.find('#');
+							auto cp = FindCommentStart(bodyLine);
 							std::string bodyComment;
 							if(cp != std::string::npos){
 								bodyComment = Trim(bodyLine.substr(cp + 1));

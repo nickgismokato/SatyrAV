@@ -2,6 +2,19 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 1.6.6 — shipped
+
+Bug-fix release plus one small feature. Quoted text can now contain `#` without being eaten by the comment stripper, `.ngk` scene files with Danish characters (`æøå`) in their names open correctly on Windows, and `play` videos gained optional fade-in / fade-out times.
+
+### Added
+- **Fade-in / fade-out on `play`.** New trailing syntax: `play video.mp4 FADE_IN_MS, FADE_OUT_MS`. Both numbers are integers in milliseconds; `0` (or omitting the entire spec) disables that side. New `Command::fadeInMs` / `Command::fadeOutMs` fields in [Types.hpp](src/core/Types.hpp); [SceneParser::ParseSingleCommand](src/core/SceneParser.cpp) reads the spec by anchoring on the comma, walking back through the fade-in digits, and requiring a whitespace gap to the filename so paths ending in digits (`movie2.mp4 1000, 2000`) are not eaten. [MediaPlayer::PlayVideo](src/render/MediaPlayer.cpp) gained two new tail parameters and stamps them onto the active `VideoPlayback` after activation; `VideoPlayback::Setup` now caches the source duration so the fade-out logic knows when to start ramping down. The brightness ramp is applied per-frame in `UpdateVideoFrame` as `SDL_SetTextureColorMod(tex, b, b, b)`, so 0 % is solid black, 100 % leaves the decoded frame untouched. Audio plays through both ramps at full volume — the spec is visual only. The navigator and debug "last command" line ([MasterWindow](src/render/MasterWindow.cpp), [PerformanceScreen](src/screens/PerformanceScreen.cpp)) print the fade pair when non-zero so the operator still sees the original cue syntax.
+
+### Bugfixes
+- **`#` inside quoted text no longer truncates the cue.** [SceneParser.cpp](src/core/SceneParser.cpp) used a plain `line.find('#')` everywhere it stripped line comments, so `text "Item #1"` lost everything from `#1` onward. New `FindCommentStart` helper walks the line tracking a `"`-quoted state and only returns the position of a `#` that sits outside any quoted string. Five call sites updated: top-level scene loop, `run{}` body, `loop(){}` body, `[Macro]` body, and `group{}` body. Quoted-string `#` characters now pass through to the text-command argument verbatim.
+- **`.ngk` filenames with `æøå` open on Windows.** Scene names live in `schema.toml` as UTF-8 (per the TOML spec), but the previous `std::ifstream file(scenePath)` in [SceneParser::ParseFile](src/core/SceneParser.cpp) handed the narrow std::string to MinGW's libstdc++, which interpreted it through the system codepage (ANSI) — so the UTF-8 bytes for `æ`, `ø`, `å` resolved to a path that didn't exist. New [`Platform::Utf8ToPath`](src/core/Platform.cpp) helper converts UTF-8 → `std::wstring` via `MultiByteToWideChar(CP_UTF8, …)` on Windows and wraps it in a `std::filesystem::path`; `ParseFile` constructs `std::ifstream` from that path. POSIX takes the std::string as-is.
+
+---
+
 ## Version 1.6.5 — shipped
 
 Single bug-fix release: ungrouped `show` calls now stack on screen instead of replacing each other.

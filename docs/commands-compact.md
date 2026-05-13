@@ -70,6 +70,7 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `show FILE`
 - `show MODIFIER(..., FILE)`
 - `play FILE`
+- `play FILE FADE_IN_MS, FADE_OUT_MS` *(1.6.6, video only)*
 - `stop`
 - `stop FILE`
 - `stopParticleCont`
@@ -137,6 +138,6 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 
 ## Syntax
 
-- `#` — line or trailing comment
+- `#` — line or trailing comment (ignored inside `"..."` strings *(1.6.6)*)
 - `\n` inside `"..."` — new text entry
 - Blank lines ignored

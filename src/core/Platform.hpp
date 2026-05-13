@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <filesystem>
 
 namespace SatyrAV{
 
@@ -18,6 +19,15 @@ public:
 	static std::string GetDefaultLogsDir();
 	static std::string GetHomeDir();
 	static void EnsureDirectoryExists(const std::string& path);
+
+	// (1.6.6) Convert a UTF-8 std::string to a std::filesystem::path that
+	// the OS can resolve. On Windows, MinGW's libstdc++ interprets the
+	// narrow std::string overload as the system codepage (ANSI), so
+	// .ngk files whose names contain æøå (UTF-8 bytes outside ASCII)
+	// fail to open. Going through a wide string fixes that round-trip.
+	// On POSIX the std::string is already taken as UTF-8 and we just
+	// construct the path directly.
+	static std::filesystem::path Utf8ToPath(const std::string& utf8);
 };
 
 } // namespace SatyrAV

@@ -122,6 +122,18 @@ struct VideoPlayback{
 	double nextPTS = 0.0;
 	uint64_t startTick = 0;
 
+	// (1.6.6) Total source duration in seconds, captured from
+	// formatCtx->duration during Setup. Used by the fade-out logic to
+	// know when to start ramping brightness down; 0 disables fade-out
+	// for streams without a known duration.
+	double durationSec = 0.0;
+	// (1.6.6) Per-playback fade times in seconds (0 = disabled). Set by
+	// MediaPlayer::PlayVideo from the parsed `play FILE FADE_IN, FADE_OUT`
+	// spec on the cue. Applied as a brightness multiplier on the video
+	// texture every frame in UpdateVideoFrame.
+	float fadeInSec  = 0.0f;
+	float fadeOutSec = 0.0f;
+
 	~VideoPlayback();
 	bool Setup(const std::string& path, SDL_Renderer* renderer,
 		int slaveW, int slaveH, int capFrames);
@@ -150,7 +162,8 @@ public:
 	void Shutdown();
 
 	bool PlayVideo(const std::string& path, SDL_Renderer* renderer,
-		int slaveW = 0, int slaveH = 0);
+		int slaveW = 0, int slaveH = 0,
+		int fadeInMs = 0, int fadeOutMs = 0);
 	void StopVideo();
 	void ToggleVideoPause();
 	bool IsVideoPlaying() const;

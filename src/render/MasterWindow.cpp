@@ -31,7 +31,16 @@ static std::string CommandToString(const Command& cmd){
 		case CommandType::ClearText:   return "clearText";
 		case CommandType::ClearImages: return "clearImages";
 		case CommandType::ClearAll:    return "clearAll";
-		case CommandType::Play:        return "play " + cmd.argument;
+		case CommandType::Play:{
+			// (1.6.6) Surface the fade-in / fade-out spec when present so
+			// the navigator preserves the original cue syntax.
+			std::string out = "play " + cmd.argument;
+			if(cmd.fadeInMs != 0 || cmd.fadeOutMs != 0){
+				out += " " + std::to_string(cmd.fadeInMs) +
+					", " + std::to_string(cmd.fadeOutMs);
+			}
+			return out;
+		}
 		case CommandType::Stop:        return cmd.argument.empty() ? "stop" : "stop " + cmd.argument;
 		case CommandType::StopParticleCont: return cmd.argument.empty() ? "stopParticleCont" : "stopParticleCont " + cmd.argument;
 		case CommandType::Show:        return "show " + cmd.argument;

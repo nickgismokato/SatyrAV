@@ -12,7 +12,7 @@ Full reference for every command, modifier, and section available in a SatyrAV `
 
 Commands are grouped by role: scene-file sections, executable commands, modifiers, and structural blocks (`loop`, `run`, `group`, `macro`).
 
-> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, and *(1.6.3)* indicate the version they were introduced. Everything unmarked was already in 1.0.
+> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, *(1.6.3)*, and *(1.6.6)* indicate the version they were introduced. Everything unmarked was already in 1.0.
 
 ---
 
@@ -243,15 +243,18 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 
 ### `play`
 
-- **Syntax:** `play FILE`
-- **Arguments:** `FILE` — audio or video file. Extension determines which.
+- **Syntax:** `play FILE` — or `play FILE FADE_IN_MS, FADE_OUT_MS` *(1.6.6)*
+- **Arguments:**
+    - `FILE` — audio or video file. Extension determines which.
+    - `FADE_IN_MS`, `FADE_OUT_MS` *(1.6.6)* — optional integer milliseconds for a fade-from-black on start and a fade-to-black on end. `0` on either side disables that side of the fade. Bare `play FILE` is equivalent to `play FILE 0, 0`. Audio is not faded — the fade is visual only.
 - **Behaviour:**
-    - Video (`.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`) — opens the hardware-decoded video pipeline and renders frames into the slave beneath text.
-    - Audio (`.mp3`, `.wav`, etc.) — plays in the background; multiple tracks can play simultaneously.
+    - Video (`.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`) — opens the hardware-decoded video pipeline and renders frames into the slave beneath text. The fade pair is applied as a per-frame brightness multiplier on the video texture; 0 % brightness is solid black, 100 % is the decoded frame untouched.
+    - Audio (`.mp3`, `.wav`, etc.) — plays in the background; multiple tracks can play simultaneously. Fade pair is ignored.
 - **Example:**
     ```txt
     play intro.mp3
     play background.mp4
+    play background.mp4 1000, 2000   # 1 s fade-in, 2 s fade-out
     ```
 
 ### `stop`
@@ -574,5 +577,5 @@ show particle(RAIN, 50, random(heart.png, [50,50], [200,200], true))
 ## Line endings and comments
 
 - `\n` inside a quoted `text` string produces a new text entry.
-- `#` starts a line/end-of-line comment — everything after it on the line is discarded.
+- `#` starts a line/end-of-line comment — everything after it on the line is discarded. *(1.6.6)* `#` characters inside a `"..."`-quoted string are kept verbatim and do not start a comment, so `text "Item #1"` renders the `#` literally.
 - Blank lines are ignored.

@@ -138,6 +138,12 @@ bool VideoPlayback::Setup(const std::string& p, SDL_Renderer* renderer,
 	srcWidth  = formatCtx->streams[videoStreamIdx]->codecpar->width;
 	srcHeight = formatCtx->streams[videoStreamIdx]->codecpar->height;
 
+	// (1.6.6) Cache the source duration for fade-out timing. AV_NOPTS or a
+	// non-positive duration leaves the field at 0 so the fade-out logic
+	// silently no-ops on un-seekable streams.
+	durationSec = (formatCtx->duration > 0)
+		? (double)formatCtx->duration / (double)AV_TIME_BASE : 0.0;
+
 	// ── Try D3D11VA hardware decode ──────────────────────────
 	// Creates its own D3D11 device — completely separate from SDL's renderer
 	// device. No cross-thread D3D11 calls, no device-context races.
@@ -711,9 +717,16 @@ void MediaPlayer::ActivateVideo(VideoPlayback* vp){
 // ── PlayVideo ───────────────────────────────────────────────
 
 bool MediaPlayer::PlayVideo(const std::string& path, SDL_Renderer* renderer,
-	int slaveW, int slaveH){
+	int slaveW, int slaveH, int fadeInMs, int fadeOutMs){
 	if(IsVideoPreloaded(path)){
-		return StartPreloadedVideo(path);
+		bool ok = StartPreloadedVideo(path);
+		// (1.6.6) Stamp fades onto the now-active VideoPlayback. The
+		// fresh-decode path below repeats the stamp after its ActivateVideo.
+		if(ok && active){
+			active->fadeInSec  = (float)fadeInMs  / 1000.0f;
+			active->fadeOutSec = (float)fadeOutMs / 1000.0f;
+		}
+		return ok;
 	}
 	videos.erase(path);
 
@@ -741,6 +754,12 @@ bool MediaPlayer::PlayVideo(const std::string& path, SDL_Renderer* renderer,
 	VideoPlayback* raw = vp.get();
 	videos.emplace(path, std::move(vp));
 	ActivateVideo(raw);
+	// (1.6.6) Stamp fade times after activation — same path as the
+	// preloaded branch above, just with a freshly-set-up VideoPlayback.
+	if(active){
+		active->fadeInSec  = (float)fadeInMs  / 1000.0f;
+		active->fadeOutSec = (float)fadeOutMs / 1000.0f;
+	}
 	return true;
 }
 
@@ -803,6 +822,30 @@ void MediaPlayer::UpdateVideoFrame(SDL_Renderer* renderer){
 
 	bool done = (vp->bufferedFrames <= 0 && !vp->threadRunning);
 	SDL_UnlockMutex(vp->mtx);
+
+	// (1.6.6) Fade-in / fade-out: scale the video texture's RGB channels by
+	// a brightness factor derived from elapsed playback time. brightness=0
+	// renders fully black (since color-mod multiplies the source colour by
+	// the modded value), brightness=1 leaves the frame untouched. Audio is
+	// not faded — the spec for 1.6.6 is visual only. Cheap enough to call
+	// every frame; falls back to a no-op (mod = 255) when no fade is set.
+	if(vp->texture){
+		double brightness = 1.0;
+		if(vp->fadeInSec > 0.0f && clock < (double)vp->fadeInSec){
+			brightness = clock / (double)vp->fadeInSec;
+		}
+		if(vp->fadeOutSec > 0.0f && vp->durationSec > 0.0){
+			double remaining = vp->durationSec - clock;
+			if(remaining < (double)vp->fadeOutSec){
+				double b = remaining / (double)vp->fadeOutSec;
+				if(b < brightness) brightness = b;
+			}
+		}
+		if(brightness < 0.0) brightness = 0.0;
+		if(brightness > 1.0) brightness = 1.0;
+		uint8_t bm = (uint8_t)(brightness * 255.0 + 0.5);
+		SDL_SetTextureColorMod(vp->texture, bm, bm, bm);
+	}
 
 	if(done){
 		std::string p = vp->path;

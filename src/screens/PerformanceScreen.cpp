@@ -532,7 +532,16 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 			case CommandType::ClearText:   return "clearText";
 			case CommandType::ClearImages: return "clearImages";
 			case CommandType::ClearAll:    return "clearAll";
-			case CommandType::Play:        return "play " + c.argument;
+			case CommandType::Play:{
+				// (1.6.6) Mirror the navigator's fade-spec formatting for the
+				// debug-popup "last command" line.
+				std::string out = "play " + c.argument;
+				if(c.fadeInMs != 0 || c.fadeOutMs != 0){
+					out += " " + std::to_string(c.fadeInMs) +
+						", " + std::to_string(c.fadeOutMs);
+				}
+				return out;
+			}
 			case CommandType::Stop:        return c.argument.empty() ? "stop" : "stop " + c.argument;
 			case CommandType::StopParticleCont: return c.argument.empty() ? "stopParticleCont" : "stopParticleCont " + c.argument;
 			case CommandType::Show:        return "show " + c.argument;
@@ -650,7 +659,11 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 					: app->GetRenderer().GetCanvasWidth();
 				int th = targetedDisplay.height > 0 ? targetedDisplay.height
 					: app->GetRenderer().GetCanvasHeight();
-				media.PlayVideo(fullPath, renderer, tw, th);
+				// (1.6.6) Forward the parsed fade-in / fade-out spec from
+				// `play file.mp4 IN, OUT`. 0/0 is the default and matches
+				// the pre-1.6.6 behaviour exactly.
+				media.PlayVideo(fullPath, renderer, tw, th,
+					cmd.fadeInMs, cmd.fadeOutMs);
 			} else{
 				media.PlayAudio(fullPath);
 			}

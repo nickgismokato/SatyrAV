@@ -278,6 +278,16 @@ struct Command{
 	// recognised keyword. The Overview Debug popup walks scenes and lifts
 	// this into the warnings list so authors can spot typos.
 	std::string unknownKeyword;
+
+	// (1.6.6) Fade-in / fade-out for `play <video> <fadeInMs>, <fadeOutMs>`.
+	// 0 (the default) on either side disables that side of the fade —
+	// `play video.mp4` is equivalent to `play video.mp4 0, 0`. Used only by
+	// `play` on video files; ignored for audio and every other command.
+	// The fade is implemented in the renderer as a per-frame brightness
+	// multiplier applied to the video texture, so 0% brightness is solid
+	// black and 100% is the decoded frame untouched.
+	int fadeInMs  = 0;
+	int fadeOutMs = 0;
 };
 
 // (1.4) Per-particle-type tunables. Storage lives on Scene and RevySchema;

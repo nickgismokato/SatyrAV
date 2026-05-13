@@ -66,4 +66,19 @@ void Platform::EnsureDirectoryExists(const std::string& path){
 	}
 }
 
+fs::path Platform::Utf8ToPath(const std::string& utf8){
+#ifdef _WIN32
+	if(utf8.empty()) return fs::path();
+	int wlen = MultiByteToWideChar(CP_UTF8, 0,
+		utf8.c_str(), (int)utf8.size(), nullptr, 0);
+	if(wlen <= 0) return fs::path(utf8);
+	std::wstring wide((size_t)wlen, L'\0');
+	MultiByteToWideChar(CP_UTF8, 0,
+		utf8.c_str(), (int)utf8.size(), wide.data(), wlen);
+	return fs::path(wide);
+#else
+	return fs::path(utf8);
+#endif
+}
+
 } // namespace SatyrAV

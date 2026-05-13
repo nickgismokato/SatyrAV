@@ -126,13 +126,20 @@ Audio device picker, F1–F12 audio hotkeys (with toggle behaviour), global logg
 
 Bug-fix release. Wrap-aware command-list scrolling, word-wrap on the slave display, dropdowns no longer freeze open after ESC + return, and project re-entry now starts the slave from a clean state. See [CHANGELOG.md](CHANGELOG.md) for details.
 
+### 1.6.5 — shipped
+
+Single bug-fix release: ungrouped `show` calls now stack on screen instead of replacing each other. See [CHANGELOG.md](CHANGELOG.md) for details.
+
+### 1.6.6 — shipped
+
+Bug-fix release plus one small feature: `play` videos gained optional fade-in / fade-out times, `#` inside quoted text no longer truncates the cue, and `.ngk` filenames with `æøå` now open on Windows. See [CHANGELOG.md](CHANGELOG.md) for details.
+
 ---
 
 ## Known bugs
 
 Most critical first. Bugs scheduled into a specific sub-version are listed there instead of here.
 
-- `.ngk` files cannot be read/recognized if it contains `æøå` in its name.
 - Run doesn't work as intended in macro environment. 
 - Scaling via the Debug menu will make the third output screen/monitor have less resolution when zooming in too much.
 	- Essentially, making the secondary target display too small, will make the output for the third monitor more "pixelated". This, I think, is because of how the resolution is rendered from the second to the third screen. The optimal rendering would be that the third screen display the secondary screen "pre" target display, essentially the resolution of the secondary display.
