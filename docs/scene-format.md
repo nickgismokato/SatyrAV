@@ -87,11 +87,14 @@ textit "message"         Italic text (uses fontItalic face)                (1.6.
 textbfCont "message"     Append, inheriting bold style                     (1.6.1)
 textitCont "message"     Append, inheriting italic style                   (1.6.1)
 textD "primary","sub"    Primary line + bottom-anchored italic translation (1.6.1)
+countdown(SECONDS)       Live MM:SS countdown timer at top of slave       (1.7)
+countdown(SEC, "LANG")   Same, with an "en" / "da" language label         (1.7)
 clear                    Clear ungrouped text, image, and particles (groups survive)
 clear NAME               Drop every entry tagged with group NAME          (1.3)
 clearText                Drop the text layer across every group           (1.3)
 clearImages              Drop the image + particle layer across every group (1.3)
 clearAll                 Full reset — text, images, particles, and groups (1.3)
+clearCountdown           Remove every active countdown                    (1.7)
 show image.png           Display an image (.png, .jpg, .bmp, .webp, .gif)
 show anim.gif            Display an animated GIF — frames cycle at file-defined delays (1.4)
 play file.mp3            Play audio file
@@ -102,6 +105,8 @@ stopParticleCont         Stop spawning ungrouped particles, let live ones finish
 stopParticleCont NAME    Same, scoped to a single group                      (1.4)
 comment "note"           Non-executable navigator row                      (1.2)
 ```
+
+> **Quoting *(1.7)*:** every quoted argument accepts three interchangeable delimiter pairs — `"..."`, `'...'`, and `´...´` (acute accent, distinct from the apostrophe). The opening delimiter must match the closing one; the other two then count as literal characters, so `text 'He said "hi"'` displays the double quotes verbatim. See [commands.md](commands.md#quoting-rules-17) for the full rules.
 
 ## Compound commands
 

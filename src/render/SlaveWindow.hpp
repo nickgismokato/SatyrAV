@@ -52,6 +52,19 @@ struct SlaveParticleEntry{
 	std::string groupName;
 };
 
+// (1.7) Live countdown timer entry. Renders as text via the same glyph
+// path as SlaveTextEntry, but the displayed string is formatted per
+// frame from elapsed time. Holds at `00:00` when the duration is
+// reached; removed by `clear`, `clearAll`, or `clearCountdown` (NOT
+// `clearText` — countdowns survive routine text wipes so a timer can
+// stay on screen across scene chatter).
+struct SlaveCountdownEntry{
+	int   durationSec  = 0;     // total seconds the countdown was started with
+	float startTimeSec = 0.0f;  // SDL_GetTicks-based seconds at push
+	// "" = digits only ("00:42"). "en" → "Countdown: ", "da" → "Nedtælling: ".
+	std::string label;
+};
+
 class SlaveWindow{
 public:
 	void Clear(Renderer& r, Colour bg = Colours::BLACK);
@@ -129,6 +142,12 @@ public:
 	// Drop all text, images, and particles regardless of group.
 	void ClearAll();
 
+	// (1.7) Countdown timers — see SlaveCountdownEntry.
+	// StartCountdown appends a new entry; multiple countdowns can run at
+	// once and stack vertically in the order they were pushed.
+	void StartCountdown(int seconds, const std::string& label);
+	void ClearCountdowns();
+
 private:
 	std::vector<SlaveTextEntry> textEntries;
 	Colour bgColour = Colours::BLACK;
@@ -140,6 +159,11 @@ private:
 
 	// Active particle systems, each with its own group tag.
 	std::vector<SlaveParticleEntry> particleEntries;
+
+	// (1.7) Active countdowns. Drawn at the top of the slave (centred X,
+	// stacked downward) after the text pass so they sit above regular
+	// text/images visually but use the same glyph path.
+	std::vector<SlaveCountdownEntry> countdownEntries;
 
 	// Delta-time stashed by Update() so draw helpers can integrate spin.
 	float lastDt = 0.0f;

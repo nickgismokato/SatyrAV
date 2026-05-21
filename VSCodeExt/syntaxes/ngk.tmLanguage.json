@@ -26,7 +26,7 @@
 			"name": "meta.section.ngk"
 		},
 		"commands": {
-			"match": "(?<![A-Za-z0-9_])(text|textCont|textbf|textit|textbfCont|textitCont|textD|clear|clearText|clearImages|clearAll|play|stop|stopParticleCont|show|comment)(?![A-Za-z0-9_])",
+			"match": "(?<![A-Za-z0-9_])(text|textCont|textbf|textit|textbfCont|textitCont|textD|clear|clearText|clearImages|clearAll|clearCountdown|play|stop|stopParticleCont|show|comment|countdown)(?![A-Za-z0-9_])",
 			"name": "keyword.control.ngk"
 		},
 		"group-block": {
@@ -51,13 +51,30 @@
 			"name": "support.function.modifier.ngk"
 		},
 		"strings": {
-			"name": "string.quoted.double.ngk",
-			"begin": "\"",
-			"end": "\"",
 			"patterns": [
 				{
-					"name": "constant.character.escape.ngk",
-					"match": "\\\\."
+					"name": "string.quoted.double.ngk",
+					"begin": "\"",
+					"end": "\"",
+					"patterns": [
+						{ "name": "constant.character.escape.ngk", "match": "\\\\." }
+					]
+				},
+				{
+					"name": "string.quoted.single.ngk",
+					"begin": "'",
+					"end": "'",
+					"patterns": [
+						{ "name": "constant.character.escape.ngk", "match": "\\\\." }
+					]
+				},
+				{
+					"name": "string.quoted.other.ngk",
+					"begin": "´",
+					"end": "´",
+					"patterns": [
+						{ "name": "constant.character.escape.ngk", "match": "\\\\." }
+					]
 				}
 			]
 		},

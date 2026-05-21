@@ -54,6 +54,13 @@ static std::string CommandToString(const Command& cmd){
 			}
 			return result;
 		}
+		case CommandType::Countdown:{
+			std::string out = "countdown(" + std::to_string(cmd.countdownSeconds);
+			if(!cmd.countdownLabel.empty()) out += ", \"" + cmd.countdownLabel + "\"";
+			out += ")";
+			return out;
+		}
+		case CommandType::ClearCountdown: return "clearCountdown";
 	}
 	return "???";
 }

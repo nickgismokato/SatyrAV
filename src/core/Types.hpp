@@ -75,7 +75,15 @@ enum class CommandType{
 	Show,
 	Loop,
 	Compound,
-	Comment
+	Comment,
+	// (1.7) Live countdown timer pushed onto the slave. Format MM:SS,
+	// minutes + seconds zero-padded, holds at 00:00 until cleared.
+	// Optional language label ("en" → "Countdown: ", "da" → "Nedtælling: ").
+	// No label argument → only the digits. Removed by `clear` / `clearAll`
+	// / `clearCountdown` (NOT `clearText`, so countdowns survive routine
+	// text wipes — useful for keeping a timer visible across scene chatter).
+	Countdown,
+	ClearCountdown
 };
 
 // (1.4) Distributions for sampling spawn positions in particle systems.
@@ -288,6 +296,14 @@ struct Command{
 	// black and 100% is the decoded frame untouched.
 	int fadeInMs  = 0;
 	int fadeOutMs = 0;
+
+	// (1.7) Countdown duration in whole seconds. Capped to MM:SS range
+	// (0–3599 = 59:59). Used only by CommandType::Countdown.
+	int countdownSeconds = 0;
+	// (1.7) Countdown language tag. Empty = no label (only digits shown).
+	// "en" → "Countdown: ", "da" → "Nedtælling: ". Unknown tags log a
+	// parser warning and fall back to no label.
+	std::string countdownLabel;
 };
 
 // (1.4) Per-particle-type tunables. Storage lives on Scene and RevySchema;

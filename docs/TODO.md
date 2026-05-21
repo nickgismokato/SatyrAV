@@ -8,6 +8,19 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 
 ---
 
+## Planned for 2.2.0
+
+- Add an application-window capture source (Windows only) so we can stream another running program onto the slave display. Video only — no audio capture.
+	- **Backend.** Windows Graphics Capture (WGC) via `GraphicsCaptureItem::CreateFromHWND` &rarr; `Direct3D11CaptureFramePool` &rarr; `FrameArrived`, sharing the existing D3D11 device with SDL/FFmpeg so the captured BGRA texture stays on the GPU. Requires Win11 (no yellow capture border).
+	- **Cue integration.** New `capture "<window-title>"` keyword in `SceneParser`, new `CommandType::Capture`, dispatched through `CueEngine` &rarr; `SlaveWindow`. Tear-down via a `stopCapture` command (or fold into existing clear semantics — decide during design).
+	- **Slave draw layer.** New layer in `SlaveWindow` between the video layer and the images layer. **Must honour the `[TargetedDisplay]` rect** so the captured window can be moved / scaled / rotated like images via `D → S`.
+	- **Window identity.** Case-insensitive **substring match on the window title** with a fallback message if not found. Easy for operators; revisit if it proves too fuzzy in practice.
+	- **Picker UI.** New popup that enumerates top-level windows (`EnumWindows`, filtered to visible + non-empty title, excludes SatyrAV's own HWNDs) so the operator can pick at scene-edit time. The chosen title substring is written back into the `.ngk`.
+	- **Phased landing:** (1) backend `WindowCaptureSource` class, verified against a debug texture; (2) `SlaveWindow` draw layer with rect support; (3) `SceneParser` / `CueEngine` wiring; (4) picker popup.
+	- **Why deferred from 1.7:** WGC needs WinRT ABI headers (`<windows.graphics.capture.h>` full method tables, `<windows.graphics.directx.direct3d11.interop.h>`, working `__uuidof` on templated `ITypedEventHandler`, etc.). The Debian mingw-w64 13 sysroot used for the current cross-compile only ships partial forward-decls — every workaround we tried hit a new gap (no `<wrl/event.h>`, no `<wrl/implements.h>`, `__declspec(uuid)` silently ignored, missing `IDirect3D11CaptureFramePool` method tables, missing `WindowsCreateStringReference` decl). Lands cleanly once the toolchain catches up — naturally that's the SDL3 / D3D11 reshuffle in 2.0.0 + MSYS2 (or equivalent full Windows SDK) by 2.2.0.
+
+---
+
 ## Planned for 2.1.0
 
 - (**Critical**) Add an output file like a `.srt` or `.ass` file that creates a time log when a show is running. This can help with time alignment in post production.
@@ -52,10 +65,8 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 
 ---
 
-## Planned for 1.7.0
+## Planned for 1.8.0
 
-- Add a way to have quotations in text commands such that we can display it.
-	- Maybe take inspiration from python and use mixed, so we can use `´Some text´` or `"Some text"`
 - Make a hierarchy for pictures such that you can command what pictures should be in front and what shouldn't.
 	- Currently the last displayed image will automatically be in front of all previous pictures.
 - Make a fastforward-goback scroller for videos.
@@ -96,10 +107,13 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 	- The Cue will have to makes "newlines" if the cue notes is to big.
 - Add typewriter effect to write text to secondary display one character at a time.
 	- Command: `typewrite(MS_PER_CHAR, "text")`
-- Add a countdown display option that begins a text countdown looking like this: `Countdown: M:s`
-	- Option for danish language
-	- Always show minutes and seconds. Maximum `59:59`.
-	- Command: `countdown(SECONDS)`
+
+---
+
+## 1.7.0 — shipped
+
+Alternate quote delimiters (`"…"` / `'…'` / `´…´`) so text can contain quotation marks, plus a live `countdown` command with optional `en` / `da` language labels and a companion `clearCountdown`. See [CHANGELOG.md](CHANGELOG.md) for details.
+
 ---
 
 ## Planned for 1.6 (split into sub-versions)

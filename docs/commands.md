@@ -12,7 +12,7 @@ Full reference for every command, modifier, and section available in a SatyrAV `
 
 Commands are grouped by role: scene-file sections, executable commands, modifiers, and structural blocks (`loop`, `run`, `group`, `macro`).
 
-> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, *(1.6.3)*, and *(1.6.6)* indicate the version they were introduced. Everything unmarked was already in 1.0.
+> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, *(1.6.3)*, *(1.6.6)*, and *(1.7)* indicate the version they were introduced. Everything unmarked was already in 1.0.
 
 ---
 
@@ -285,6 +285,33 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
         run{ show particle(NOISE, trail(8, star.png)) }
     }
     stopParticleCont Sparkles  # only the Sparkles group enters smooth-stop
+    ```
+
+### `countdown` *(1.7)*
+
+- **Syntax:** `countdown(SECONDS)` — or `countdown(SECONDS, "LANG")`
+- **Arguments:**
+    - `SECONDS` — integer from `0` to `3599` (= `59:59`). Values outside the range clamp into it.
+    - `LANG` — optional language tag: `"en"` → prefix `"Countdown: "`, `"da"` → prefix `"Nedtælling: "`. Any other value (or omitting the argument entirely) renders only the digits — useful when the countdown is meant as a neutral overlay without an explicit label.
+- **Behaviour:** Pushes a live timer onto the slave. The display ticks down once per second in real time, formatted as zero-padded `MM:SS` (e.g. `02:00`, `00:05`). When the timer reaches `00:00` it **holds at zero** until cleared — the operator decides when to advance. Multiple `countdown(...)` calls stack vertically at the top of the slave in the order they were pushed.
+- **Clear semantics:** `clear` (no name), `clearAll`, and the new `clearCountdown` all remove every countdown. `clearText` and `clearImages` deliberately do NOT touch them, so a timer can survive routine text refreshes during the scene.
+- **Output:** Centred horizontally at the top of the canvas (≈ 8 % from the top edge), rendered in white at the project font size.
+- **Example:**
+    ```txt
+    countdown(300, "da")     # "Nedtælling: 05:00" → ticks to "00:00"
+    countdown(120, "en")     # "Countdown: 02:00"
+    countdown(60)            # just "01:00"
+    ```
+
+### `clearCountdown` *(1.7)*
+
+- **Syntax:** `clearCountdown`
+- **Behaviour:** Removes every active countdown. Text, images, particles, and groups are untouched. Use when you want to dismiss a timer without disturbing the rest of the scene.
+- **Example:**
+    ```txt
+    countdown(60, "en")
+    # … operator advances cues, intermission ends early …
+    clearCountdown
     ```
 
 ### `comment` *(1.2)*
@@ -579,3 +606,23 @@ show particle(RAIN, 50, random(heart.png, [50,50], [200,200], true))
 - `\n` inside a quoted `text` string produces a new text entry.
 - `#` starts a line/end-of-line comment — everything after it on the line is discarded. *(1.6.6)* `#` characters inside a `"..."`-quoted string are kept verbatim and do not start a comment, so `text "Item #1"` renders the `#` literally.
 - Blank lines are ignored.
+
+## Quoting rules *(1.7)*
+
+Every quoted argument in scene files accepts **three interchangeable delimiter pairs**:
+
+| Pair | Use it when the text contains… |
+| --- | --- |
+| `"..."` | apostrophes, acute accents |
+| `'...'` | double quotes, acute accents |
+| `´...´` | double quotes, apostrophes |
+
+The opening and closing delimiters must match. Whichever pair is open treats the *other two* as literal characters, so:
+
+```txt
+text "He said 'hi' to me."          # ' is literal inside " "
+text 'She said "absolutely not".'   # " is literal inside ' '
+text ´don't worry about "quotes"´   # both ' and " literal inside ´ ´
+```
+
+`´` is the acute accent character (Unicode U+00B4, UTF-8 `0xC2 0xB4`) — distinct from the regular apostrophe `'`. It exists as a third option specifically for cases where both `"` and `'` need to appear inside the displayed text. The rule applies uniformly to `text`, `textCont`, `textbf`, `textit`, `textbfCont`, `textitCont`, `textD`, `comment`, and the optional `LANG` argument of `countdown(...)`.

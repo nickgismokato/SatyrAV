@@ -1,6 +1,7 @@
 #include "render/SlaveWindow.hpp"
 #include <SDL2/SDL.h>
 #include <cmath>
+#include <cstdio>
 #include <algorithm>
 
 namespace SatyrAV{
@@ -362,6 +363,41 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 			}
 		}
 	}
+
+	// (1.7) Countdown pass — drawn last so it sits above any text/images
+	// visually. Format `MM:SS` (both sides zero-padded, max 59:59), with
+	// an optional language label prefix. Multiple active countdowns stack
+	// downward from the top of the canvas.
+	if(!countdownEntries.empty()){
+		auto* renderer = r.GetSlave();
+		if(renderer){
+			const int canvasW = r.GetCanvasWidth();
+			const int canvasH = r.GetCanvasHeight();
+			const int lineH = text.GetSlaveLineHeight();
+			// Top of the canvas, with a small margin (≈8 % from the top edge).
+			int yCursor = canvasH / 12;
+			const int centerX = canvasW / 2;
+			const float now = SDL_GetTicks() / 1000.0f;
+
+			for(const auto& e : countdownEntries){
+				int remaining = e.durationSec - (int)(now - e.startTimeSec);
+				if(remaining < 0) remaining = 0;
+				int mins = remaining / 60;
+				int secs = remaining % 60;
+
+				std::string body;
+				if(e.label == "en")      body = "Countdown: ";
+				else if(e.label == "da") body = "Nedtælling: ";
+				char digits[8];
+				std::snprintf(digits, sizeof(digits), "%02d:%02d", mins, secs);
+				body += digits;
+
+				text.DrawTextCenteredSlave(renderer, body, centerX, yCursor,
+					Colours::WHITE, false, false);
+				yCursor += lineH;
+			}
+		}
+	}
 }
 
 void SlaveWindow::DrawMedia(Renderer& r, MediaPlayer& media){
@@ -705,6 +741,25 @@ void SlaveWindow::ClearAll(){
 				return !e.system.IsStoppingSmoothly();
 			}),
 		particleEntries.end());
+	// (1.7) `clearAll` is documented as the most aggressive wipe, so it
+	// takes the countdowns too. Plain `clear` (no name) handles this in
+	// PerformanceScreen by calling ClearCountdowns alongside its other
+	// per-layer clears; `clearText` deliberately does NOT.
+	countdownEntries.clear();
+}
+
+// (1.7) Countdown timers ---------------------------------------------------
+
+void SlaveWindow::StartCountdown(int seconds, const std::string& label){
+	SlaveCountdownEntry e;
+	e.durationSec  = seconds;
+	e.startTimeSec = SDL_GetTicks() / 1000.0f;
+	e.label        = label;
+	countdownEntries.push_back(std::move(e));
+}
+
+void SlaveWindow::ClearCountdowns(){
+	countdownEntries.clear();
 }
 
 void SlaveWindow::RenderTextureFitted(SDL_Renderer* r, SDL_Texture* tex,

@@ -2,6 +2,16 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 1.7.0 — shipped
+
+Two scene-language additions: alternate quote delimiters so quoted text can itself contain quotation marks, and a live `countdown` command with optional language labels.
+
+### Added
+- **Alternate quote delimiters in scene text.** Until 1.7 every quoted argument used `"..."` exclusively, so a line like `text "He said "hi""` was impossible to write. 1.7 accepts three interchangeable string pairs — `"..."`, `'...'`, and `´...´` (acute accent, UTF-8 `0xC2 0xB4`) — and the opener must match the closer. The other two delimiters inside an open string become literal characters, so `text 'He said "hi"'` and `text ´don't worry´` both render correctly. The change is purely additive: every existing scene that uses `"..."` still parses identically. New `DelimAt` helper in [SceneParser.cpp](src/core/SceneParser.cpp) returns the byte length + a kind code for the delimiter at a given offset, used in four refactored sites (`FindCommentStart`, `SplitArgs`, `SplitPlus`, `StripQuotes`) plus the bareword check that decides whether an unknown leading token is a typo or really meant to be text.
+- **Live countdown timer.** New `countdown(SECONDS)` command displays a `MM:SS` clock at the top of the slave that ticks down in real time. Both sides are zero-padded (`02:00`, `00:05`); the timer holds at `00:00` when it reaches zero and stays until cleared. Optional second argument selects a language prefix: `countdown(120, "en")` renders `Countdown: 02:00`, `countdown(120, "da")` renders `Nedtælling: 02:00`; omitting the argument shows just the digits so the timer can act as a neutral overlay. Range is `0`–`3599` (59:59) — values outside clamp into range. Multiple active countdowns stack downward. New companion `clearCountdown` command removes them without touching text/images/particles; plain `clear` and `clearAll` also wipe them, but `clearText` deliberately does not, so a timer survives routine text refreshes. Countdowns are scene-scoped — advancing to another scene drops them along with the rest of the slave content. New `CommandType::Countdown` / `ClearCountdown` and `Command::countdownSeconds` / `countdownLabel` in [Types.hpp](src/core/Types.hpp); paren-style parsing in [SceneParser.cpp](src/core/SceneParser.cpp); new `SlaveCountdownEntry` list rendered in the `DrawText` tail in [SlaveWindow.cpp](src/render/SlaveWindow.cpp) using the same `DrawTextCenteredSlave` glyph path as plain text; dispatch wired in [PerformanceScreen.cpp](src/screens/PerformanceScreen.cpp) and [MasterWindow.cpp](src/render/MasterWindow.cpp).
+
+---
+
 ## Version 1.6.6 — shipped
 
 Bug-fix release plus one small feature. Quoted text can now contain `#` without being eaten by the comment stripper, `.ngk` scene files with Danish characters (`æøå`) in their names open correctly on Windows, and `play` videos gained optional fade-in / fade-out times.

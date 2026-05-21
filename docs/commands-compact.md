@@ -62,11 +62,14 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `textbfCont "MSG"` *(1.6.1)*
 - `textitCont "MSG"` *(1.6.1)*
 - `textD "PRIMARY", "SECONDARY"` *(1.6.1)* — secondary optional; comma-split, whitespace-tolerant
+- `countdown(SECONDS)` *(1.7)* — live `MM:SS` timer, digits only
+- `countdown(SECONDS, "LANG")` *(1.7)* — `LANG` = `en` | `da`; adds a label prefix
 - `clear`
 - `clear NAME`
 - `clearText`
 - `clearImages`
 - `clearAll`
+- `clearCountdown` *(1.7)*
 - `show FILE`
 - `show MODIFIER(..., FILE)`
 - `play FILE`
@@ -138,6 +141,7 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 
 ## Syntax
 
-- `#` — line or trailing comment (ignored inside `"..."` strings *(1.6.6)*)
-- `\n` inside `"..."` — new text entry
+- `#` — line or trailing comment (ignored inside quoted strings *(1.6.6)*)
+- `"..."`, `'...'`, `´...´` — interchangeable string delimiters; opener must match closer *(1.7)*
+- `\n` inside a quoted string — new text entry
 - Blank lines ignored

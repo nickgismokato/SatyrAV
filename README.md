@@ -3,7 +3,7 @@
 An AV cue controller for SaTyR revyer. Dual-display output with keyboard-first
 navigation through acts, scenes, and commands.
 
-**Current version:** 1.6.5 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
+**Current version:** 1.7.0 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
 
 Full documentation lives in [docs/](docs/README.md).
 
@@ -30,8 +30,10 @@ Full documentation lives in [docs/](docs/README.md).
 - `group NAME{ ... }` tags every piece of slave content produced by the body so
   it can be dropped later with `clear NAME` without disturbing anything else
   on screen.
-- Fine-grained clears: `clear NAME`, `clearText`, `clearImages`, and
-  `clearAll`.
+- Fine-grained clears: `clear NAME`, `clearText`, `clearImages`, `clearAll`,
+  and `clearCountdown`.
+- Quoted text accepts three interchangeable delimiter pairs — `"..."`,
+  `'...'`, and `´...´` — so a line can itself contain quotation marks.
 
 ### Content rendering
 
@@ -55,6 +57,10 @@ Full documentation lives in [docs/](docs/README.md).
   whole line.
 - `textCont "..."` appends to the most recently pushed text entry across cues,
   so a line can be revealed piece by piece.
+- `countdown(SECONDS)` shows a live `MM:SS` timer at the top of the slave that
+  ticks down in real time, with an optional `"en"` / `"da"` language label.
+  Holds at `00:00` until cleared; scene-scoped, so it never bleeds into the
+  next scene.
 - Canvas-relative slave text: text scales with the targeted-display rect in
   lockstep with images, videos, GIFs, and particles.
 

@@ -5,13 +5,13 @@ Syntax highlighting for SatyrAV scene files (`.ngk`).
 Highlights:
 
 - Section headers — `[Options]`, `[Preload]`, `[Commands]`, `[Hotkeys]`, `[RevyData]`, `[Structure]`, `[Display]`, `[Particle.<TYPE>]`.
-- Command keywords — `text`, `textCont`, `textbf`, `textit`, `textbfCont`, `textitCont`, `textD`, `clear`, `clearText`, `clearImages`, `clearAll`, `play`, `stop`, `stopParticleCont`, `show`, `comment`.
+- Command keywords — `text`, `textCont`, `textbf`, `textit`, `textbfCont`, `textitCont`, `textD`, `clear`, `clearText`, `clearImages`, `clearAll`, `clearCountdown`, `play`, `stop`, `stopParticleCont`, `show`, `comment`, `countdown`.
 - Modifier wrappers — `color(...)`, `trans(...)`, `rotate(...)`, `move(...)`, `spin(...)`, `pos(...)`, `size(...)`, `particle(...)`, `randomImages(...)`, `randomSize(...)`, `bold(...)`, `it(...)`, `trail(...)`, `trailGlow(...)`, `bounce(...)`.
 - Block keywords — `group NAME{...}`, `loop(count, every){...}`.
 - Particle / distribution constants — `RAIN`, `SNOW`, `CONFETTI`, `RISE`, `SCATTER`, `BROWNIAN`, `OSCILLATION`, `ORBIT`, `NOISE`, `LIFECURVE`, `GHOST`, `STRETCH`, `GLOW`, `UNIFORM`, `NORMAL`, `LOGNORMAL`, `BINOMIAL`, `BERNOULLI`, `GAMMA`.
-- String literals (`"..."`), numbers, line comments (`# ...`).
+- String literals — `"..."`, `'...'`, and `´...´` *(1.7)* — numbers, line comments (`# ...`).
 
-This is the 1.6.3 baseline — syntax highlighting only. Auto-completion, diagnostics, and snippets are intentionally deferred to a later cycle.
+Syntax highlighting only — current as of SatyrAV 1.7.0. Auto-completion, diagnostics, and snippets are intentionally deferred to a later cycle.
 
 ## Install — option 1: copy folder (no tooling needed) ★ recommended
 
@@ -20,13 +20,13 @@ VSCode auto-loads any folder dropped into its `extensions` directory. No npm, no
 **Windows (cmd or PowerShell):**
 
 ```cmd
-xcopy /E /I /Y VSCodeExt %USERPROFILE%\.vscode\extensions\satyrav-ngk-0.1.0
+xcopy /E /I /Y VSCodeExt %USERPROFILE%\.vscode\extensions\satyrav-ngk-0.2.0
 ```
 
 **Linux / WSL / macOS:**
 
 ```bash
-cp -r VSCodeExt ~/.vscode/extensions/satyrav-ngk-0.1.0
+cp -r VSCodeExt ~/.vscode/extensions/satyrav-ngk-0.2.0
 ```
 
 Restart VSCode. Open any `.ngk` file — the grammar will be active.
@@ -50,8 +50,8 @@ Useful while editing the grammar — `Ctrl+R` reloads the host window so you see
 ```bash
 cd VSCodeExt
 npm install -g @vscode/vsce
-vsce package          # produces satyrav-ngk-0.1.0.vsix in this folder
-code --install-extension ./satyrav-ngk-0.1.0.vsix
+vsce package          # produces satyrav-ngk-0.2.0.vsix in this folder
+code --install-extension ./satyrav-ngk-0.2.0.vsix
 ```
 
 **Stick with Node 18** by pinning `vsce` to the last Node-18-compatible release:
@@ -60,10 +60,10 @@ code --install-extension ./satyrav-ngk-0.1.0.vsix
 cd VSCodeExt
 sudo npm install -g @vscode/vsce@2.32.0
 vsce package
-code --install-extension ./satyrav-ngk-0.1.0.vsix
+code --install-extension ./satyrav-ngk-0.2.0.vsix
 ```
 
-> If the `code --install-extension` step prints `ENOENT: no such file or directory`, it means `vsce package` didn't actually produce the `.vsix` — check the previous command's output. From WSL, prefix the path with `./` (or use the absolute Windows path: `code --install-extension "C:\Users\you\…\satyrav-ngk-0.1.0.vsix"`).
+> If the `code --install-extension` step prints `ENOENT: no such file or directory`, it means `vsce package` didn't actually produce the `.vsix` — check the previous command's output. From WSL, prefix the path with `./` (or use the absolute Windows path: `code --install-extension "C:\Users\you\…\satyrav-ngk-0.2.0.vsix"`).
 
 For most people, **option 1 is the path of least resistance** — it's a single copy with no toolchain. Use option 3 only if you want a redistributable `.vsix` to share.
 

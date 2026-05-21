@@ -477,6 +477,10 @@ void PerformanceScreen::AdvanceToNextScene(){
 	slaveUI.ClearText();
 	slaveUI.ClearImage();
 	slaveUI.StopParticles();
+	// (1.7) Countdowns are scene-scoped — a scene change drops them along
+	// with the rest of the slave content so a timer can't bleed into the
+	// next scene.
+	slaveUI.ClearCountdowns();
 	media.StopAll();
 
 	// Preload for new context
@@ -548,6 +552,13 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 			case CommandType::Loop:        return "loop(...)";
 			case CommandType::Compound:    return "compound";
 			case CommandType::Comment:     return "# " + c.argument;
+			case CommandType::Countdown:{
+				std::string out = "countdown(" + std::to_string(c.countdownSeconds);
+				if(!c.countdownLabel.empty()) out += ", \"" + c.countdownLabel + "\"";
+				out += ")";
+				return out;
+			}
+			case CommandType::ClearCountdown: return "clearCountdown";
 		}
 		return "???";
 	};
@@ -627,6 +638,10 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 				slaveUI.ClearText();
 				slaveUI.ClearImage();
 				slaveUI.StopParticles();
+				// (1.7) Countdowns ride along with the no-arg `clear`. The
+				// per-layer `clearText` deliberately doesn't touch them so a
+				// timer can stay on screen across text refreshes.
+				slaveUI.ClearCountdowns();
 			} else{
 				// `clear NAME` — drop one whole group across all three layers.
 				slaveUI.ClearGroup(cmd.argument);
@@ -785,6 +800,12 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 		case CommandType::Loop:
 		case CommandType::Compound:
 		case CommandType::Comment:
+			break;
+		case CommandType::Countdown:
+			slaveUI.StartCountdown(cmd.countdownSeconds, cmd.countdownLabel);
+			break;
+		case CommandType::ClearCountdown:
+			slaveUI.ClearCountdowns();
 			break;
 	}
 }

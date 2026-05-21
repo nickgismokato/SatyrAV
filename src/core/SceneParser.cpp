@@ -18,17 +18,51 @@ static std::string Trim(const std::string& s){
 	return s.substr(lt, rt - lt + 1);
 }
 
+// (1.7) String delimiters supported in scene files:
+//   "..."   primary; `'` and `´` inside are literal
+//   '...'   single quote; `"` and `´` inside are literal
+//   ´...´   acute accent (UTF-8 0xC2 0xB4); `"` and `'` inside are literal
+//
+// All three forms are interchangeable — pick whichever doesn't clash with
+// the literal characters you want to display. Open and close must match;
+// mismatched delimiters inside a string are treated as literal content.
+//
+// Returns the byte length of the delimiter starting at `s[i]` (0 if no
+// delimiter is there), and writes a distinguishing kind code (1/2/3) into
+// `*kind` so quote-aware loops can require the closer to match the opener.
+static size_t DelimAt(const std::string& s, size_t i, int* kind = nullptr){
+	if(i >= s.size()) return 0;
+	unsigned char c = (unsigned char)s[i];
+	if(c == '"'){  if(kind) *kind = 1; return 1; }
+	if(c == '\''){ if(kind) *kind = 2; return 1; }
+	// ´ (U+00B4) → 0xC2 0xB4 in UTF-8
+	if(c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB4){
+		if(kind) *kind = 3;
+		return 2;
+	}
+	return 0;
+}
+
 // (1.6.6) Find the start of a `#` line-comment, ignoring `#` characters
-// that sit inside a double-quoted string. Pre-1.6.6 the parser used a
-// plain `line.find('#')`, which truncated `text "Look at #1"` to
-// `text "Look at ` and lost the rest of the cue. Returns std::string::npos
-// when the line has no comment.
+// that sit inside a quoted string. Pre-1.6.6 the parser used a plain
+// `line.find('#')`, which truncated `text "Look at #1"` to `text "Look at `
+// and lost the rest of the cue. *(1.7)* Quote tracking honours `'` and `´`
+// as alternates to `"`. Returns std::string::npos when the line has no
+// comment.
 static size_t FindCommentStart(const std::string& line){
-	bool inQuote = false;
-	for(size_t i = 0; i < line.size(); i++){
-		char c = line[i];
-		if(c == '"') inQuote = !inQuote;
-		else if(c == '#' && !inQuote) return i;
+	int quoteKind = 0;
+	for(size_t i = 0; i < line.size(); ){
+		int k = 0;
+		size_t dl = DelimAt(line, i, &k);
+		if(dl > 0){
+			if(quoteKind == 0)       quoteKind = k;
+			else if(quoteKind == k)  quoteKind = 0;
+			// else: different delimiter inside an open quote → literal.
+			i += dl;
+			continue;
+		}
+		if(line[i] == '#' && quoteKind == 0) return i;
+		i++;
 	}
 	return std::string::npos;
 }
@@ -67,17 +101,26 @@ static size_t FindMatchingBracket(const std::string& s, size_t openPos){
 	return std::string::npos;
 }
 
-// Split arguments at top-level commas (not inside parens or brackets)
+// Split arguments at top-level commas (not inside parens, brackets, or
+// quoted strings). *(1.7)* Honours `'` and `´` as alternate quote pairs.
 static std::vector<std::string> SplitArgs(const std::string& s){
 	std::vector<std::string> args;
 	int parenDepth = 0, bracketDepth = 0;
-	bool inQuote = false;
+	int quoteKind = 0;
 	size_t start = 0;
 
-	for(size_t i = 0; i < s.size(); i++){
+	for(size_t i = 0; i < s.size(); ){
+		int k = 0;
+		size_t dl = DelimAt(s, i, &k);
+		if(dl > 0){
+			if(quoteKind == 0)      quoteKind = k;
+			else if(quoteKind == k) quoteKind = 0;
+			i += dl;
+			continue;
+		}
+		if(quoteKind != 0){ i++; continue; }
+
 		char c = s[i];
-		if(c == '"') inQuote = !inQuote;
-		if(inQuote) continue;
 		if(c == '(') parenDepth++;
 		else if(c == ')') parenDepth--;
 		else if(c == '[') bracketDepth++;
@@ -86,6 +129,7 @@ static std::vector<std::string> SplitArgs(const std::string& s){
 			args.push_back(Trim(s.substr(start, i - start)));
 			start = i + 1;
 		}
+		i++;
 	}
 	args.push_back(Trim(s.substr(start)));
 	return args;
@@ -116,10 +160,19 @@ static bool ParseBracketPairF(const std::string& s, float& a, float& b){
 	} catch(...){ return false; }
 }
 
-// Strip quotes from a string argument
+// Strip quotes from a string argument. *(1.7)* Accepts `"..."`, `'...'`,
+// or `´...´` — the closer must match the opener. Returns the input
+// unchanged if it isn't a recognised quoted string.
 static std::string StripQuotes(const std::string& s){
-	if(s.size() >= 2 && s.front() == '"' && s.back() == '"'){
-		return s.substr(1, s.size() - 2);
+	if(s.size() >= 2){
+		if(s.front() == '"'  && s.back() == '"')  return s.substr(1, s.size() - 2);
+		if(s.front() == '\'' && s.back() == '\'') return s.substr(1, s.size() - 2);
+	}
+	// ´...´ uses two bytes at each end (UTF-8 0xC2 0xB4).
+	if(s.size() >= 4
+		&& (unsigned char)s[0] == 0xC2 && (unsigned char)s[1] == 0xB4
+		&& (unsigned char)s[s.size()-2] == 0xC2 && (unsigned char)s[s.size()-1] == 0xB4){
+		return s.substr(2, s.size() - 4);
 	}
 	return s;
 }
@@ -509,15 +562,23 @@ static std::string ParseModifiers(const std::string& input, RenderModifiers& mod
 // and brackets. Used by `text` / `textCont` to support the concatenation
 // operator — each piece is parsed independently via ParseModifiers so every
 // segment can carry its own color/trans wrapper on one line.
+// *(1.7)* Quote tracking honours `'` and `´` as alternates to `"`.
 static std::vector<std::string> SplitPlus(const std::string& s){
 	std::vector<std::string> out;
 	int parenDepth = 0, bracketDepth = 0;
-	bool inQuote = false;
+	int quoteKind = 0;
 	size_t start = 0;
-	for(size_t i = 0; i < s.size(); i++){
+	for(size_t i = 0; i < s.size(); ){
+		int k = 0;
+		size_t dl = DelimAt(s, i, &k);
+		if(dl > 0){
+			if(quoteKind == 0)      quoteKind = k;
+			else if(quoteKind == k) quoteKind = 0;
+			i += dl;
+			continue;
+		}
+		if(quoteKind != 0){ i++; continue; }
 		char c = s[i];
-		if(c == '"') inQuote = !inQuote;
-		if(inQuote) continue;
 		if(c == '(') parenDepth++;
 		else if(c == ')') parenDepth--;
 		else if(c == '[') bracketDepth++;
@@ -526,6 +587,7 @@ static std::vector<std::string> SplitPlus(const std::string& s){
 			out.push_back(Trim(s.substr(start, i - start)));
 			start = i + 1;
 		}
+		i++;
 	}
 	out.push_back(Trim(s.substr(start)));
 	// Drop empties (e.g. trailing `+`).
@@ -625,6 +687,34 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 	Command cmd;
 	cmd.lineNumber = lineNumber;
 
+	// (1.7) `countdown(SECONDS)` and `countdown(SECONDS, "LANG")` are the
+	// only paren-style commands in the grammar; the rest still split on the
+	// first space. Handle countdown up front so it gets paren-aware arg
+	// extraction without disturbing the existing keyword dispatch.
+	if(line.size() > 10 && line.compare(0, 10, "countdown(") == 0){
+		cmd.type = CommandType::Countdown;
+		size_t close = line.rfind(')');
+		std::string inner = (close != std::string::npos && close > 9)
+			? line.substr(10, close - 10) : "";
+		auto args = SplitArgs(inner);
+		if(!args.empty()){
+			try{ cmd.countdownSeconds = std::stoi(Trim(args[0])); }
+			catch(...){ cmd.countdownSeconds = 0; }
+		}
+		if(args.size() >= 2){
+			std::string lang = StripQuotes(Trim(args[1]));
+			std::transform(lang.begin(), lang.end(), lang.begin(), ::tolower);
+			// Recognised tags get a label; unknown tags fall back to "no
+			// label" (just the digits). Empty second arg = explicit no-label.
+			if(lang == "en" || lang == "da") cmd.countdownLabel = lang;
+		}
+		// Clamp to MM:SS range (max 59:59 = 3599s).
+		if(cmd.countdownSeconds < 0)    cmd.countdownSeconds = 0;
+		if(cmd.countdownSeconds > 3599) cmd.countdownSeconds = 3599;
+		cmd.argument = inner; // for the master command list / debug
+		return cmd;
+	}
+
 	auto spacePos = line.find(' ');
 	std::string keyword = (spacePos != std::string::npos)
 		? line.substr(0, spacePos) : line;
@@ -645,8 +735,9 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 	else if(keyword == "play")         cmd.type = CommandType::Play;
 	else if(keyword == "stop")         cmd.type = CommandType::Stop;
 	else if(keyword == "stopParticleCont") cmd.type = CommandType::StopParticleCont;
-	else if(keyword == "show")         cmd.type = CommandType::Show;
-	else if(keyword == "comment")      cmd.type = CommandType::Comment;
+	else if(keyword == "show")            cmd.type = CommandType::Show;
+	else if(keyword == "comment")         cmd.type = CommandType::Comment;
+	else if(keyword == "clearCountdown")  cmd.type = CommandType::ClearCountdown;
 	else{
 		cmd.type = CommandType::Text;
 		// (1.6.3) Heuristic: a leading bareword (no quote, no `+`, no
@@ -654,9 +745,15 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 		// — flag it so the Overview Debug popup can surface it. Strings
 		// that genuinely start with text (quoted or with leading non-
 		// alpha) skip this path and behave as before.
+		// *(1.7)* Also let `´…´` through (UTF-8 0xC2 0xB4) so the new
+		// acute-accent quote pair doesn't get warned on.
 		if(!keyword.empty()){
 			char c0 = keyword.front();
-			bool isBareWord = (c0 != '"' && c0 != '\'' && c0 != '+' && c0 != '#');
+			bool startsWithAcute = (keyword.size() >= 2
+				&& (unsigned char)c0 == 0xC2
+				&& (unsigned char)keyword[1] == 0xB4);
+			bool isBareWord = (c0 != '"' && c0 != '\'' && c0 != '+' && c0 != '#'
+				&& !startsWithAcute);
 			if(isBareWord) cmd.unknownKeyword = keyword;
 		}
 	}
@@ -670,7 +767,8 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 		cmd.argument = Trim(argRaw);
 	} else if(cmd.type == CommandType::ClearText
 		|| cmd.type == CommandType::ClearImages
-		|| cmd.type == CommandType::ClearAll){
+		|| cmd.type == CommandType::ClearAll
+		|| cmd.type == CommandType::ClearCountdown){
 		// These take no arguments — any trailing text is ignored.
 		cmd.argument = "";
 	} else if(cmd.type == CommandType::TextD){
