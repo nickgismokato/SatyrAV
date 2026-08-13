@@ -21,6 +21,8 @@
 
 ## In a project (Performance screen)
 
+The navigator has three focusable columns — **Akt**, **Scene**, **Command** — plus, from *1.8.4*, a read-only **Cue Notes** column on the right. Cue Notes is not focusable and has no keys of its own: it scrolls with the command list and shows the `[Cue]` note attached to each row. It only appears when the selected scene defines notes, so scenes without them keep the full-width command column.
+
 ### Navigation
 
 | Key | Action |

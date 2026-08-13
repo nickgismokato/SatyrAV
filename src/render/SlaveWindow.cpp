@@ -25,6 +25,87 @@ namespace{
 	}
 }
 
+// (1.8.3) Resolve the position of an animated entry at `elapsed` seconds
+// since it was pushed. One implementation for both move() and pathMove(),
+// shared by the text and image draw paths — before 1.8.3 the two-point
+// lerp was written out twice, and a path would have had to be too.
+//
+// Returns false when the entry is not animated, leaving the caller to fall
+// through to pos() / centred layout as before.
+//
+// `contentW/H` size the content, and are only consulted for side sentinels
+// (N/S/E/W), which resolve to an off-screen position relative to it.
+static bool EvalAnimatedPosition(const RenderModifiers& mods, float elapsed,
+	int contentW, int contentH, int screenW, int screenH,
+	int& outX, int& outY){
+
+	// Resolve one endpoint — percent coordinates, or a side sentinel.
+	auto resolve = [&](float px, float py, int side, int& x, int& y){
+		if(side != 0){
+			SideToPixel(side, contentW, contentH, screenW, screenH, x, y);
+		} else{
+			x = (int)(px / 100.0f * (float)screenW);
+			y = (int)(py / 100.0f * (float)screenH);
+		}
+	};
+
+	// ── pathMove(): two or more waypoints ──
+	if(mods.pathPoints.size() >= 2 && mods.pathDurationSec > 0.0f){
+		const int legs = (int)mods.pathPoints.size() - 1;
+		const float total = mods.pathDurationSec;
+		if(elapsed < 0.0f) elapsed = 0.0f;
+
+		// Fold elapsed time into a position along a single forward pass.
+		float t;
+		switch(mods.pathRepeat){
+			case RenderModifiers::PathRepeat::Loop:
+				t = std::fmod(elapsed, total);
+				break;
+			case RenderModifiers::PathRepeat::PingPong:{
+				// One full there-and-back cycle is twice the path time; the
+				// second half replays the first in reverse.
+				const float cycle = total * 2.0f;
+				float u = std::fmod(elapsed, cycle);
+				t = (u <= total) ? u : (cycle - u);
+				break;
+			}
+			case RenderModifiers::PathRepeat::Once:
+			default:
+				t = std::min(elapsed, total);
+				break;
+		}
+
+		const float legDur = total / (float)legs;
+		int leg = (legDur > 0.0f) ? (int)(t / legDur) : 0;
+		if(leg >= legs) leg = legs - 1;   // clamps the exact-end case
+		if(leg < 0)     leg = 0;
+		float local = (legDur > 0.0f) ? (t - (float)leg * legDur) / legDur : 1.0f;
+		local = std::clamp(local, 0.0f, 1.0f);
+
+		const auto& a = mods.pathPoints[leg];
+		const auto& b = mods.pathPoints[leg + 1];
+		int ax, ay, bx, by;
+		resolve(a.x, a.y, a.side, ax, ay);
+		resolve(b.x, b.y, b.side, bx, by);
+		outX = (int)((1.0f - local) * (float)ax + local * (float)bx);
+		outY = (int)((1.0f - local) * (float)ay + local * (float)by);
+		return true;
+	}
+
+	// ── move(): the original two-point tween ──
+	if(mods.hasMove && mods.moveDurationSec > 0.0f){
+		float t = std::clamp(elapsed / mods.moveDurationSec, 0.0f, 1.0f);
+		int fromX, fromY, toX, toY;
+		resolve(mods.moveFromX, mods.moveFromY, mods.moveFromSide, fromX, fromY);
+		resolve(mods.moveToX,   mods.moveToY,   mods.moveToSide,   toX,   toY);
+		outX = (int)((1.0f - t) * (float)fromX + t * (float)toX);
+		outY = (int)((1.0f - t) * (float)fromY + t * (float)toY);
+		return true;
+	}
+
+	return false;
+}
+
 void SlaveWindow::Clear(Renderer& r, Colour bg){
 	r.ClearSlave(bg);
 }
@@ -165,6 +246,72 @@ namespace{
 			if(rh > outH) outH = rh;
 		}
 	}
+
+	// (1.8.2) ── Typewriter reveal ───────────────────────────────
+	// Everything here counts *characters*, never bytes: the 1.8.2 LaTeX
+	// symbols put multi-byte UTF-8 into ordinary scene text, and cutting
+	// mid-codepoint would draw a replacement box rather than a partial
+	// glyph. A UTF-8 continuation byte is 0b10xxxxxx, so a character
+	// starts at every byte that is not one.
+	static bool IsUtf8Continuation(char c){
+		return ((unsigned char)c & 0xC0) == 0x80;
+	}
+
+	static int Utf8Length(const std::string& s){
+		int n = 0;
+		for(char c : s){
+			if(!IsUtf8Continuation(c)) n++;
+		}
+		return n;
+	}
+
+	// First `count` characters of `s`. count <= 0 gives "";
+	// count >= length gives the whole string.
+	static std::string Utf8Prefix(const std::string& s, int count){
+		if(count <= 0) return "";
+		int n = 0;
+		for(size_t i = 0; i < s.size(); i++){
+			if(!IsUtf8Continuation(s[i])){
+				if(n == count) return s.substr(0, i);
+				n++;
+			}
+		}
+		return s;
+	}
+
+	// The runs an entry should draw this frame. Anything that is not a
+	// live typewriter returns its runs untouched, so the common path
+	// costs a single branch.
+	static std::vector<TextRun> VisibleRuns(const SlaveTextEntry& entry,
+		float nowSec){
+		if(entry.typeMsPerChar <= 0 || entry.typeComplete) return entry.runs;
+
+		float elapsedMs = (nowSec - entry.spawnTimeSec) * 1000.0f;
+		if(elapsedMs < 0.0f) elapsedMs = 0.0f;
+		// Characters revealed across the whole command, rebased onto this
+		// entry's slice of it (see SlaveTextEntry::typeCharOffset).
+		int revealed = (int)(elapsedMs / (float)entry.typeMsPerChar)
+			- entry.typeCharOffset;
+		if(revealed <= 0) return {};
+
+		std::vector<TextRun> out;
+		int budget = revealed;
+		for(const auto& run : entry.runs){
+			int len = Utf8Length(run.text);
+			if(budget >= len){
+				out.push_back(run);
+				budget -= len;
+				continue;
+			}
+			if(budget > 0){
+				TextRun partial = run;       // keeps colour / bold / italic
+				partial.text = Utf8Prefix(run.text, budget);
+				out.push_back(std::move(partial));
+			}
+			break;
+		}
+		return out;
+	}
 } // namespace
 
 void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
@@ -192,16 +339,24 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 	std::vector<std::vector<int>> lineWidths(textEntries.size());
 	std::vector<std::vector<int>> lineHeights(textEntries.size());
 	std::vector<std::vector<std::vector<int>>> runWidthsPerLine(textEntries.size());
+	// (1.8.2) Typewriters are resolved to their currently-visible runs here,
+	// before wrapping, so a revealing line wraps and re-centres exactly as
+	// the finished line will. An entry with nothing revealed yet takes the
+	// empty-entry path below, which keeps its slot in the centred stack —
+	// so the rest of the screen doesn't jump when the first character
+	// appears.
+	const float nowSec = SDL_GetTicks() / 1000.0f;
 	for(size_t i = 0; i < textEntries.size(); i++){
 		auto& entry = textEntries[i];
-		if(entry.runs.empty()){
+		std::vector<TextRun> visible = VisibleRuns(entry, nowSec);
+		if(visible.empty()){
 			entryLines[i].push_back({});
 			lineWidths[i].push_back(0);
 			lineHeights[i].push_back(slaveLineH);
 			runWidthsPerLine[i].push_back({});
 			continue;
 		}
-		entryLines[i] = WrapEntryLines(entry.runs, wrapWidth, text);
+		entryLines[i] = WrapEntryLines(visible, wrapWidth, text);
 		for(auto& line : entryLines[i]){
 			int lw = 0, lh = 0;
 			std::vector<int> rws;
@@ -289,26 +444,11 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 		// around blockX (block-centre) or left-aligned at blockX.
 		bool centerEachLine = false;
 
-		if(entry.mods.hasMove && entry.mods.moveDurationSec > 0.0f){
-			float now = SDL_GetTicks() / 1000.0f;
-			float elapsed = now - entry.spawnTimeSec;
-			float t = std::clamp(elapsed / entry.mods.moveDurationSec, 0.0f, 1.0f);
-
-			int fromX, fromY, toX, toY;
-			if(entry.mods.moveFromSide != 0){
-				SideToPixel(entry.mods.moveFromSide, blockMaxW, blockH, slaveW, slaveH, fromX, fromY);
-			} else{
-				fromX = (int)(entry.mods.moveFromX / 100.0f * (float)slaveW);
-				fromY = (int)(entry.mods.moveFromY / 100.0f * (float)slaveH);
-			}
-			if(entry.mods.moveToSide != 0){
-				SideToPixel(entry.mods.moveToSide, blockMaxW, blockH, slaveW, slaveH, toX, toY);
-			} else{
-				toX = (int)(entry.mods.moveToX / 100.0f * (float)slaveW);
-				toY = (int)(entry.mods.moveToY / 100.0f * (float)slaveH);
-			}
-			blockX = (int)((1.0f - t) * (float)fromX + t * (float)toX);
-			blockY = (int)((1.0f - t) * (float)fromY + t * (float)toY);
+		// (1.8.3) One evaluator covers both move() and pathMove().
+		if(EvalAnimatedPosition(entry.mods,
+				SDL_GetTicks() / 1000.0f - entry.spawnTimeSec,
+				blockMaxW, blockH, slaveW, slaveH, blockX, blockY)){
+			// blockX / blockY filled by the evaluator.
 		} else if(entry.subtitleAnchor){
 			// Subtitle: each visual line is centred on the canvas, with
 			// per-line bottom-Y already computed above.
@@ -420,9 +560,11 @@ void SlaveWindow::DrawMedia(Renderer& r, MediaPlayer& media){
 		}
 	}
 
-	// All active images, painted in the order they were pushed. Grouped
-	// shows accumulate; ungrouped shows replaced any previous ungrouped
-	// image at push-time.
+	// All active images, painted front-to-back in list order. (1.6.5)
+	// Grouped and ungrouped shows both accumulate rather than replacing.
+	// (1.8.3) The list is kept sorted by `layer()` at push time, ties in
+	// push order, so iterating it in order is already the correct depth
+	// sort — see InsertImageByLayer.
 	for(auto& img : imageEntries){
 		// Animated GIF: advance the current frame by wall time. The frame
 		// delay vector is aligned 1:1 with `frames`, so we roll forward as
@@ -529,6 +671,31 @@ void SlaveWindow::PushTextRuns(const std::vector<TextRun>& runs,
 	if(!current.empty()) emit(std::move(current));
 }
 
+void SlaveWindow::PushTypewriteRuns(const std::vector<TextRun>& runs,
+	const RenderModifiers& mods, int msPerChar, const std::string& groupName){
+	// Reuse the PushTextRuns plumbing (capitalize, `\n` splitting, spawn
+	// time, grouping) and stamp the reveal state onto whatever entries it
+	// produced — the same approach PushSubtitleRuns takes.
+	size_t before = textEntries.size();
+	PushTextRuns(runs, mods, groupName);
+	if(msPerChar <= 0) return; // instant: identical to a plain text push
+
+	// Each emitted entry is one output line. Give every line the offset of
+	// the characters that precede it, so a multi-line typewrite reveals in
+	// reading order rather than all lines at once.
+	int offset = 0;
+	for(size_t i = before; i < textEntries.size(); i++){
+		auto& entry = textEntries[i];
+		entry.typeMsPerChar  = msPerChar;
+		entry.typeCharOffset = offset;
+		for(const auto& r : entry.runs) offset += Utf8Length(r.text);
+	}
+}
+
+void SlaveWindow::CompleteTypewriters(){
+	for(auto& entry : textEntries) entry.typeComplete = true;
+}
+
 void SlaveWindow::PushSubtitleRuns(const std::vector<TextRun>& runs,
 	const RenderModifiers& mods, const std::string& groupName){
 	// Reuses the PushTextRuns plumbing for capitalize/`\n`-splitting/spawn
@@ -621,7 +788,7 @@ void SlaveWindow::ShowImage(SDL_Texture* tex, int w, int h,
 	entry.spawnTimeSec = SDL_GetTicks() / 1000.0f;
 	entry.currentSpin = 0.0f;
 	entry.groupName = groupName;
-	imageEntries.push_back(entry);
+	InsertImageByLayer(std::move(entry));
 }
 
 void SlaveWindow::ShowAnimation(const std::vector<SDL_Texture*>& frames,
@@ -641,7 +808,21 @@ void SlaveWindow::ShowAnimation(const std::vector<SDL_Texture*>& frames,
 	entry.frameDelaysMs = delaysMs;
 	entry.frameIdx = 0;
 	entry.frameElapsedSec = 0.0f;
-	imageEntries.push_back(std::move(entry));
+	InsertImageByLayer(std::move(entry));
+}
+
+// (1.8.3) Insert an image so `imageEntries` stays sorted by `mods.layer`,
+// with equal layers keeping push order. The draw loop then remains a plain
+// front-to-back iteration and costs nothing per frame.
+//
+// The invariant this maintains is the important part: with every layer at
+// its default 0, `upper_bound` always returns end(), so this degenerates to
+// the pre-1.8.3 push_back and existing scenes render pixel-identically.
+void SlaveWindow::InsertImageByLayer(SlaveImageEntry&& entry){
+	const int layer = entry.mods.layer;
+	auto pos = std::upper_bound(imageEntries.begin(), imageEntries.end(), layer,
+		[](int value, const SlaveImageEntry& e){ return value < e.mods.layer; });
+	imageEntries.insert(pos, std::move(entry));
 }
 
 void SlaveWindow::ClearImage(){
@@ -781,27 +962,14 @@ void SlaveWindow::RenderTextureFitted(SDL_Renderer* r, SDL_Texture* tex,
 		drawH = (int)(texH * scale);
 	}
 
-	// ── Position: animated move() wins over pos(); otherwise centred ──
-	if(mods.hasMove && mods.moveDurationSec > 0.0f && spawnTimeSec > 0.0f){
-		float now = SDL_GetTicks() / 1000.0f;
-		float elapsed = now - spawnTimeSec;
-		float t = std::clamp(elapsed / mods.moveDurationSec, 0.0f, 1.0f);
-
-		int fromX, fromY, toX, toY;
-		if(mods.moveFromSide != 0){
-			SideToPixel(mods.moveFromSide, drawW, drawH, screenW, screenH, fromX, fromY);
-		} else{
-			fromX = (int)(mods.moveFromX / 100.0f * (float)screenW);
-			fromY = (int)(mods.moveFromY / 100.0f * (float)screenH);
-		}
-		if(mods.moveToSide != 0){
-			SideToPixel(mods.moveToSide, drawW, drawH, screenW, screenH, toX, toY);
-		} else{
-			toX = (int)(mods.moveToX / 100.0f * (float)screenW);
-			toY = (int)(mods.moveToY / 100.0f * (float)screenH);
-		}
-		drawX = (int)((1.0f - t) * (float)fromX + t * (float)toX);
-		drawY = (int)((1.0f - t) * (float)fromY + t * (float)toY);
+	// ── Position: animated move()/pathMove() wins over pos(); else centred ──
+	// (1.8.3) `spawnTimeSec > 0` still gates animation here: callers that
+	// pass 0 (the video layer) have no spawn stamp to measure elapsed time
+	// against and must never animate.
+	if(spawnTimeSec > 0.0f && EvalAnimatedPosition(mods,
+			SDL_GetTicks() / 1000.0f - spawnTimeSec,
+			drawW, drawH, screenW, screenH, drawX, drawY)){
+		// drawX / drawY filled by the evaluator.
 	} else if(mods.HasPosition()){
 		drawX = (int)(mods.posX / 100.0f * (float)screenW);
 		drawY = (int)(mods.posY / 100.0f * (float)screenH);

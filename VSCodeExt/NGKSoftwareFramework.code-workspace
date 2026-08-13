@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../../../SatyrAV/projects"
+		},
+		{
+			"path": "../../../KOMBIT/kdi-tools"
 		}
 	],
 	"settings": {

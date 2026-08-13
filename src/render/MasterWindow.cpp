@@ -61,6 +61,9 @@ static std::string CommandToString(const Command& cmd){
 			return out;
 		}
 		case CommandType::ClearCountdown: return "clearCountdown";
+		case CommandType::Typewrite:
+			return "typewrite(" + std::to_string(cmd.typeMsPerChar)
+				+ ", \"" + cmd.argument + "\")";
 	}
 	return "???";
 }
@@ -128,12 +131,33 @@ void MasterWindow::DrawNavigator(Renderer& r, TextRenderer& text,
 	int cmdColX = aktColW + sceneColW;
 	int cmdColW = w - cmdColX;
 
+	// (1.8.4) Cue Notes column. It only claims space when the primed scene
+	// actually defines notes, so every project that doesn't use the feature
+	// keeps the full-width command column it had before. The trade-off is a
+	// layout that differs between scenes; the alternative — always
+	// reserving a third of the command area — penalises every existing
+	// project for a feature it never asked for.
+	const Scene* cueScene = (primedAkt >= 0 && primedScene >= 0)
+		? engine.GetScene(primedAkt, primedScene) : nullptr;
+	const bool hasCueNotes = cueScene && !cueScene->cueNotes.empty();
+
+	int cueColX = 0, cueColW = 0;
+	if(hasCueNotes){
+		cueColW = std::max(160, (cmdColW * 35) / 100);
+		if(cueColW > cmdColW / 2) cueColW = cmdColW / 2; // never dominate
+		cmdColW -= cueColW;
+		cueColX = cmdColX + cmdColW;
+	}
+
 	int maxLines = (h - startY - 20) / lineH;
 	if(maxLines < 1) maxLines = 1;
 
 	// Draw column separators
 	r.DrawRect(renderer, aktColW - 1, startY, 1, h - startY, {0x40, 0x50, 0x60, 0xFF});
 	r.DrawRect(renderer, cmdColX - 1, startY, 1, h - startY, {0x40, 0x50, 0x60, 0xFF});
+	if(hasCueNotes){
+		r.DrawRect(renderer, cueColX - 1, startY, 1, h - startY, {0x40, 0x50, 0x60, 0xFF});
+	}
 
 	// ── Akt column ───────────────────────────────────────────
 	int aktCount = engine.GetAktCount();
@@ -206,7 +230,9 @@ void MasterWindow::DrawNavigator(Renderer& r, TextRenderer& text,
 		int rowPxBudget = cmdColW - 35 - 5;
 		if(rowPxBudget < 20) rowPxBudget = 20;
 
-		auto wrapCommand = [&text, rowPxBudget](const std::string& s){
+		// (1.8.4) The same greedy wrapper now serves two columns, so the
+		// pixel budget is a parameter rather than a captured constant.
+		auto wrapAt = [&text](const std::string& s, int rowPxBudget){
 			std::vector<std::string> rows;
 			if(s.empty()){ rows.emplace_back(); return rows; }
 			if(text.MeasureWidth(s) <= rowPxBudget){
@@ -250,11 +276,33 @@ void MasterWindow::DrawNavigator(Renderer& r, TextRenderer& text,
 			return rows;
 		};
 
-		// Helper — wrapped row count for command #idx.
+		auto wrapCommand = [&](const std::string& s){
+			return wrapAt(s, rowPxBudget);
+		};
+
+		// (1.8.4) The note for a row, already wrapped to the notes column.
+		// Empty vector when the row has no note or the column is hidden.
+		int notePxBudget = cueColW - 10;
+		if(notePxBudget < 20) notePxBudget = 20;
+		auto wrapNoteFor = [&](int idx) -> std::vector<std::string>{
+			if(!hasCueNotes) return {};
+			auto* c = engine.GetCommand(primedAkt, primedScene, idx);
+			if(!c) return {};
+			const CueNote* note = FindCueNote(*cueScene, RowCueName(*c));
+			if(!note) return {};
+			return wrapAt(note->text, notePxBudget);
+		};
+
+		// Helper — how many rows command #idx occupies. The note has to be
+		// counted too: the two columns share a row block so a note always
+		// sits beside its command, and the 1.6.4 wrap-aware scroll clamp
+		// below would mis-measure the last screenful without it.
 		auto rowsForCmd = [&](int idx) -> int{
 			auto* c = engine.GetCommand(primedAkt, primedScene, idx);
 			std::string s = c ? CommandToString(*c) : "???";
-			return (int)wrapCommand(s).size();
+			int cmdRows = (int)wrapCommand(s).size();
+			int noteRows = (int)wrapNoteFor(idx).size();
+			return std::max(cmdRows, noteRows);
 		};
 
 		// Scroll: keep primedCmd visible. Compute how many wrapped rows
@@ -316,12 +364,19 @@ void MasterWindow::DrawNavigator(Renderer& r, TextRenderer& text,
 
 			std::string cmdText = cmd ? CommandToString(*cmd) : "???";
 			auto rows = wrapCommand(cmdText);
-			int rowCount = (int)rows.size();
+			// (1.8.4) The note shares the command's row block, so whichever
+			// wraps taller sets the block height and the note always starts
+			// level with its command — which is what makes the notes column
+			// scroll in lockstep instead of drifting.
+			auto noteRows = wrapNoteFor(idx);
+			int rowCount = std::max((int)rows.size(), (int)noteRows.size());
 			int blockH = rowCount * lineH;
 
 			if(idx == primedCmd){
 				int hlH = std::min(blockH, yLimit - yCursor);
-				r.DrawRect(renderer, cmdColX, yCursor, cmdColW, hlH, Colours::HIGHLIGHT);
+				// Span the notes column too, so the eye tracks one row.
+				int hlW = hasCueNotes ? (cmdColW + cueColW) : cmdColW;
+				r.DrawRect(renderer, cmdColX, yCursor, hlW, hlH, Colours::HIGHLIGHT);
 			}
 
 			if(!isComment){
@@ -339,10 +394,23 @@ void MasterWindow::DrawNavigator(Renderer& r, TextRenderer& text,
 					? Colours::ORANGE : Colours::WHITE;
 			}
 
-			for(int ri = 0; ri < rowCount; ri++){
+			for(int ri = 0; ri < (int)rows.size(); ri++){
 				int rowY = yCursor + ri * lineH;
 				if(rowY >= yLimit){ overflowed = true; break; }
 				text.DrawText(renderer, rows[ri], cmdColX + 35, rowY + 2, c);
+			}
+
+			// (1.8.4) Cue note, level with the first row of its command.
+			// Read-only by design — nothing here is selectable or focusable,
+			// so it is drawn in a dimmer colour than the command to keep the
+			// operator's eye on the cue list itself.
+			for(int ri = 0; ri < (int)noteRows.size(); ri++){
+				int rowY = yCursor + ri * lineH;
+				if(rowY >= yLimit){ overflowed = true; break; }
+				Colour nc = (idx == primedCmd)
+					? Colour{0xD0, 0xD8, 0xE0, 0xFF}
+					: Colour{0x90, 0x9C, 0xA8, 0xFF};
+				text.DrawText(renderer, noteRows[ri], cueColX + 6, rowY + 2, nc);
 			}
 
 			yCursor += blockH;

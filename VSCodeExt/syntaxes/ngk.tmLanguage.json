@@ -19,14 +19,14 @@
 			"name": "comment.line.number-sign.ngk"
 		},
 		"section-headers": {
-			"match": "^\\s*\\[(Options|Preload|Commands|Hotkeys|RevyData|Structure|Display|Particle\\.[A-Z]+)\\]\\s*$",
+			"match": "^\\s*\\[(Options|Preload|Commands|Macro|Cue|Hotkeys|RevyData|Structure|Display|Particle\\.[A-Z]+)\\]\\s*$",
 			"captures": {
 				"1": { "name": "entity.name.section.ngk" }
 			},
 			"name": "meta.section.ngk"
 		},
 		"commands": {
-			"match": "(?<![A-Za-z0-9_])(text|textCont|textbf|textit|textbfCont|textitCont|textD|clear|clearText|clearImages|clearAll|clearCountdown|play|stop|stopParticleCont|show|comment|countdown)(?![A-Za-z0-9_])",
+			"match": "(?<![A-Za-z0-9_])(text|textCont|textbf|textit|textbfCont|textitCont|textD|clear|clearText|clearImages|clearAll|clearCountdown|play|stop|stopParticleCont|show|comment|countdown|typewrite)(?![A-Za-z0-9_])",
 			"name": "keyword.control.ngk"
 		},
 		"group-block": {
@@ -47,7 +47,7 @@
 			"name": "constant.language.particle.ngk"
 		},
 		"modifiers": {
-			"match": "(?<![A-Za-z0-9_])(color|trans|rotate|move|spin|pos|size|particle|randomImages|randomSize|bold|it|trail|trailGlow|bounce)(?=\\s*\\()",
+			"match": "(?<![A-Za-z0-9_])(color|trans|rotate|move|pathMove|spin|pos|size|scale|layer|particle|randomImages|randomSize|random|bold|it|trail|trailGlow|bounce)(?=\\s*\\()",
 			"name": "support.function.modifier.ngk"
 		},
 		"strings": {

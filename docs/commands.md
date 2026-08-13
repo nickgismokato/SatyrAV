@@ -52,6 +52,30 @@ Files to pre-decode/pre-cache before the scene runs, so the first `show` or `pla
     intro.mp3
     ```
 
+### `[Cue]` *(1.8.4)*
+
+Named operator notes, shown in the master window's **Cue Notes** column beside the command that references them. Nothing reaches the slave — these are stage-management notes, not audience-facing text.
+
+- **Syntax:** `[Cue]` on its own line, then one note per line: `Name` followed by whitespace and the note text. A command claims a note by ending with `\Name`.
+- **Names:** letters, digits and underscores (`Cue1`, `stage_left_2`).
+- **Placement:** `[Cue]` may appear before or after `[Commands]` — references are resolved in a pre-pass, so section order does not matter.
+- **Binding:** the reference attaches to the whole **navigator row**. On a compound (`clear & play x.mp3 \Cue1`) the note belongs to the row, not to one sub-command. A `run{ … }` collapses its body into one row, so a reference written on a command inside the body surfaces on that row.
+- **Blocks:** a reference on a block's closing brace (`} \Cue1`) is dropped — notes bind to command rows. The brace still closes the block, so the rest of the scene parses normally. Put the reference on a command inside the body instead.
+- **Wrapping:** a long note wraps onto as many rows as it needs, and its command's row grows to match so the two stay aligned while scrolling.
+- **Warnings:** a note that nothing references, a duplicate name, or a name with no text each raise a parser warning, visible in the Overview Debug popup (`D → O`). The unreferenced-note warning is how a mistyped `\Name` surfaces — see the note on collisions below.
+- **Collision with LaTeX symbols:** a reference is only recognised when the name is actually defined in `[Cue]`. `\alpha` and `\Cue1` have the same shape, and an undefined `\Name` is left alone for the [symbol expander](#latex-symbols-182). A `\Name` inside quotes is always text.
+- **Example:**
+    ```txt
+    [Cue]
+    Cue1 Play audio when Actor leaves the scene
+    Cue2 Stop audio when Actor begin screaming from outside the scene
+
+    [Commands]
+    show backgroundImage.png
+    play Music.mp3 \Cue1
+    stop \Cue2
+    ```
+
 ### `[Macro]` *(1.3)*
 
 Defines reusable command blocks that can be expanded anywhere in `[Commands]` via the `macro` command.
@@ -314,6 +338,25 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
     clearCountdown
     ```
 
+### `typewrite` *(1.8.2)*
+
+- **Syntax:** `typewrite(MS_PER_CHAR, TEXT)`
+- **Arguments:**
+    - `MS_PER_CHAR` — milliseconds between revealed characters. `0` reveals everything at once (identical to `text`); values are clamped to `0`–`5000`.
+    - `TEXT` — the **full text expression**, exactly as `text` accepts it: quoted strings in any of the three delimiters, `+` concatenation, and every modifier (`color`, `bold`, `it`, `trans`, `pos`, `move`, `spin`, …). The split between the two arguments is on the first **structural** comma, so a comma inside `color(RED, "a, b")` stays part of the text.
+- **Behaviour:** Pushes an ordinary text line that reveals itself one character at a time from the moment the cue fires. In every other respect it *is* a text line — it stacks in the same centred layout, word-wraps the same way, honours groups, and is removed by the same `clear` / `clearText` / `clearAll`.
+- **Behaviour:** Revealing is **character-based, not byte-based**, so LaTeX symbols and `æøå` are never cut mid-character.
+- **Behaviour:** A multi-line `typewrite` (one containing `\n`) reveals in reading order — the second line does not begin until the first has finished.
+- **Cue advance:** Pressing ENTER for the next cue **snaps any still-typing line to fully typed** before the next command runs. An operator who advances early never leaves a half-written word on the slave.
+- **Output:** Identical to `text` once complete. While typing, the line grows and re-centres as characters appear.
+- **Example:**
+    ```txt
+    typewrite(45, "The letter arrived at dawn...")
+    typewrite(80, color(RED, "DANGER") + " — do not open")
+    typewrite(30, pos([50, 80], "subtitle style reveal"))
+    typewrite(0, "instant — same as text")
+    ```
+
 ### `comment` *(1.2)*
 
 - **Syntax:** `comment "TEXT"`
@@ -350,9 +393,12 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 
 - **Syntax:** `cmd1 & cmd2 & cmd3 ...`
 - **Behaviour:** Executes all parts as a single cue. Occupies one navigator row.
+- **Behaviour:** *(1.8.2)* Only a **structural** `&` separates commands — one that is outside every quoted string and outside every modifier argument list. An `&` in displayed text is literal, so `text "Tom & Jerry"` is one text line. Before 1.8.2 it was split into two bogus commands.
 - **Example:**
     ```txt
     clear & text "Next slide" & play sting.mp3
+    text "Tom & Jerry"                        # one command, ampersand shown
+    clear & text color(RED, "Salt & Pepper")  # one separator, one literal
     ```
 
 ### `run{ ... }` *(1.2)*
@@ -427,8 +473,9 @@ Modifiers wrap around command arguments. They can be nested freely. For `text` t
 
 ### `color(COLOUR, content)`
 
-- **Arguments:** named colour (`red`, `green`, `blue`, `white`, `black`, `yellow`, `orange`, `purple`, `pink`, `cyan`, `lime`, `grey`) or `#RRGGBB`.
+- **Arguments:** named colour (`red`, `green`, `blue`, `white`, `black`, `yellow`, `orange`, `purple`, `pink`, `cyan`, `lime`, `grey`) or `#RRGGBB`. Names are case-insensitive; hex accepts either case.
 - **Example:** `text color(RED, "Warning!")`
+- **Example:** `text color(#FF5500, "Custom colour")` — *(fixed in 1.8.2; before that the `#` was read as a comment marker and the rest of the cue was discarded)*
 
 ### `trans(PERCENT, content)`
 
@@ -569,6 +616,39 @@ VYDistP2 = 0.1
 - **Behaviour:** Linear slide from `FROM` to `TO` over the duration, then static.
 - **Example:** `show move(W, [50,50], 800, logo.png)`
 
+### `pathMove(P1, P2, …, PN, DURATION_MS [, MODE], content)` *(1.8.3)*
+
+- **Arguments:**
+    - `P1 … PN` — two or more waypoints, each in `move()`'s endpoint vocabulary: `[X, Y]` percent coords or a side letter (`N`, `S`, `E`, `W`).
+    - `DURATION_MS` — milliseconds for the **whole path**, split evenly across the `N-1` legs. A short leg therefore travels more slowly than a long one; the timing is per-leg, not constant-speed.
+    - `MODE` *(optional)* — `once` (default), `loop`, or `pingpong`. Case-insensitive.
+- **Behaviour:** Moves the content through each waypoint in turn.
+    - `once` — traverse the path and hold at the final waypoint (same end state as `move()`).
+    - `loop` — on reaching the end, jump back to the first waypoint and go again.
+    - `pingpong` — on reaching the end, travel back along the path in reverse, then forward again.
+- **Behaviour:** Works on text as well as images, exactly like `move()`. In a `+` concatenation it is a line-level modifier, so the leftmost one wins.
+- **Malformed specs degrade gracefully:** fewer than two waypoints, a missing or non-positive duration, or an unrecognised `MODE` leaves the content **unanimated but still displayed**, rather than swallowing the cue. An unknown mode word is treated as a typo rather than silently meaning `once`.
+- **Example:**
+    ```txt
+    show pathMove([0,50], [50,90], [100,50], 3000, logo.png)      # arc across, once
+    show pathMove([10,10], [90,10], [90,90], [10,90], 4000, loop, logo.png)   # square circuit
+    text pathMove([20,50], [80,50], 2000, pingpong, "drifting")   # back and forth forever
+    show pathMove(W, [50,50], E, 2500, logo.png)                  # in from the left, out to the right
+    ```
+
+### `layer(N, content)` *(1.8.3)*
+
+- **Arguments:** `N` — integer draw order. Higher numbers draw **in front**; negative values are legal and sit behind unlayered content.
+- **Behaviour:** Controls the depth of images relative to each other. The default is `0`, and images on the same layer keep the order they were shown in — so a scene that never mentions `layer()` renders exactly as it did before 1.8.3, with the most recent `show` on top.
+- **Scope:** Images only. `layer()` on `text` or on a particle system parses but has no effect — text is always drawn above the image layer.
+- **Example:**
+    ```txt
+    show layer(-1, backdrop.png)   # behind everything
+    show sun.png                   # default layer 0
+    show layer(5, foreground.png)  # always in front, even though it was shown first
+    show layer(5, curtain.png)     # same layer — ties break by show order, so this is on top of foreground
+    ```
+
 ### `spin(DEG_PER_SEC, content)` *(1.2)*
 
 - **Arguments:** `DEG_PER_SEC` — positive = clockwise, negative = counter-clockwise.
@@ -604,8 +684,52 @@ show particle(RAIN, 50, random(heart.png, [50,50], [200,200], true))
 ## Line endings and comments
 
 - `\n` inside a quoted `text` string produces a new text entry.
-- `#` starts a line/end-of-line comment — everything after it on the line is discarded. *(1.6.6)* `#` characters inside a `"..."`-quoted string are kept verbatim and do not start a comment, so `text "Item #1"` renders the `#` literally.
+- `#` starts a line/end-of-line comment — everything after it on the line is discarded. Two exceptions, both cases where the `#` is data rather than a comment marker:
+    - *(1.6.6)* `#` inside a quoted string is kept verbatim, so `text "Item #1"` renders the `#` literally.
+    - *(1.8.2)* `#` **inside a modifier argument list** (i.e. between `(` and its matching `)`) is kept verbatim, so `text color(#FF5500, "Warm")` passes the hex colour through. Parentheses are only counted outside strings, so a `)` in displayed text — `text "smile :)"` — cannot confuse the rule. A comment that merely starts with something hex-shaped, such as `#FFFFFF looks nice`, is still a comment.
 - Blank lines are ignored.
+
+## LaTeX symbols *(1.8.2)*
+
+Displayed text accepts LaTeX-style macros for Greek letters and common mathematical symbols. They are expanded at parse time, so the master navigator, the word-wrap, and the slave all deal in real characters. Expansion applies to every text-bearing command — `text` and its styled/`Cont` variants, both sides of `textD`, `typewrite`, each segment of a `+` concatenation, and `comment` rows — but **never** to filenames, group names, or section keys.
+
+```txt
+text "Let \varepsilon > 0 and pick \delta \in \mathbb{R}"
+text "Energy: E = mc\Delta \approx 3 \times 10^8"
+textbf "\forall x \in \mathbb{N} : x \geq 0"
+```
+
+**Greek, lower case** — `\alpha \beta \gamma \delta \epsilon \zeta \eta \theta \iota \kappa \lambda \mu \nu \xi \omicron \pi \rho \sigma \tau \upsilon \phi \chi \psi \omega`
+
+**Greek variants** — `\varepsilon \vartheta \varpi \varrho \varsigma \varphi`
+
+> **The `\epsilon` / `\phi` trap:** as in real LaTeX, `\epsilon` is the lunate ϵ and `\phi` is the closed ϕ. The shapes most people picture — ε and φ — are `\varepsilon` and `\varphi`.
+
+**Greek, upper case** — `\Gamma \Delta \Theta \Lambda \Xi \Pi \Sigma \Upsilon \Phi \Psi \Omega`
+
+> Only these eleven exist, matching LaTeX. The rest are visually identical to Latin capitals, so type `A` for Alpha and `B` for Beta. `\Alpha` is left unexpanded rather than silently diverging from LaTeX.
+
+**Relations and arithmetic** — `\times \cdot \pm \mp \approx \sim \simeq \neq \leq \geq \ll \gg \infty \ldots \deg` (`\degree` is an accepted alias)
+
+**Big operators** — `\sum \prod \int`
+
+**Set theory** — `\in \notin \subset \supset \subseteq \supseteq \cap \cup \emptyset`
+
+**Logic** — `\forall \exists \nexists \wedge \vee \land \lor \neg`
+
+**Arrows** — `\rightarrow \leftarrow \leftrightarrow \Rightarrow \Leftarrow \Leftrightarrow`
+
+**Blackboard bold** — `\mathbb{X}` for any single capital `A`–`Z`: `\mathbb{N}` ℕ, `\mathbb{Z}` ℤ, `\mathbb{Q}` ℚ, `\mathbb{R}` ℝ, `\mathbb{C}` ℂ, `\mathbb{F}` 𝔽, `\mathbb{H}` ℍ, `\mathbb{P}` ℙ, and the rest.
+
+### Rules and limits
+
+This is a lookup table, not a LaTeX engine:
+
+- **Unrecognised macros are left byte-for-byte.** `\foo` displays as `\foo`. That is deliberate — it is what keeps the `\n` line-break marker working, since `n` is not a symbol name. It also means a typo like `\alpah` shows up on screen rather than vanishing.
+- **No space is swallowed after a macro.** Real LaTeX renders `\alpha x` as `αx`; here it renders as `α x`, which is nearly always what was meant. Write `\alpha\beta` when two symbols should touch — no separator is needed, because a macro name ends at the first non-letter.
+- **No arguments, no maths mode, no sizing.** `\frac{1}{2}` and friends are not supported and pass through unchanged.
+- **`\omicron` is a deliberate addition.** LaTeX omits it (omicron is visually identical to Latin `o`); SatyrAV accepts it because a scene author looking for a Greek letter should not have to know that.
+- **Fonts:** every symbol above is present in all four bundled DejaVu faces (regular, bold, oblique, bold-oblique). A custom `Font` in `[Options]` without these glyphs will render boxes instead.
 
 ## Quoting rules *(1.7)*
 

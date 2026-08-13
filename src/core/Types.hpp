@@ -46,6 +46,21 @@ enum class RevyType{
 
 const char* RevyTypeName(RevyType type);
 
+struct Command;
+struct Scene;
+struct CueNote;
+
+// (1.8.4) The cue note a navigator *row* displays. Usually just the
+// command's own `cueName`, but a `run{ … }` collapses a whole body into a
+// single Compound row — so a reference written on a command inside that
+// body has to surface on the row, or it would silently never appear. Falls
+// back to the first sub-command that carries one.
+const std::string& RowCueName(const Command& cmd);
+
+// (1.8.4) Look up a note's text by name in a scene, or nullptr when the
+// scene doesn't define it.
+const CueNote* FindCueNote(const Scene& scene, const std::string& name);
+
 // ── Command types parsed from .ngk ──────────────────────────
 enum class CommandType{
 	Text,
@@ -83,7 +98,13 @@ enum class CommandType{
 	// / `clearCountdown` (NOT `clearText`, so countdowns survive routine
 	// text wipes — useful for keeping a timer visible across scene chatter).
 	Countdown,
-	ClearCountdown
+	ClearCountdown,
+	// (1.8.2) `typewrite(MS_PER_CHAR, "text")` — a text line revealed one
+	// character at a time. Identical to `Text` in every other respect: it
+	// carries the same `runs`, honours the same modifiers, stacks in the
+	// same layout, and is dropped by the same clears. Only the reveal is
+	// different, and that lives entirely in the slave draw path.
+	Typewrite
 };
 
 // (1.4) Distributions for sampling spawn positions in particle systems.
@@ -217,6 +238,44 @@ struct RenderModifiers{
 	int   moveFromSide    = 0; // 0 = use X/Y; 1=N, 2=S, 3=E, 4=W
 	int   moveToSide      = 0;
 
+	// ── Animation: PATHMOVE ──────────────────────────────────
+	// (1.8.3) `pathMove(P1, P2, …, PN, DURATION_MS [, MODE], content)` —
+	// movement through two or more waypoints. Each waypoint is either a
+	// percent coordinate or a side sentinel, exactly like move()'s two
+	// endpoints, so the same authoring vocabulary carries over.
+	//
+	// `pathDurationSec` is the time for the **whole** path, split evenly
+	// across the N-1 legs. A short leg therefore travels more slowly than
+	// a long one — predictable to author, at the cost of non-constant
+	// speed on an uneven path.
+	//
+	// Parsing a path also sets `hasMove`, so every existing "is this entry
+	// animated?" check keeps working untouched. The draw path consults
+	// `pathPoints` first and falls back to the two-point move() fields
+	// when it is empty, which is what keeps plain move() byte-identical.
+	struct PathPoint{
+		float x    = 0.0f;
+		float y    = 0.0f;
+		int   side = 0; // 0 = use x/y; 1=N, 2=S, 3=E, 4=W
+	};
+	// Once     — traverse once, then hold at the final waypoint (the same
+	//            end-state as move()).
+	// Loop     — on reaching the end, restart from the first waypoint.
+	// PingPong — on reaching the end, travel back along the path in
+	//            reverse, then forward again.
+	enum class PathRepeat{ Once, Loop, PingPong };
+	std::vector<PathPoint> pathPoints;
+	float      pathDurationSec = 0.0f;
+	PathRepeat pathRepeat      = PathRepeat::Once;
+
+	// ── Layering ─────────────────────────────────────────────
+	// (1.8.3) Draw-order control for images: higher values draw in front.
+	// The default of 0 with ties broken by push order reproduces the
+	// pre-1.8.3 behaviour exactly — the most recent `show` sits on top.
+	// Negative values are legal and push an image behind the unlayered
+	// ones. Ignored by text and particles; see `layer()` in commands.md.
+	int layer = 0;
+
 	// ── Animation: SPIN ──────────────────────────────────────
 	// Continuous rotation at spinDegPerSec degrees per second (negative
 	// = counter-clockwise). Added on top of the static `rotate(...)` so
@@ -280,6 +339,15 @@ struct Command{
 	// the group name so the slave can later clear that group selectively.
 	std::string groupName;
 
+	// (1.8.4) Name of the `[Cue]` note this row references, written as a
+	// trailing `\Name` on the command line. Empty when the row has no note.
+	// The reference is stripped from the line before the command itself is
+	// parsed, and it attaches to the whole navigator row — so on a compound
+	// (`clear & play x.mp3 \Cue1`) it lands on the Compound, not on one of
+	// its sub-commands, because the row is what the notes column draws
+	// beside.
+	std::string cueName;
+
 	// (1.6.3) Set to the offending keyword when the parser fell through to
 	// `Text` because it didn't recognise the leading bareword. Empty when
 	// the command was either real text (started with a quote / `+`) or a
@@ -296,6 +364,12 @@ struct Command{
 	// black and 100% is the decoded frame untouched.
 	int fadeInMs  = 0;
 	int fadeOutMs = 0;
+
+	// (1.8.2) Milliseconds per revealed character for `typewrite`. 0 means
+	// "reveal instantly", which makes the command behave exactly like
+	// `text`. Clamped to 0–5000 by the parser. Used only by
+	// CommandType::Typewrite.
+	int typeMsPerChar = 0;
 
 	// (1.7) Countdown duration in whole seconds. Capped to MM:SS range
 	// (0–3599 = 59:59). Used only by CommandType::Countdown.
@@ -322,6 +396,20 @@ struct ParticleTuning{
 	bool haveVyDist  = false;
 };
 
+// (1.8.4) One entry of a scene's `[Cue]` section:
+//
+//     [Cue]
+//     Cue1 Play audio when the Actor leaves the scene
+//
+// The first whitespace-delimited token is the name; everything after it is
+// the note. A command references it with a trailing `\Cue1`, and the master
+// window's Cue Notes column draws the note beside that command's row.
+struct CueNote{
+	std::string name;
+	std::string text;
+	int lineNumber = 0;
+};
+
 struct Scene{
 	std::string name;
 	std::string fileName;
@@ -343,6 +431,11 @@ struct Scene{
 	// (1.4) Per-type particle tunables. Missing entries fall back to
 	// project-level tunings, then to built-in defaults.
 	std::unordered_map<int, ParticleTuning> particleTunings;
+
+	// (1.8.4) Notes from the `[Cue]` section, in file order. Kept as a
+	// vector rather than a map so the "defined but never referenced"
+	// warning reports in a deterministic order.
+	std::vector<CueNote> cueNotes;
 
 	// (1.6.3) Parser warnings raised while reading this scene's `.ngk`.
 	// Populated for unknown keywords and other recoverable issues so the

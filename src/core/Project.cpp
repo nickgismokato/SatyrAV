@@ -38,9 +38,9 @@ ProjectData Project::Create(
 		fs::copy_file(logoSrc, logoDst, fs::copy_options::skip_existing);
 	}
 
-	// Generate default schema and example scene
+	// Generate default schema and the four example scenes it references
 	GenerateDefaultSchema(projectPath + "/schema.toml", data);
-	GenerateExampleScene(projectPath + "/scenes/ExampleScene.ngk");
+	GenerateExampleScenes(projectPath + "/scenes");
 
 	// Reload the project so it's fully populated
 	return Load(projectPath);
@@ -110,101 +110,357 @@ void Project::Save(const ProjectData& data){
 	out << tbl;
 }
 
+// (1.8.0) Every option the schema parser reads is emitted at its default
+// value, uncommented, so an operator can edit in place instead of looking
+// the key up in the docs. The one exception is the ten `[Particle.<TYPE>]`
+// tables: their default is "no override at all", and writing 10 × 11 no-op
+// keys into every new project is noise — so one fully-documented commented
+// template stands in for all ten.
+//
+// (1.8.4) `FontSize` is the one value that deliberately differs from the
+// parser's built-in fallback. The fallback is 25, which suits a desktop
+// window but is far too small on a projected slave display — new projects
+// therefore start at 60, a usable size for a hall. The fallback itself is
+// left alone: changing it would resize every existing project that omits
+// the key, and the whole point of the 1.8.0 generator is that it never
+// alters how an existing scene renders.
+//
+// Note: `Project::Save` round-trips this file through toml++, which does
+// not preserve stand-alone comments. The first Debug → S rect save strips
+// the commentary below; the keys and values survive.
 void Project::GenerateDefaultSchema(const std::string& path, const ProjectData& data){
 	std::ofstream out(path);
-	out << "# Project options — these apply to all scenes unless overridden\n";
-	out << "[Options]\n";
-	out << "FontSize = 25\n";
-	out << "TextOutline = 4        # Black outline thickness (pt), 0 = disabled\n";
-	out << "# Font = \"\"           # Path to .ttf font file\n";
-	out << "# BackgroundColour = black  # Default slave background\n";
-	out << "\n";
+	if(!out.is_open()) return;
+
+	out << R"NGK(# ============================================================
+# schema.toml - project definition
+# ============================================================
+# Every option is listed at its default value. Scene [Options] in a
+# .ngk file override these for that scene only; see the cascade table
+# in docs/project-structure.md.
+
+)NGK";
+
 	out << "[RevyData]\n";
 	// data.revyName already includes the Jubi suffix and/or custom name
 	// chosen by the user in the New Project screen.
-	out << "Revy = \"" << data.revyName << " " << data.year << "\"\n";
+	out << "Revy    = \"" << data.revyName << " " << data.year << "\"\n";
 	// (1.6.2) Persist the creator so the Load Project screen can show
 	// authorship in its second column. Empty string is acceptable for
 	// users who skip the field; older projects can backfill by hand.
 	out << "Creator = \"" << data.creatorName << "\"\n\n";
-	out << "[Structure]\n";
-	out << "akter = 1\n";
-	out << "[Structure.Akt1]\n";
-	out << "schema = [\n";
-	out << "\t\"ExampleScene\"\n";
-	out << "]\n\n";
-	out << "# [Display] — targeted display rect within the physical secondary screen.\n";
-	out << "# Adjust interactively from Debug popup (D) → S, then ESC to save.\n";
-	out << "# [Display]\n";
-	out << "# Width    = 1920\n";
-	out << "# Height   = 1080\n";
-	out << "# CenterX  = 960\n";
-	out << "# CenterY  = 540\n";
-	out << "# Rotation = 0.0\n\n";
-	out << "# (1.6.3) [Hotkeys] — bind F1..F12 to audio files for one-tap playback\n";
-	out << "# during a performance (e.g. doorbell, gunshot, applause). Files are\n";
-	out << "# resolved against this project's `sound/` folder.\n";
-	out << "# [Hotkeys]\n";
-	out << "# F1  = \"knock.mp3\"\n";
-	out << "# F12 = \"applause.mp3\"\n";
+
+	out << R"NGK([Options]
+FontSize             = 60        # Slave text size, in points
+TextOutline          = 4         # Black outline thickness in points, 0 = off
+Capitalize           = false     # Uppercase every line of slave text
+BackgroundColour     = "black"   # black | blue | red | green | white
+Font                 = ""        # Regular face: full path, or a bare FONTS/ filename
+FontItalic           = ""        # Italic face, used by textit and it(...)
+FontBold             = ""        # Bold face, used by textbf and bold(...)
+FontBoldItalic       = ""        # Combined face, used when a run is bold AND italic
+SubtitleItalic       = true      # Render the textD translation line italic
+SubtitleColour       = "grey"    # grey | white | black, or a "#RRGGBB" string
+SubtitleTransparency = 0.0       # Percent: 0 = opaque, 100 = invisible
+SubtitlePosY         = 90.0      # Percent down from the top of the canvas
+
+[Structure]
+akter = 2
+
+[Structure.Akt1]
+schema = [
+	"TextShowcase",
+	"PictureShowcase"
+]
+
+[Structure.Akt2]
+schema = [
+	"ParticleShowcase",
+	"MacroShowcase"
+]
+
+# Targeted display rect inside the physical secondary screen. All zero
+# means "fill the whole display". Adjust it live from the Debug popup
+# (D) -> S; ESC writes the result back here.
+[Display]
+Width    = 0
+Height   = 0
+CenterX  = 0
+CenterY  = 0
+Rotation = 0.0
+
+# F1-F12 audio hotkeys for one-tap playback during a performance.
+# Bare filenames resolve against this project's sound/ folder. An empty
+# value leaves the key unbound. Pressing the same key while its sound is
+# still playing stops it.
+[Hotkeys]
+F1  = ""
+F2  = ""
+F3  = ""
+F4  = ""
+F5  = ""
+F6  = ""
+F7  = ""
+F8  = ""
+F9  = ""
+F10 = ""
+F11 = ""
+F12 = ""
+
+# Project-level particle tuning, one table per type. The block below
+# lists every key with its default value - uncomment the table and the
+# keys you want to change. The same keys exist for SNOW, CONFETTI, RISE,
+# SCATTER, BROWNIAN, OSCILLATION, ORBIT, NOISE and LIFECURVE.
+# Distributions: UNIFORM, NORMAL, LOGNORMAL, BINOMIAL, BERNOULLI, GAMMA.
+# [Particle.RAIN]
+# Speed    = 1.0        # Velocity multiplier
+# Density  = 1.0        # Spawn-rate multiplier
+# XDist    = "UNIFORM"  # Spawn-x distribution
+# XDistP1  = 0.5
+# XDistP2  = 0.1
+# VXDist   = "UNIFORM"  # Horizontal velocity distribution
+# VXDistP1 = 0.5
+# VXDistP2 = 0.1
+# VYDist   = "UNIFORM"  # Vertical velocity distribution
+# VYDistP1 = 0.5
+# VYDistP2 = 0.1
+)NGK";
 }
 
-void Project::GenerateExampleScene(const std::string& path){
+static void WriteSceneFile(const std::string& path, const char* content){
 	std::ofstream out(path);
-	out << "# =============================================\n";
-	out << "# ExampleScene.ngk — A tutorial scene\n";
-	out << "# =============================================\n";
-	out << "# Each line under [Commands] is one cue.\n";
-	out << "# Press ENTER to advance through them.\n";
-	out << "#\n";
-	out << "# Commands:\n";
-	out << "#   text \"message\"       — Display text on screen\n";
-	out << "#   clear                — Clear all text and images\n";
-	out << "#   show file.png        — Display an image\n";
-	out << "#   play file.mp3        — Play audio or video\n";
-	out << "#   stop                 — Stop all media\n";
-	out << "#   stop file.mp3        — Stop specific media\n";
-	out << "#   clear & text \"Hi\"    — Combine with & for one cue\n";
-	out << "#\n";
-	out << "# Loops:\n";
-	out << "#   loop(count, clearEvery){\n";
-	out << "#       commands...\n";
-	out << "#   }\n";
-	out << "#\n";
-	out << "# Per-scene options override project options:\n";
-	out << "#   bc = black/blue/red/green/white\n";
-	out << "#   FontSize = 30\n";
-	out << "#   font = path/to/font.ttf\n";
-	out << "\n";
-	out << "[Options]\n";
-	out << "bc = black\n";
-	out << "# FontSize = 30  # Uncomment to override project font size\n";
-	out << "\n";
-	out << "[Preload]\n";
-	out << "satyr-logo.png\n";
-	out << "\n";
-	out << "[Commands]\n";
-	out << "text \"Welcome to SatyrAV!\"\n";
-	out << "text \"This is your first scene.\"\n";
-	out << "text \"Each line is a cue - press ENTER to advance.\"\n";
-	out << "clear\n";
-	out << "text \"Let's show the SaTyR logo:\"\n";
-	out << "show satyr-logo.png\n";
-	out << "clear                                #Clear everything\n";
-	out << "text \"You can combine commands:\"\n";
-	out << "clear & text \"Like this!\"            #Clear and show text in one cue\n";
-	out << "clear\n";
-	out << "text \"Now let's try a loop:\"\n";
-	out << "clear\n";
-	out << "loop(3, 1){\n";
-	out << "\ttext \"Loop iteration!\"\n";
-	out << "\ttext \"This repeats 3 times, clearing each time.\"\n";
-	out << "}\n";
-	out << "text \"Loop finished!\"\n";
-	out << "clear\n";
-	out << "text \"That's the basics!\"\n";
-	out << "text \"Edit this .ngk file to create your own scenes.\"\n";
-	out << "clear\n";
+	if(!out.is_open()) return;
+	out << content;
+}
+
+// (1.8.0) Four tutorial scenes across the two generated akter, one per
+// layer of the engine. Every scene only references `satyr-logo.png` —
+// the single asset `Create` copies into `pictures/` — so a brand-new
+// project runs end to end without the operator adding any media first.
+void Project::GenerateExampleScenes(const std::string& scenesDir){
+	// ── Akt 1, scene 1 — the text layer ──────────────────────
+	WriteSceneFile(scenesDir + "/TextShowcase.ngk", R"NGK(# =============================================
+# TextShowcase.ngk - the text layer
+# =============================================
+# Every non-comment line under [Commands] is one cue. Press ENTER to
+# fire the next one. Anything after a # is a comment and never runs.
+# Full command reference: docs/commands.md
+
+[Options]
+bc = black                 # black | blue | red | green | white
+# FontSize = 30            # Overrides the project FontSize for this scene
+# cap = true               # Uppercase every line of text
+
+[Commands]
+comment "--- Plain text ---"
+text "Welcome to SatyrAV!"
+text "Each line here is one cue - press ENTER for the next."
+clear
+
+comment "--- Styling ---"
+textbf "This line is bold"
+textit "and this one is italic"
+clear
+text color(RED, "Red") + " sitting next to " + color(LIME, "green")
+text "Plain " + bold("BOLD") + " plus " + it("italic") + " on one line"
+clear
+
+comment "--- Revealing a line piece by piece ---"
+text "Loading"
+textCont " ."
+textCont " ."
+textCont " . done!"
+clear
+
+comment "--- Placement and translation ---"
+text pos([50, 25], "Positioned 50% across, 25% down")
+clear
+textD "Good evening!", "Godaften!"
+clear
+
+comment "--- Live countdown ---"
+text "The show starts in:"
+countdown(10, "en")
+clearCountdown
+clear
+
+text "That is the text layer. Next scene: pictures."
+clear
+)NGK");
+
+	// ── Akt 1, scene 2 — the image layer ─────────────────────
+	WriteSceneFile(scenesDir + "/PictureShowcase.ngk", R"NGK(# =============================================
+# PictureShowcase.ngk - the image layer
+# =============================================
+# Image paths resolve against the project root and then pictures/,
+# so `show satyr-logo.png` finds pictures/satyr-logo.png.
+# Supported: .png .jpg .bmp .webp .gif (animated GIFs cycle on their own).
+
+[Options]
+bc = black
+
+[Preload]
+satyr-logo.png
+
+[Commands]
+comment "--- A plain image ---"
+text "show puts a picture on the slave:"
+show satyr-logo.png
+clear
+
+comment "--- Size and position ---"
+show size([200, 200], satyr-logo.png)
+clear
+show pos([25, 50], size([200, 200], satyr-logo.png))
+show pos([75, 50], size([200, 200], satyr-logo.png))
+clear
+
+comment "--- Images stack until you clear them ---"
+show pos([30, 30], size([150, 150], satyr-logo.png))
+show pos([50, 50], size([150, 150], satyr-logo.png))
+show pos([70, 70], size([150, 150], satyr-logo.png))
+clearImages
+
+comment "--- Transparency and rotation ---"
+show trans(60, size([300, 300], satyr-logo.png))
+clear
+show rotate(30, size([250, 250], satyr-logo.png))
+clear
+show spin(90, size([250, 250], satyr-logo.png))
+clear
+
+comment "--- Movement ---"
+show move(W, [50, 50], 1200, size([200, 200], satyr-logo.png))
+clear
+show move([0, 100], [100, 0], 2000, size([150, 150], satyr-logo.png))
+clear
+
+comment "--- Random size, and one cue doing two things ---"
+show random(satyr-logo.png, [80, 80], [320, 320], true)
+clear & text "clear and text in a single cue, joined with &"
+clear
+)NGK");
+
+	// ── Akt 2, scene 1 — the particle layer ──────────────────
+	WriteSceneFile(scenesDir + "/ParticleShowcase.ngk", R"NGK(# =============================================
+# ParticleShowcase.ngk - the particle layer
+# =============================================
+# particle(TYPE, [intensity,] image) turns an image into an emitter.
+# Intensity is 1-100 and defaults to 100.
+# Types: RAIN SNOW CONFETTI RISE SCATTER BROWNIAN OSCILLATION
+#        ORBIT NOISE LIFECURVE
+
+[Options]
+bc = black
+# Per-type tuning for this scene only. Project-wide defaults live in
+# schema.toml under [Particle.<TYPE>]; each field cascades on its own.
+SNOW.SPEED  = 0.8                  # Velocity multiplier
+SNOW.DENS   = 1.5                  # Spawn-rate multiplier
+SNOW.X.DIST = NORMAL(0.5, 0.15)    # Cluster spawns near the middle
+
+[Preload]
+satyr-logo.png
+
+[Commands]
+comment "--- Falling particles ---"
+text "SNOW, using this scene's tuning:"
+show particle(SNOW, 40, size([48, 48], satyr-logo.png))
+stopParticleCont                   #Stop spawning, let the live ones land
+clear
+show particle(RAIN, 60, size([32, 32], satyr-logo.png))
+clear
+
+comment "--- Bursts and rising ---"
+show particle(CONFETTI, 50, size([32, 32], satyr-logo.png))
+clear
+show particle(RISE, 40, size([40, 40], satyr-logo.png))
+clear
+
+comment "--- Motion models ---"
+show particle(ORBIT, 30, size([40, 40], satyr-logo.png))
+clear
+show particle(NOISE, 30, size([32, 32], satyr-logo.png))
+clear
+show particle(BROWNIAN, 30, bounce(true, size([40, 40], satyr-logo.png)))
+clear
+
+comment "--- Trails ---"
+show particle(ORBIT, 20, trail(16, size([40, 40], satyr-logo.png)))
+clear
+show particle(NOISE, 20, trailGlow(16, size([32, 32], satyr-logo.png)))
+clear
+
+text "Particles are dropped by clear, clearImages and clearAll."
+clear
+)NGK");
+
+	// ── Akt 2, scene 2 — grouping, macros and blocks ─────────
+	WriteSceneFile(scenesDir + "/MacroShowcase.ngk", R"NGK(# =============================================
+# MacroShowcase.ngk - groups, macros and blocks
+# =============================================
+# [Macro] defines reusable blocks; `macro NAME` inlines one at parse
+# time. Macro bodies are simple - no loops, groups or nested macros.
+#
+# run{ }    fires a whole block on one key press.
+# loop(n,c){ } repeats a block, clearing after every c iterations.
+# group N{ }   tags what the body produces so `clear N` drops just it.
+
+[Options]
+bc = black
+
+[Preload]
+satyr-logo.png
+
+[Macro]
+Title{
+	text color(ORANGE, "SatyrAV")
+	textCont " - macro and group showcase"
+}
+
+LogoPair{
+	show pos([30, 50], size([180, 180], satyr-logo.png))
+	show pos([70, 50], size([180, 180], satyr-logo.png))
+}
+
+[Commands]
+comment "--- macro: one reference, two cues ---"
+macro Title
+clear
+
+comment "--- run{}: one key press, everything at once ---"
+run{
+	text "Both of these appeared together"
+	show pos([50, 70], size([150, 150], satyr-logo.png))
+}
+clear
+
+comment "--- the same macro, reused ---"
+macro LogoPair
+clearImages
+
+comment "--- group: clear part of the screen by name ---"
+group Backdrop{
+	run{
+		show pos([50, 50], trans(70, size([400, 400], satyr-logo.png)))
+	}
+}
+text "This text is ungrouped."
+text "clearText drops the text but leaves the backdrop alone."
+clearText
+clear Backdrop
+
+comment "--- loop: repeat a block ---"
+loop(3, 1){
+	text "Loop iteration"
+	text "Cleared after every iteration"
+}
+text "Loop finished!"
+clearAll
+
+text "Edit these .ngk files, or add your own under scenes/."
+text "Remember to list any new scene in schema.toml."
+clear
+)NGK");
 }
 
 } // namespace SatyrAV

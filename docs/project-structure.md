@@ -8,7 +8,10 @@ A SatyrAV project is a directory containing a `schema.toml` file and scene files
 MyRevy2026/
 ├── schema.toml          # Project definition
 ├── scenes/
-│   ├── ExampleScene.ngk
+│   ├── TextShowcase.ngk       # ┐ the four tutorial scenes a new
+│   ├── PictureShowcase.ngk    # │ project is generated with (1.8.0)
+│   ├── ParticleShowcase.ngk   # │
+│   ├── MacroShowcase.ngk      # ┘
 │   ├── Intro.ngk
 │   └── Finale.ngk
 ├── pictures/
@@ -27,20 +30,26 @@ Media files referenced in scene commands are resolved relative to the project ro
 
 ## schema.toml
 
-The project definition file uses TOML format:
+The project definition file uses TOML format. Since *1.8.0* a generated `schema.toml` contains **every** option the parser reads, uncommented and at its default value, so options can be changed in place without looking them up:
 
 ```toml
-# Project options — apply to all scenes unless overridden
-[Options]
-FontSize = 25
-TextOutline = 4        # Black outline thickness (pt), 0 = disabled
-Capitalize = false     # Uppercase all text
-# Font = "path/to.ttf" # Custom font
-# BackgroundColour = black
-
 [RevyData]
-Revy = "MatRevy 2026"
+Revy    = "MatRevy 2026"
 Creator = "Nick"          # (1.6.2) Persisted authorship — shown in Load Project
+
+[Options]
+FontSize             = 60        # Slave text size, in points
+TextOutline          = 4         # Black outline thickness in points, 0 = off
+Capitalize           = false     # Uppercase every line of slave text
+BackgroundColour     = "black"   # black | blue | red | green | white
+Font                 = ""        # Regular face: full path, or a bare FONTS/ filename
+FontItalic           = ""        # (1.6.1) Italic face, used by textit and it(...)
+FontBold             = ""        # (1.6.1) Bold face, used by textbf and bold(...)
+FontBoldItalic       = ""        # (1.6.1) Used when a run is bold AND italic
+SubtitleItalic       = true      # (1.6.1) Render the textD translation line italic
+SubtitleColour       = "grey"    # grey | white | black, or a "#RRGGBB" string
+SubtitleTransparency = 0.0       # Percent: 0 = opaque, 100 = invisible
+SubtitlePosY         = 90.0      # Percent down from the top of the canvas
 
 [Structure]
 akter = 2
@@ -59,31 +68,35 @@ schema = [
 ]
 
 # (1.2) Targeted-display rectangle — configured via the Debug → S menu.
-# Refreshed on save; width = 0 means "fill the physical display".
+# Refreshed on save; all zero means "fill the physical display".
 [Display]
-Width    = 1920
-Height   = 1080
-CenterX  = 960
-CenterY  = 540
+Width    = 0
+Height   = 0
+CenterX  = 0
+CenterY  = 0
 Rotation = 0.0
 
+# (1.6.3) F1–F12 audio hotkeys — bare filenames resolved against sound/.
+# Empty = unbound. Pressing the same key twice while audio plays stops it.
+# The generator emits all twelve; only the bound ones are shown here.
+[Hotkeys]
+F1  = "knock.mp3"
+F12 = "applause.mp3"
+
 # (1.4) Project-level particle tunables — one table per type.
-# Scene [Options] can override individual fields.
+# Scene [Options] can override individual fields. The generator ships this
+# block commented out, listing every key at its default, because "no table
+# at all" *is* the default — writing ten no-op tables into every new
+# project is noise.
 [Particle.RAIN]
 Speed    = 1.5
 Density  = 2.0
 XDist    = "NORMAL"
 XDistP1  = 0.5
 XDistP2  = 0.1
-
-# (1.6.3) F1–F12 audio hotkeys — bare filenames resolved against sound/.
-# Pressing the same key twice while audio is still playing stops it.
-[Hotkeys]
-F1  = "knock.mp3"
-F12 = "applause.mp3"
 ```
 
-> Project-level `[Options]` can also set `FontItalic`, `FontBold`, `FontBoldItalic` *(1.6.1)* and the four `Subtitle*` keys (`SubtitleItalic`, `SubtitleColour`, `SubtitleTransparency`, `SubtitlePosY`) that drive `textD`'s default appearance. See [scene-format.md](scene-format.md#options) and [commands.md](commands.md#options).
+> **Comments are not round-tripped.** `Project::Save` (triggered by the Debug → S rect editor) reloads the file through toml++ and re-emits it, and toml++ does not preserve stand-alone comments. Keys and values survive; the generated commentary does not.
 
 Scene names in the `schema` arrays correspond to `.ngk` filenames in the `scenes/` directory (without extension).
 
@@ -93,7 +106,7 @@ Settings are resolved in priority order: scene → project → global config.
 
 | Setting | Scene (`[Options]` in .ngk) | Project (`schema.toml [Options]`) | Global (config) |
 |---|---|---|---|
-| Font size | `FontSize = 30` | `FontSize = 25` | Config font size |
+| Font size | `FontSize = 30` | `FontSize = 60` *(1.8.4; generated value — a schema with no `FontSize` key at all still falls back to 25)* | Config font size |
 | Background | `bc = blue` | `BackgroundColour = black` | Black |
 | Capitalize | `cap = true` | `Capitalize = false` | false |
 | Text outline | — | `TextOutline = 4` | 4 |
@@ -105,7 +118,7 @@ Settings are resolved in priority order: scene → project → global config.
 | Bold font *(1.6.1)* | `fontBold = path.ttf` | `FontBold = path.ttf` | `[font] bold = ...` in `config.toml` (or bundled DejaVu) |
 | Bold-italic font *(1.6.1)* | `fontBoldItalic = path.ttf` | `FontBoldItalic = path.ttf` | `[font] bold_italic = ...` in `config.toml` (or bundled DejaVu) |
 
-If a scene sets `FontSize = 30`, that overrides the project's `FontSize = 25` for that scene only. All other scenes use 25. Particle tunings cascade per-field — setting only `SPEED` in a scene still inherits `DENS` and `X.DIST` from the project level. The same applies to font slots: a scene can override only the bold face and still pick up project-level italic / bold-italic / regular.
+If a scene sets `FontSize = 30`, that overrides the project's `FontSize` for that scene only; all other scenes keep the project value. Particle tunings cascade per-field — setting only `SPEED` in a scene still inherits `DENS` and `X.DIST` from the project level. The same applies to font slots: a scene can override only the bold face and still pick up project-level italic / bold-italic / regular.
 
 ## Shared directories *(1.6.1+)*
 
@@ -129,7 +142,20 @@ From the main menu, select "New project". Fill in:
 - **Year** — the production year.
 - **Your name** — stored for reference.
 
-The project directory is created under the configured projects path (default: `~/satyrav/projects/` on Linux, `Documents\SatyrAV\projects\` on Windows). An example scene is included to demonstrate the command syntax.
+The project directory is created under the configured projects path (default: `~/satyrav/projects/` on Linux, `Documents\SatyrAV\projects\` on Windows).
+
+### Generated example scenes *(1.8.0)*
+
+A new project ships with two akter and four tutorial scenes, one per layer of the engine. All four reference only `pictures/satyr-logo.png` — the single asset the generator copies in — so a fresh project runs end to end before any media is added.
+
+| Akt | Scene | Covers |
+|---|---|---|
+| 1 | `TextShowcase` | `text`, `textbf` / `textit`, `color()` and `+` concatenation, `textCont`, `pos()`, `textD` translation lines, `countdown` |
+| 1 | `PictureShowcase` | `show`, `size()` / `pos()`, image stacking, `trans()`, `rotate()` / `spin()`, `move()`, `random()`, the `&` compound operator |
+| 2 | `ParticleShowcase` | every `particle()` type, intensity, `trail()` / `trailGlow()`, `bounce()`, `stopParticleCont`, per-scene `<TYPE>.SPEED` / `.DENS` / `.X.DIST` tuning |
+| 2 | `MacroShowcase` | `[Macro]` definitions and `macro NAME`, `run{}`, `group NAME{}` with `clear NAME`, `loop(){}`, `clearText` / `clearAll` |
+
+Before 1.8.0 a single `ExampleScene.ngk` was generated instead. Existing projects are untouched — this only affects newly created ones.
 
 ## Loading a project *(1.6.2 redesign)*
 

@@ -7,6 +7,7 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `[Options]`
 - `[Preload]`
 - `[Macro]`
+- `[Cue]` *(1.8.4)* — `Name note text…` per line; a command claims one with a trailing `\Name`. Shown in the master window's Cue Notes column, never on the slave
 - `[Hotkeys]` *(1.6.3, project schema only)*
 - `[Commands]`
 
@@ -64,6 +65,8 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `textD "PRIMARY", "SECONDARY"` *(1.6.1)* — secondary optional; comma-split, whitespace-tolerant
 - `countdown(SECONDS)` *(1.7)* — live `MM:SS` timer, digits only
 - `countdown(SECONDS, "LANG")` *(1.7)* — `LANG` = `en` | `da`; adds a label prefix
+- `typewrite(MS_PER_CHAR, TEXT)` *(1.8.2)* — text revealed one character at a time; `TEXT` takes the full `text` grammar; `0` = instant; cue advance snaps it to complete
+- LaTeX symbols *(1.8.2)* — `\alpha`…`\omega`, the 11 LaTeX uppercase, `\var*` forms, `\times \pm \leq \geq \neq \approx \sum \prod \int \in \subseteq \cap \cup \forall \exists \wedge \vee \emptyset \rightarrow \infty …`, and `\mathbb{X}` for any capital. Unknown macros pass through unchanged (that is what preserves `\n`)
 - `clear`
 - `clear NAME`
 - `clearText`
@@ -108,6 +111,8 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `trailGlow(N, content)`
 - `bounce(BOOL, content)`
 - `move(FROM, TO, DURATION_MS, content)`
+- `pathMove(P1, P2, ..., PN, DURATION_MS[, MODE], content)` *(1.8.3)* — 2+ waypoints in `move()`'s vocabulary; `DURATION_MS` is the whole path split evenly per leg; `MODE` = `once` (default) | `loop` | `pingpong`
+- `layer(N, content)` *(1.8.3)* — image draw order, higher is in front, default `0`, ties by show order; ignored on text
 - `spin(DEG_PER_SEC, content)`
 
 ## Particle types

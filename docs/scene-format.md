@@ -1,6 +1,6 @@
 # Scene file format (.ngk)
 
-Scene files use a simple INI-like format with four sections. Lines starting with `#` are comments (end-of-line comments are also supported).
+Scene files use a simple INI-like format with four sections. Lines starting with `#` are comments (end-of-line comments are also supported). A `#` is treated as literal data rather than a comment marker in two places: inside a quoted string *(1.6.6)*, and inside a modifier's parentheses *(1.8.2)* — which is what makes `color(#RRGGBB, …)` work. See [commands.md](commands.md#line-endings-and-comments).
 
 > **Canonical reference:** This document is a tutorial introduction to the format. For the complete and authoritative list of every command, modifier, and block — with syntax and a runnable example per entry — see [commands.md](commands.md).
 
@@ -56,6 +56,27 @@ F12 = "applause.mp3"
 
 Press a key during a performance to play; press the **same** key again while its sound is still going to stop it (toggle behaviour, useful for long ambient loops). Pressing a different F-key while one is already playing replaces the running sound.
 
+### [Cue] *(1.8.4)*
+
+Named notes for the operator, shown in the master window's **Cue Notes** column beside the command that references them. Nothing is displayed on the slave — these are stage-management notes, not audience-facing text.
+
+Each line is `Name` then the note text. A command claims a note with a trailing `\Name`.
+
+```ini
+[Cue]
+Cue1 Play audio when Actor leaves the scene
+Cue2 Stop audio when Actor begin screaming from outside the scene
+
+[Commands]
+show backgroundImage.png
+play Music.mp3 \Cue1
+stop \Cue2
+```
+
+Names may use letters, digits and underscores. `[Cue]` can sit before or after `[Commands]`. Long notes wrap onto as many rows as they need, and the command's row grows to match so the two stay aligned.
+
+A note that nothing references raises a parser warning (visible in the Overview Debug popup, `D → O`) — that is how a mistyped `\Name` surfaces, since an unrecognised reference is deliberately left alone so it can't collide with the `\alpha`-style [LaTeX symbols](commands.md#latex-symbols-182).
+
 ### [Macro] *(1.3)*
 
 Named, reusable blocks of commands. Inlined at parse time when referenced from `[Commands]` with `macro <Name>`. No parameters, no nesting.
@@ -89,6 +110,7 @@ textitCont "message"     Append, inheriting italic style                   (1.6.
 textD "primary","sub"    Primary line + bottom-anchored italic translation (1.6.1)
 countdown(SECONDS)       Live MM:SS countdown timer at top of slave       (1.7)
 countdown(SEC, "LANG")   Same, with an "en" / "da" language label         (1.7)
+typewrite(MS, "text")    Text revealed one character at a time            (1.8.2)
 clear                    Clear ungrouped text, image, and particles (groups survive)
 clear NAME               Drop every entry tagged with group NAME          (1.3)
 clearText                Drop the text layer across every group           (1.3)
@@ -106,6 +128,8 @@ stopParticleCont NAME    Same, scoped to a single group                      (1.
 comment "note"           Non-executable navigator row                      (1.2)
 ```
 
+> **LaTeX symbols *(1.8.2)*:** displayed text accepts LaTeX-style macros for Greek letters and common maths symbols — `text "pick \delta \in \mathbb{R}"` renders `pick δ ∈ ℝ`. Expansion happens at parse time and covers every text-bearing command, but never filenames or group names. Unrecognised macros pass through unchanged. See [commands.md](commands.md#latex-symbols-182) for the full list.
+
 > **Quoting *(1.7)*:** every quoted argument accepts three interchangeable delimiter pairs — `"..."`, `'...'`, and `´...´` (acute accent, distinct from the apostrophe). The opening delimiter must match the closing one; the other two then count as literal characters, so `text 'He said "hi"'` displays the double quotes verbatim. See [commands.md](commands.md#quoting-rules-17) for the full rules.
 
 ## Compound commands
@@ -115,6 +139,13 @@ Join multiple commands with `&` to execute them as a single cue:
 ```
 clear & text "Next slide"
 play music.mp3 & show background.png
+```
+
+*(1.8.2)* Only a `&` outside quotes and outside modifier parentheses separates commands, so an ampersand in displayed text is literal:
+
+```
+text "Tom & Jerry"                        # one command
+clear & text color(RED, "Salt & Pepper")  # one separator, one literal
 ```
 
 ## Modifiers
@@ -129,6 +160,8 @@ Set text colour. Named colours: red, green, blue, white, black, yellow, orange, 
 text color(RED, "Warning!")
 text color(#FF5500, "Custom colour")
 ```
+
+> The hex form only started working in **1.8.2** — before that the comment stripper cut the cue at the `#`. Scenes written against older versions that worked around it with a named colour keep working unchanged.
 
 ### trans(percentage, content)
 
@@ -174,6 +207,25 @@ Linear tween of position over time. `FROM` and `TO` are either `[x,y]` percent c
 ```
 show move(N, [50, 50], 800, heart.png)        # flies in from above over 800 ms
 show move([0, 0], [100, 100], 2000, logo.png) # diagonal sweep
+```
+
+### pathMove(P1, P2, ..., PN, DURATION_MS[, MODE], content) *(1.8.3)*
+
+Movement through two or more waypoints. Each waypoint uses `move()`'s vocabulary — `[x,y]` percent coords or a side letter. `DURATION_MS` is the time for the whole path, split evenly across the legs. `MODE` is `once` (default), `loop`, or `pingpong`.
+
+```
+show pathMove([0,50], [50,90], [100,50], 3000, logo.png)
+show pathMove([10,10], [90,10], [90,90], [10,90], 4000, loop, logo.png)
+text pathMove([20,50], [80,50], 2000, pingpong, "drifting")
+```
+
+### layer(N, content) *(1.8.3)*
+
+Draw order for images — higher is nearer the front, default `0`, ties broken by show order. Negative values sit behind unlayered images. Ignored on text.
+
+```
+show layer(-1, backdrop.png)
+show layer(5, foreground.png)
 ```
 
 ### pos([x, y], content)

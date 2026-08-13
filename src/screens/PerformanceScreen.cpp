@@ -402,6 +402,13 @@ void PerformanceScreen::ExecuteCommand(){
 		return;
 	}
 
+	// (1.8.2) Snap any still-revealing `typewrite` line to fully typed
+	// before the next cue fires. An operator who advances early gets the
+	// complete line rather than a half-written word frozen on the slave.
+	// Done here rather than inside the dispatch so it applies whatever the
+	// next command turns out to be — including a `clear`.
+	slaveUI.CompleteTypewriters();
+
 	// Normal: execute current command
 	engine.SelectAkt(primedAkt);
 	engine.SelectScene(primedScene);
@@ -559,6 +566,9 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 				return out;
 			}
 			case CommandType::ClearCountdown: return "clearCountdown";
+			case CommandType::Typewrite:
+				return "typewrite(" + std::to_string(c.typeMsPerChar)
+					+ ", \"" + c.argument + "\")";
 		}
 		return "???";
 	};
@@ -577,6 +587,14 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 				slaveUI.PushTextRuns(cmd.runs, cmd.mods, cmd.groupName);
 			} else{
 				slaveUI.PushText(cmd.argument, cmd.mods, cmd.groupName);
+			}
+			break;
+		case CommandType::Typewrite:
+			// (1.8.2) Same push as `text`, plus the reveal rate. A rate of
+			// 0 makes PushTypewriteRuns behave identically to PushTextRuns.
+			if(!cmd.runs.empty()){
+				slaveUI.PushTypewriteRuns(cmd.runs, cmd.mods,
+					cmd.typeMsPerChar, cmd.groupName);
 			}
 			break;
 		case CommandType::TextD:{

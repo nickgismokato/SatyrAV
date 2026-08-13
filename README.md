@@ -3,7 +3,7 @@
 An AV cue controller for SaTyR revyer. Dual-display output with keyboard-first
 navigation through acts, scenes, and commands.
 
-**Current version:** 1.7.0 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
+**Current version:** 1.8.4 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
 
 Full documentation lives in [docs/](docs/README.md).
 
@@ -18,6 +18,10 @@ Full documentation lives in [docs/](docs/README.md).
   leaving the performance screen.
 - `comment "..."` cues show in the master navigator as non-executable rows and
   are skipped during navigation.
+- **Cue Notes column** *(1.8.4)*: a fourth, read-only column right of the
+  command list showing stage-management notes from the scene's `[Cue]`
+  section. Scrolls in lockstep with the commands, wraps long notes, and never
+  reaches the audience display. Appears only for scenes that define notes.
 
 ### Scene format
 
@@ -34,6 +38,11 @@ Full documentation lives in [docs/](docs/README.md).
   and `clearCountdown`.
 - Quoted text accepts three interchangeable delimiter pairs — `"..."`,
   `'...'`, and `´...´` — so a line can itself contain quotation marks.
+- `[Cue]` section *(1.8.4)*: named operator notes, claimed by a command with a
+  trailing `\Name` and shown in the master window's Cue Notes column.
+- New projects are generated with two acts and four tutorial scenes — one per
+  engine layer (text, pictures, particles, groups/macros) — plus a
+  `schema.toml` that lists every project option at its default *(1.8.0)*.
 
 ### Content rendering
 
@@ -61,6 +70,17 @@ Full documentation lives in [docs/](docs/README.md).
   ticks down in real time, with an optional `"en"` / `"da"` language label.
   Holds at `00:00` until cleared; scene-scoped, so it never bleeds into the
   next scene.
+- `typewrite(MS_PER_CHAR, TEXT)` *(1.8.2)* reveals a line one character at a
+  time. Takes the full `text` grammar; advancing the cue snaps a half-typed
+  line to complete so nothing is left mid-word on the slave.
+- LaTeX symbol macros in displayed text *(1.8.2)*: all Greek letters plus ~45
+  mathematical symbols and `\mathbb{X}` for any capital — `text "pick \delta
+  \in \mathbb{R}"` renders `pick δ ∈ ℝ`. Every glyph is present in the four
+  bundled DejaVu faces.
+- `layer(N, content)` *(1.8.3)* gives images an explicit draw order; the
+  default of 0 with ties by show order keeps pre-1.8.3 scenes identical.
+- `pathMove(P1, …, PN, DURATION_MS[, MODE], content)` *(1.8.3)* moves content
+  through multiple waypoints, with `once`, `loop`, or `pingpong` repeat.
 - Canvas-relative slave text: text scales with the targeted-display rect in
   lockstep with images, videos, GIFs, and particles.
 
@@ -103,6 +123,12 @@ Full documentation lives in [docs/](docs/README.md).
   `rotate()`.
 - `scale(content, [w,h])` — pixel-dimension alias of `size()` with the
   argument order matching `random()` and the other content-first modifiers.
+- `pathMove(P1, P2, …, PN, DURATION_MS[, MODE], content)` *(1.8.3)* — the
+  multi-waypoint generalisation of `move()`, using the same endpoint
+  vocabulary. `DURATION_MS` covers the whole path, split evenly per leg;
+  `MODE` is `once` (default), `loop`, or `pingpong`.
+- `layer(N, content)` *(1.8.3)* — explicit draw order for images. Higher is
+  nearer the front; negatives sit behind unlayered content.
 
 ### Display and output
 
@@ -164,6 +190,28 @@ Windows installer:
 ```bash
 makensis ../installer/satyr-av.nsi
 ```
+
+### Unit tests *(1.8.1)*
+
+Tests are **off by default** — a normal build compiles no test code and
+downloads no test framework. Opt in with one flag:
+
+```bash
+cmake .. -DSATYR_BUILD_TESTS=ON
+make -j$(nproc)
+ctest --output-on-failure
+```
+
+The suite covers the SDL-independent core (`SceneParser`, `SchemaParser`,
+`CueEngine`, `Config`, `Project`, `Types`), so it also builds standalone on a
+machine with no SDL2 or FFmpeg installed:
+
+```bash
+cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/satyr-tests
+```
+
+See [tests/README.md](tests/README.md) for the layout and for what is
+deliberately left untested.
 
 ## License
 

@@ -27,6 +27,24 @@ struct SlaveTextEntry{
 	// `mods.posY` for vertical placement. Used by `textD`'s secondary
 	// translation line. Independent of grouping/clear semantics.
 	bool subtitleAnchor = false;
+
+	// (1.8.2) Typewriter reveal. 0 — the default for every command except
+	// `typewrite` — means the entry is fully visible from the moment it is
+	// pushed, and the draw path skips the reveal logic entirely.
+	//
+	// When > 0, DrawText shows only the first N *characters* (UTF-8 aware,
+	// so a Greek letter or a `\mathbb{F}` never renders half a codepoint),
+	// with N growing from `spawnTimeSec`. Because PushTextRuns splits a
+	// `\n`-bearing line into one entry per output line, `typeCharOffset`
+	// records how many characters precede this entry within the original
+	// command — that is what keeps a multi-line typewrite revealing in
+	// order instead of every line typing at once.
+	//
+	// `typeComplete` is latched by CompleteTypewriters() when the operator
+	// advances the cue, so a half-typed line never stays half-typed.
+	int  typeMsPerChar  = 0;
+	int  typeCharOffset = 0;
+	bool typeComplete   = false;
 };
 
 struct SlaveImageEntry{
@@ -90,6 +108,15 @@ public:
 	// Used by `textD`'s second argument.
 	void PushSubtitleRuns(const std::vector<TextRun>& runs, const RenderModifiers& mods,
 		const std::string& groupName = "");
+	// (1.8.2) Push a text entry that reveals itself one character at a
+	// time. `msPerChar` of 0 is accepted and behaves exactly like
+	// PushTextRuns. Used by `typewrite`.
+	void PushTypewriteRuns(const std::vector<TextRun>& runs, const RenderModifiers& mods,
+		int msPerChar, const std::string& groupName = "");
+	// (1.8.2) Finish every typewriter still revealing. Called when the
+	// operator advances the cue, so pressing ENTER early never leaves a
+	// half-written word on the slave.
+	void CompleteTypewriters();
 	// Remove all ungrouped text entries (preserves traditional `clear` behaviour).
 	void ClearText();
 	// Remove every text entry regardless of group (used by `clearText` / `clearAll`).
@@ -155,7 +182,10 @@ private:
 
 	// Active images (previously a single texture; now a list so grouped
 	// shows can stack and ungrouped shows replace their own kind only).
+	// (1.8.3) Kept sorted by `mods.layer`, ties in push order — see
+	// InsertImageByLayer. The draw loop iterates it front-to-back as-is.
 	std::vector<SlaveImageEntry> imageEntries;
+	void InsertImageByLayer(SlaveImageEntry&& entry);
 
 	// Active particle systems, each with its own group tag.
 	std::vector<SlaveParticleEntry> particleEntries;

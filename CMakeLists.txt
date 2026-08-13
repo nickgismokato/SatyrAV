@@ -58,6 +58,11 @@ FetchContent_MakeAvailable(tomlplusplus)
 # ── Sources ──────────────────────────────────────────────────
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
+# (1.8.1) Everything under src/core/ links without SDL2 and FFmpeg. The
+# unit-test suite reuses exactly this list, which is what lets it build
+# and run on a machine that has neither installed.
+file(GLOB SATYR_CORE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/*.cpp)
+
 add_executable(satyr-av ${SOURCES})
 
 # Windows icon
@@ -94,6 +99,19 @@ target_link_libraries(satyr-av PRIVATE
 # D3D11 for hardware-accelerated video decode (D3D11VA)
 if(WIN32)
 	target_link_libraries(satyr-av PRIVATE d3d11)
+endif()
+
+# ── Unit tests (1.8.1) ───────────────────────────────────────
+# OFF by default: a normal build of SatyrAV never compiles, downloads, or
+# links anything test-related. Turn on explicitly:
+#     cmake .. -DSATYR_BUILD_TESTS=ON
+# Enabling it adds the `satyr-tests` target and registers it with CTest.
+# See tests/README.md — the suite can also be configured on its own,
+# without SDL2 / FFmpeg present at all.
+option(SATYR_BUILD_TESTS "Build the SDL-independent core unit test suite" OFF)
+if(SATYR_BUILD_TESTS)
+	enable_testing()
+	add_subdirectory(tests)
 endif()
 
 # ── Install ──────────────────────────────────────────────────

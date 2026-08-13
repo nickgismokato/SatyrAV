@@ -17,7 +17,10 @@ public:
 
 private:
 	static void GenerateDefaultSchema(const std::string& path, const ProjectData& data);
-	static void GenerateExampleScene(const std::string& path);
+	// (1.8.0) Writes the four tutorial scenes listed in the generated
+	// schema's two akter — text, picture, particle, and group/macro
+	// showcases. `scenesDir` is the project's `scenes/` folder.
+	static void GenerateExampleScenes(const std::string& scenesDir);
 };
 
 } // namespace SatyrAV

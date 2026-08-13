@@ -154,6 +154,12 @@ bool CueEngine::IsLastScene() const{
 	return GetNextScene() == nullptr;
 }
 
+// (1.8.1) NOT UNIT-TESTED — deliberately. These three are empty stubs
+// with no observable behaviour, so a test could only assert "calling it
+// does nothing", which locks in the placeholder rather than the feature.
+// They also have to reach MediaPlayer once implemented, which puts them
+// in the render/audio layer whose tests are deferred to 2.1.0. Add
+// coverage in the same change that gives them a body.
 void CueEngine::StopAllMedia(){
 	// TODO: Stop all playing audio/video
 }

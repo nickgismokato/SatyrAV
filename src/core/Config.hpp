@@ -9,6 +9,11 @@ public:
 	static Config& Instance();
 
 	void Load(const std::string& path);
+	// (1.8.1) NOT UNIT-TESTED — this overload only forwards to
+	// Save(configPath), and configPath is the user's real config file. A
+	// test would either re-test the forwarding or write into the
+	// developer's home directory. Save(path) carries all the logic and is
+	// covered in tests/test_config.cpp.
 	void Save();
 	void Save(const std::string& path);
 	void EnsureDefaults();

@@ -1,4 +1,5 @@
 #include "core/SceneParser.hpp"
+#include "core/LatexSymbols.hpp"
 #include "core/Platform.hpp"
 #include <fstream>
 #include <sstream>
@@ -43,14 +44,38 @@ static size_t DelimAt(const std::string& s, size_t i, int* kind = nullptr){
 	return 0;
 }
 
-// (1.6.6) Find the start of a `#` line-comment, ignoring `#` characters
-// that sit inside a quoted string. Pre-1.6.6 the parser used a plain
-// `line.find('#')`, which truncated `text "Look at #1"` to `text "Look at `
-// and lost the rest of the cue. *(1.7)* Quote tracking honours `'` and `´`
-// as alternates to `"`. Returns std::string::npos when the line has no
-// comment.
-static size_t FindCommentStart(const std::string& line){
+// (1.8.2) Find the next *structural* occurrence of `target` — one that is
+// outside every quoted string and outside every modifier argument list.
+//
+// Two separators need exactly this scan: the `#` comment marker and the
+// `&` compound separator. They were each written with their own ad-hoc
+// splitting and each grew the same class of bug, fixed years apart:
+//   - `#` used a plain `line.find('#')`, so `text "Look at #1"` was
+//     truncated to `text "Look at ` (fixed 1.6.6 by tracking quotes), and
+//     `text color(#FF5500, "hi")` was truncated to `text color(` — the
+//     documented hex colour never reached ParseNamedColour (fixed 1.8.2
+//     by tracking parens).
+//   - `&` used a getline split, so `text "Tom & Jerry"` became two bogus
+//     commands (fixed 1.8.2 by routing it through here).
+// Sharing one scanner is the point: a third separator, or a fourth quote
+// style, is now a single edit rather than N places to remember.
+//
+// Rationale for paren depth over the alternatives considered for `#`:
+//   - "no comment when `#` is followed by 6 hex digits" would silently
+//     eat a legitimate comment line like `#FFFFFF looks nice here`.
+//   - "require whitespace before `#`" breaks on `color( #FF5500, "x")`,
+//     where the author simply spaced out the argument list.
+//
+// Parens are counted only outside strings, so `text "smile :)"` cannot
+// unbalance the depth, and a stray closer clamps at zero rather than
+// going negative and disabling the scan for the rest of the line. The
+// walk always starts at index 0 so quote/paren state is correct; `from`
+// only gates which matches are returned.
+//
+// Returns std::string::npos when there is no structural occurrence.
+static size_t FindStructural(const std::string& line, char target, size_t from = 0){
 	int quoteKind = 0;
+	int parenDepth = 0;
 	for(size_t i = 0; i < line.size(); ){
 		int k = 0;
 		size_t dl = DelimAt(line, i, &k);
@@ -61,10 +86,19 @@ static size_t FindCommentStart(const std::string& line){
 			i += dl;
 			continue;
 		}
-		if(line[i] == '#' && quoteKind == 0) return i;
+		if(quoteKind == 0){
+			if(line[i] == '(')      parenDepth++;
+			else if(line[i] == ')') { if(parenDepth > 0) parenDepth--; }
+			else if(line[i] == target && parenDepth == 0 && i >= from) return i;
+		}
 		i++;
 	}
 	return std::string::npos;
+}
+
+// Start of a `#` line comment, or npos. See FindStructural.
+static size_t FindCommentStart(const std::string& line){
+	return FindStructural(line, '#');
 }
 
 // ── Modifier parser ─────────────────────────────────────────
@@ -387,6 +421,83 @@ static std::string ParseModifiers(const std::string& input, RenderModifiers& mod
 		}
 	}
 
+	// (1.8.3) pathMove(P1, P2, …, PN, DURATION_MS [, MODE], content)
+	// Two or more waypoints in move()'s endpoint vocabulary, then the total
+	// time for the whole path, then an optional repeat mode, then content.
+	// Waypoints are collected greedily from the front: the scan stops at
+	// the first argument that is neither `[x,y]` nor a side letter, which
+	// is necessarily the duration. Like move(), a malformed spec still
+	// recurses into the content so the image/text is shown unanimated
+	// rather than the whole cue disappearing.
+	if(s.rfind("pathMove(", 0) == 0){
+		auto close = FindMatchingParen(s, 8);
+		if(close != std::string::npos){
+			std::string inner = s.substr(9, close - 9);
+			auto args = SplitArgs(inner);
+			// A valid spec needs at least 4 args (2 waypoints + duration +
+			// content), but anything with a plausible content slot is worth
+			// unwrapping: a malformed path then still shows its image or
+			// text, unanimated, instead of printing the raw modifier string
+			// on the slave.
+			if(args.size() >= 2){
+				std::vector<RenderModifiers::PathPoint> pts;
+				size_t i = 0;
+				for(; i < args.size(); i++){
+					RenderModifiers::PathPoint p;
+					if(!ParseMovePoint(args[i], p.x, p.y, p.side)) break;
+					pts.push_back(p);
+				}
+
+				bool ok = (pts.size() >= 2) && (i < args.size());
+				float ms = 0.0f;
+				if(ok){
+					try{ ms = std::stof(Trim(args[i])); } catch(...){ ok = false; }
+					if(ms <= 0.0f) ok = false;
+				}
+				if(ok) i++;
+
+				// An optional repeat mode sits between the duration and the
+				// content, so exactly one spare argument means a mode is
+				// present. An unrecognised word there is a typo, not a
+				// silent Once — reject the spec so the author sees it.
+				RenderModifiers::PathRepeat rep = RenderModifiers::PathRepeat::Once;
+				if(ok && args.size() - i == 2){
+					std::string mode = Trim(args[i]);
+					std::transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
+					if(mode == "loop")          rep = RenderModifiers::PathRepeat::Loop;
+					else if(mode == "pingpong") rep = RenderModifiers::PathRepeat::PingPong;
+					else if(mode == "once")     rep = RenderModifiers::PathRepeat::Once;
+					else ok = false;
+					if(ok) i++;
+				}
+
+				if(ok && args.size() - i == 1){
+					mods.pathPoints      = std::move(pts);
+					mods.pathDurationSec = ms / 1000.0f;
+					mods.pathRepeat      = rep;
+					// Also flag the two-point field so every existing
+					// "animated?" check sees this entry as animated.
+					mods.hasMove         = true;
+				}
+				return ParseModifiers(args.back(), mods);
+			}
+		}
+	}
+
+	// (1.8.3) layer(N, content) — draw-order for images. Higher is nearer
+	// the front; 0 is the default and reproduces push-order behaviour.
+	if(s.rfind("layer(", 0) == 0){
+		auto close = FindMatchingParen(s, 5);
+		if(close != std::string::npos){
+			std::string inner = s.substr(6, close - 6);
+			auto args = SplitArgs(inner);
+			if(args.size() >= 2){
+				try{ mods.layer = std::stoi(Trim(args[0])); } catch(...){}
+				return ParseModifiers(args[1], mods);
+			}
+		}
+	}
+
 	// spin(degreesPerSecond, content)
 	if(s.rfind("spin(", 0) == 0){
 		auto close = FindMatchingParen(s, 4);
@@ -618,7 +729,13 @@ static std::vector<TextRun> ParseTextRuns(const std::string& argRaw,
 		std::string content = ParseModifiers(piece, segMods);
 
 		TextRun run;
-		run.text = content;
+		// (1.8.2) LaTeX symbol macros are expanded here, at the very end
+		// of the modifier walk, so every text-bearing command inherits it
+		// through one code path — `text`, the styled and `Cont` variants,
+		// both sides of `textD`, and each segment of a `+` concatenation.
+		// Doing it at parse time means the navigator, the wrap measuring
+		// and the glyph rendering all see real characters.
+		run.text = ExpandLatexSymbols(content);
 		if(segMods.textColour.a > 0) run.colour = segMods.textColour;
 		run.transparency = segMods.transparency;
 		// (1.6.1) Inline `bold(...)` / `it(...)` set the per-run style
@@ -643,6 +760,12 @@ static std::vector<TextRun> ParseTextRuns(const std::string& argRaw,
 			lineMods.moveDurationSec = segMods.moveDurationSec;
 			lineMods.moveFromSide    = segMods.moveFromSide;
 			lineMods.moveToSide      = segMods.moveToSide;
+			// (1.8.3) pathMove() rides along on the same leftmost-wins slot;
+			// a path sets hasMove, so it can never be folded independently
+			// of the two-point fields and get half-applied.
+			lineMods.pathPoints      = segMods.pathPoints;
+			lineMods.pathDurationSec = segMods.pathDurationSec;
+			lineMods.pathRepeat      = segMods.pathRepeat;
 			lineSetMove = true;
 		}
 		if(!lineSetSpin && segMods.spinDegPerSec != 0.0f){
@@ -715,6 +838,37 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 		return cmd;
 	}
 
+	// (1.8.2) `typewrite(MS_PER_CHAR, TEXT)` — the second paren-style
+	// command. TEXT is the full text expression, so `+` concatenation and
+	// every text modifier work exactly as they do in `text`; the split is
+	// on the first *structural* comma, which leaves commas inside
+	// `color(RED, "a")` alone.
+	if(line.size() > 10 && line.compare(0, 10, "typewrite(") == 0){
+		cmd.type = CommandType::Typewrite;
+		size_t close = line.rfind(')');
+		std::string inner = (close != std::string::npos && close > 9)
+			? line.substr(10, close - 10) : "";
+
+		size_t comma = FindStructural(inner, ',');
+		std::string msRaw   = (comma == std::string::npos)
+			? inner : inner.substr(0, comma);
+		std::string textRaw = (comma == std::string::npos)
+			? std::string() : inner.substr(comma + 1);
+
+		try{ cmd.typeMsPerChar = std::stoi(Trim(msRaw)); }
+		catch(...){ cmd.typeMsPerChar = 0; }
+		// 0 = instant (degrades to plain `text`); the upper bound keeps a
+		// fat-fingered value from pinning a line on screen for an hour.
+		if(cmd.typeMsPerChar < 0)    cmd.typeMsPerChar = 0;
+		if(cmd.typeMsPerChar > 5000) cmd.typeMsPerChar = 5000;
+
+		cmd.runs = ParseTextRuns(Trim(textRaw), cmd.mods);
+		std::string concat;
+		for(auto& r : cmd.runs) concat += r.text;
+		cmd.argument = concat;
+		return cmd;
+	}
+
 	auto spacePos = line.find(' ');
 	std::string keyword = (spacePos != std::string::npos)
 		? line.substr(0, spacePos) : line;
@@ -761,7 +915,10 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 	// Parse modifiers from the argument
 	if(cmd.type == CommandType::Comment){
 		// Comments: take the quoted text verbatim; no modifier parsing.
-		cmd.argument = StripQuotes(argRaw);
+		// (1.8.2) Symbol macros still expand — a navigator row reading
+		// "Cue after the Ω speech" is more use to the operator than one
+		// reading "Cue after the \Omega speech".
+		cmd.argument = ExpandLatexSymbols(StripQuotes(argRaw));
 	} else if(cmd.type == CommandType::Clear){
 		// clear may take an optional group name (bareword, no quotes).
 		cmd.argument = Trim(argRaw);
@@ -883,26 +1040,123 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 	return cmd;
 }
 
-static Command ParseCommandLine(const std::string& line, int lineNumber){
-	if(line.find('&') == std::string::npos){
-		return ParseSingleCommand(line, lineNumber);
+// (1.8.4) Strip a trailing `\Name` cue reference from a command line and
+// return the name ("" if there is none). The reference must:
+//   - sit at the very end of the line,
+//   - be preceded by whitespace,
+//   - be structural (outside quotes and modifier parens), and
+//   - name a cue that the scene's [Cue] section actually defines.
+//
+// That last condition is what keeps this from colliding with the 1.8.2
+// LaTeX macros. `text \alpha` written without quotes has the same shape as
+// a cue reference; requiring the name to be defined means an undefined
+// `\alpha` is left alone for the symbol expander. The cost is that a
+// mistyped reference is silently not a reference — which is why an
+// unreferenced note raises a warning instead (see ParseFile).
+static std::string ExtractCueRef(std::string& line,
+	const std::vector<CueNote>& cues){
+	if(cues.empty()) return "";
+
+	// Walk back over the trailing identifier.
+	size_t end = line.size();
+	while(end > 0 && (line[end - 1] == ' ' || line[end - 1] == '\t')) end--;
+	size_t start = end;
+	while(start > 0){
+		char c = line[start - 1];
+		bool ident = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+			|| (c >= '0' && c <= '9') || c == '_';
+		if(!ident) break;
+		start--;
+	}
+	if(start == end || start == 0) return "";          // no identifier
+	if(line[start - 1] != '\\') return "";             // not a `\Name`
+	size_t slash = start - 1;
+	if(slash == 0) return "";                          // needs leading space
+	char before = line[slash - 1];
+	if(before != ' ' && before != '\t') return "";
+
+	// The backslash must be structural — not inside a string or a modifier
+	// argument list, where a backslash is content.
+	if(FindStructural(line, '\\', slash) != slash) return "";
+
+	std::string name = line.substr(start, end - start);
+	bool defined = false;
+	for(const auto& c : cues){
+		if(c.name == name){ defined = true; break; }
+	}
+	if(!defined) return "";
+
+	line = line.substr(0, slash);
+	// Trim the whitespace the reference was hanging off.
+	while(!line.empty() && (line.back() == ' ' || line.back() == '\t')){
+		line.pop_back();
+	}
+	return name;
+}
+
+// (1.8.4) True when a block-body line closes the block. A bare `}` is the
+// normal case; a closing brace that picked up a stray `\Name` also counts.
+//
+// An author who wants a note on a whole `run{ … }` naturally reaches for
+// `} \Cue1`, and before this check that line simply wasn't the terminator
+// — so the block ran on and swallowed the rest of the scene with no error.
+// Closing on it is the safe reading. The reference itself is dropped,
+// because notes bind to command rows; put it on a command inside the body
+// and the row picks it up (see RowCueName).
+static bool IsBlockClose(const std::string& bodyLine,
+	const std::vector<CueNote>& cues){
+	if(bodyLine == "}") return true;
+	if(bodyLine.empty() || bodyLine[0] != '}') return false;
+	std::string probe = bodyLine;
+	if(ExtractCueRef(probe, cues).empty()) return false;
+	return Trim(probe) == "}";
+}
+
+static Command ParseCommandLine(const std::string& line, int lineNumber,
+	const std::vector<CueNote>& cues){
+	// (1.8.4) A `\Name` cue reference belongs to the whole navigator row,
+	// so strip it here — before the `&` split — and stamp it on whatever
+	// command comes out. On `clear & play x.mp3 \Cue1` the note lands on
+	// the Compound, which is the row the notes column draws beside.
+	std::string body = line;
+	const std::string cueName = ExtractCueRef(body, cues);
+
+	// (1.8.2) Split on `&` only where it is structural. Until 1.8.2 this
+	// used `std::getline(stream, segment, '&')`, which knew nothing about
+	// quoting — so `text "Tom & Jerry"` was chopped into `text "Tom ` and
+	// `Jerry"` and dispatched as a two-command Compound. Routing the split
+	// through FindStructural gives `&` the same quote/paren awareness the
+	// `#` comment marker has.
+	if(FindStructural(body, '&') == std::string::npos){
+		Command single = ParseSingleCommand(body, lineNumber);
+		single.cueName = cueName;
+		return single;
 	}
 
 	std::vector<Command> parts;
-	std::istringstream stream(line);
-	std::string segment;
-	while(std::getline(stream, segment, '&')){
-		segment = Trim(segment);
-		if(segment.empty()) continue;
-		parts.push_back(ParseSingleCommand(segment, lineNumber));
+	size_t start = 0;
+	while(true){
+		size_t amp = FindStructural(body, '&', start);
+		std::string segment = Trim(amp == std::string::npos
+			? body.substr(start)
+			: body.substr(start, amp - start));
+		if(!segment.empty()){
+			parts.push_back(ParseSingleCommand(segment, lineNumber));
+		}
+		if(amp == std::string::npos) break;
+		start = amp + 1;
 	}
 
-	if(parts.size() == 1) return std::move(parts[0]);
+	if(parts.size() == 1){
+		parts[0].cueName = cueName;
+		return std::move(parts[0]);
+	}
 
 	Command compound;
 	compound.type = CommandType::Compound;
 	compound.lineNumber = lineNumber;
 	compound.subCommands = std::move(parts);
+	compound.cueName = cueName;
 	return compound;
 }
 
@@ -950,6 +1204,7 @@ static void ProcessLogicalCommand(
 	const std::vector<std::string>& allLines, size_t& i,
 	const std::string& line, const std::string& comment,
 	std::unordered_map<std::string, std::vector<Command>>& macros,
+	const std::vector<CueNote>& cues,
 	std::vector<Command>& out){
 
 	int lineNumber = (int)i + 1;
@@ -985,9 +1240,9 @@ static void ProcessLogicalCommand(
 				auto cp = FindCommentStart(bodyLine);
 				if(cp != std::string::npos) bodyLine = bodyLine.substr(0, cp);
 				bodyLine = Trim(bodyLine);
-				if(bodyLine == "}") break;
+				if(IsBlockClose(bodyLine, cues)) break;
 				if(!bodyLine.empty()){
-					Command inner = ParseCommandLine(bodyLine, (int)i + 1);
+					Command inner = ParseCommandLine(bodyLine, (int)i + 1, cues);
 					if(inner.type == CommandType::Compound){
 						for(auto& sub : inner.subCommands){
 							body.push_back(std::move(sub));
@@ -1037,9 +1292,9 @@ static void ProcessLogicalCommand(
 				auto cp = FindCommentStart(bodyLine);
 				if(cp != std::string::npos) bodyLine = bodyLine.substr(0, cp);
 				bodyLine = Trim(bodyLine);
-				if(bodyLine == "}") break;
+				if(IsBlockClose(bodyLine, cues)) break;
 				if(!bodyLine.empty()){
-					body.push_back(ParseCommandLine(bodyLine, (int)i + 1));
+					body.push_back(ParseCommandLine(bodyLine, (int)i + 1, cues));
 				}
 				i++;
 			}
@@ -1061,7 +1316,7 @@ static void ProcessLogicalCommand(
 	}
 
 	// ── plain line ────────────────────────────────────────
-	Command cmd = ParseCommandLine(line, lineNumber);
+	Command cmd = ParseCommandLine(line, lineNumber, cues);
 	cmd.comment = comment;
 	out.push_back(std::move(cmd));
 }
@@ -1081,7 +1336,7 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 	scene.fileName = scenePath.substr(pos + 1);
 	scene.name = scenePath.substr(pos + 1, dot - pos - 1);
 
-	enum class Section{ None, Options, Preload, Macro, Commands };
+	enum class Section{ None, Options, Preload, Macro, Cue, Commands };
 	Section currentSection = Section::None;
 
 	// Macros collected from the [Macro] section. Referenced by name from
@@ -1093,6 +1348,58 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 	std::string rawLine;
 	while(std::getline(file, rawLine)){
 		allLines.push_back(rawLine);
+	}
+
+	// (1.8.4) [Cue] is collected in a pre-pass. A command's `\Name`
+	// reference is only recognised when the name is actually defined, so
+	// the notes have to be known before any command is parsed — regardless
+	// of whether the author put [Cue] above or below [Commands].
+	{
+		bool inCue = false;
+		for(size_t i = 0; i < allLines.size(); i++){
+			std::string line = allLines[i];
+			auto cp = FindCommentStart(line);
+			if(cp != std::string::npos) line = line.substr(0, cp);
+			line = Trim(line);
+			if(line.empty()) continue;
+
+			// Any `[...]` header ends the section — checked generically so
+			// an unknown section can't be swallowed as cue notes.
+			if(line.size() >= 2 && line.front() == '[' && line.back() == ']'){
+				inCue = (line == "[Cue]");
+				continue;
+			}
+			if(!inCue) continue;
+
+			// `Name  the note text…` — first token names the cue.
+			auto sp = line.find_first_of(" \t");
+			if(sp == std::string::npos){
+				Scene::Warning w;
+				w.lineNumber = (int)i + 1;
+				w.message = "Cue note '" + line + "' has a name but no text";
+				scene.warnings.push_back(std::move(w));
+				continue;
+			}
+			CueNote note;
+			note.name = line.substr(0, sp);
+			note.text = Trim(line.substr(sp + 1));
+			note.lineNumber = (int)i + 1;
+			if(note.name.empty() || note.text.empty()) continue;
+
+			bool duplicate = false;
+			for(const auto& existing : scene.cueNotes){
+				if(existing.name == note.name){ duplicate = true; break; }
+			}
+			if(duplicate){
+				Scene::Warning w;
+				w.lineNumber = note.lineNumber;
+				w.message = "Duplicate cue note '" + note.name
+					+ "' — the first definition is used";
+				scene.warnings.push_back(std::move(w));
+				continue;
+			}
+			scene.cueNotes.push_back(std::move(note));
+		}
 	}
 
 	for(size_t i = 0; i < allLines.size(); i++){
@@ -1112,6 +1419,7 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 		if(line == "[Options]"){ currentSection = Section::Options; continue; }
 		if(line == "[Preload]"){ currentSection = Section::Preload; continue; }
 		if(line == "[Macro]"){ currentSection = Section::Macro; continue; }
+		if(line == "[Cue]"){ currentSection = Section::Cue; continue; }
 		if(line == "[Commands]"){ currentSection = Section::Commands; continue; }
 
 		switch(currentSection){
@@ -1215,9 +1523,10 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 					auto cp = FindCommentStart(bodyLine);
 					if(cp != std::string::npos) bodyLine = bodyLine.substr(0, cp);
 					bodyLine = Trim(bodyLine);
-					if(bodyLine == "}") break;
+					if(IsBlockClose(bodyLine, scene.cueNotes)) break;
 					if(!bodyLine.empty()){
-						body.push_back(ParseCommandLine(bodyLine, (int)i + 1));
+						body.push_back(ParseCommandLine(bodyLine, (int)i + 1,
+							scene.cueNotes));
 					}
 					i++;
 				}
@@ -1272,10 +1581,10 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 								bodyLine = bodyLine.substr(0, cp);
 							}
 							bodyLine = Trim(bodyLine);
-							if(bodyLine == "}") break;
+							if(IsBlockClose(bodyLine, scene.cueNotes)) break;
 							if(!bodyLine.empty()){
 								ProcessLogicalCommand(allLines, i, bodyLine,
-									bodyComment, macros, scene.commands);
+									bodyComment, macros, scene.cueNotes, scene.commands);
 							}
 							i++;
 						}
@@ -1290,7 +1599,8 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 
 				// All other top-level command forms — run{}, loop(){}, macro,
 				// plain — share one helper with the group-body loop above.
-				ProcessLogicalCommand(allLines, i, line, comment, macros, scene.commands);
+				ProcessLogicalCommand(allLines, i, line, comment, macros,
+					scene.cueNotes, scene.commands);
 				break;
 			}
 			default: break;
@@ -1314,6 +1624,37 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 		for(const auto& sub : c.loopBody)    walk(sub);
 	};
 	for(const auto& c : scene.commands) walk(c);
+
+	// (1.8.4) A cue note that nothing references is almost always a typo in
+	// the command's `\Name`, and it is the only way to catch one: an
+	// unrecognised reference is deliberately left alone so it can't collide
+	// with a LaTeX macro (see ExtractCueRef), which means the mistake shows
+	// up here, on the note, rather than on the command.
+	if(!scene.cueNotes.empty()){
+		std::function<void(const Command&, std::vector<std::string>&)> collect;
+		collect = [&](const Command& c, std::vector<std::string>& used){
+			if(!c.cueName.empty()) used.push_back(c.cueName);
+			for(const auto& sub : c.subCommands) collect(sub, used);
+			for(const auto& sub : c.loopBody)    collect(sub, used);
+		};
+		std::vector<std::string> used;
+		for(const auto& c : scene.commands) collect(c, used);
+
+		for(const auto& note : scene.cueNotes){
+			bool referenced = false;
+			for(const auto& u : used){
+				if(u == note.name){ referenced = true; break; }
+			}
+			if(!referenced){
+				Scene::Warning w;
+				w.lineNumber = note.lineNumber;
+				w.message = "Cue note '" + note.name
+					+ "' is never referenced — check the \\" + note.name
+					+ " on the command";
+				scene.warnings.push_back(std::move(w));
+			}
+		}
+	}
 
 	return scene;
 }
