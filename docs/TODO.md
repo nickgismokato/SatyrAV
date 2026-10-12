@@ -85,6 +85,10 @@ Evaluated during the scoping review and dropped from 2.0.0:
 - **`SDL3 System Tray API`** — SatyrAV is a foreground operator tool; no roadmap feature needs a tray icon. It is a small, isolated feature that can be added in any release if wanted — it does not need to be coupled to the migration.
 - **`SDL3 Time API` as a feature** — `<chrono>` (C++17) already provides calendar time. The in-project clock and per-scene stopwatch *command* are user features, moved to 2.1.0.
 
+## 2.0.1
+### Bugs
+- Video playback problems on `Windows 10`. It plays the first frame and hold the 32 frames in buffer but it cannot play any longer. It does use the GTX1060 GPU and do zero-copy DirectX Hardware playback but still doesn't want to play. Neither in fullscreen nor in dev mode.
+
 ---
 
 ## 1.8 — shipped (five sub-versions)
