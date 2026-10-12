@@ -1,8 +1,9 @@
 #include "ui/DisplaySizePopup.hpp"
+#include "core/Logger.hpp"
 #include "render/SlaveWindow.hpp"
 #include "core/AssetPath.hpp"
 #include "core/Project.hpp"
-#include <SDL2/SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -39,7 +40,13 @@ void DisplaySizePopup::Open(TargetedDisplay* targeted, SlaveWindow* slaveWin,
 		std::string assetPath = FindAsset("SatyrAV_4k-test.png");
 		testPattern = IMG_LoadTexture(slaveRenderer, assetPath.c_str());
 		if(testPattern){
-			SDL_QueryTexture(testPattern, nullptr, nullptr, &testW, &testH);
+			// (2.0.0) SDL_QueryTexture is gone; SDL_GetTextureSize reports
+			// float dimensions. The layer API downstream is integer-based,
+			// so round-trip through floats here.
+			float tw = 0.0f, th = 0.0f;
+			SDL_GetTextureSize(testPattern, &tw, &th);
+			testW = (int)tw;
+			testH = (int)th;
 			// Push onto the slave image layer so DrawMedia draws it inside
 			// the targeted rect. Default RenderModifiers → fit + centre.
 			if(slave){
@@ -47,8 +54,8 @@ void DisplaySizePopup::Open(TargetedDisplay* targeted, SlaveWindow* slaveWin,
 				slave->ShowImage(testPattern, testW, testH, mods);
 			}
 		} else{
-			fprintf(stderr, "DisplaySizePopup: failed to load %s: %s\n",
-				assetPath.c_str(), IMG_GetError());
+			Logger::Instance().Errorf("DisplaySizePopup: failed to load %s: %s",
+				assetPath.c_str(), SDL_GetError());
 		}
 	}
 
@@ -99,7 +106,8 @@ void DisplaySizePopup::ResetToDefault(){
 void DisplaySizePopup::Update(float dt){
 	if(!visible || !td || dt <= 0.0f) return;
 
-	const Uint8* keys = SDL_GetKeyboardState(nullptr);
+	// (2.0.0) SDL3 returns a bool array rather than Uint8.
+	const bool* keys = SDL_GetKeyboardState(nullptr);
 	if(!keys) return;
 
 	// The S key that opened the popup is still held. Wait for the user to

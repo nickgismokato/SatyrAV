@@ -12,36 +12,22 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
-# ── SDL2 ──────────────────────────────────────────────────────
-# Try config mode first (works with MinGW dev packages), then module mode
-find_package(SDL2 REQUIRED)
-find_package(SDL2_ttf REQUIRED)
-find_package(SDL2_image REQUIRED)
+# ── SDL3 (2.0.0) ──────────────────────────────────────────────
+# SDL3 always ships CMake config packages with namespaced targets, so the
+# per-distro target-name guessing SDL2 needed is gone. CONFIG is explicit:
+# there is no FindSDL3.cmake module, and without it a missing SDL3 fails
+# with a confusing "module not found" instead of a clear config error.
+#
+# Ubuntu 24.04 does not package SDL3. Point CMake at a local build:
+#     -DCMAKE_PREFIX_PATH=$HOME/sdl3-prefix
+# The MinGW cross-build gets it from MINGW_DEPS_DIR via the toolchain file.
+find_package(SDL3 REQUIRED CONFIG)
+find_package(SDL3_ttf REQUIRED CONFIG)
+find_package(SDL3_image REQUIRED CONFIG)
 
-# Normalise SDL2 targets — different distros/packages expose different names
-if(TARGET SDL2::SDL2)
-	set(SDL2_LINK SDL2::SDL2)
-elseif(TARGET SDL2::SDL2-static)
-	set(SDL2_LINK SDL2::SDL2-static)
-else()
-	set(SDL2_LINK ${SDL2_LIBRARIES})
-endif()
-
-if(TARGET SDL2_ttf::SDL2_ttf)
-	set(SDL2_TTF_LINK SDL2_ttf::SDL2_ttf)
-elseif(TARGET SDL2_ttf::SDL2_ttf-static)
-	set(SDL2_TTF_LINK SDL2_ttf::SDL2_ttf-static)
-else()
-	set(SDL2_TTF_LINK SDL2_ttf)
-endif()
-
-if(TARGET SDL2_image::SDL2_image)
-	set(SDL2_IMAGE_LINK SDL2_image::SDL2_image)
-elseif(TARGET SDL2_image::SDL2_image-static)
-	set(SDL2_IMAGE_LINK SDL2_image::SDL2_image-static)
-else()
-	set(SDL2_IMAGE_LINK SDL2_image)
-endif()
+set(SDL3_LINK       SDL3::SDL3)
+set(SDL3_TTF_LINK   SDL3_ttf::SDL3_ttf)
+set(SDL3_IMAGE_LINK SDL3_image::SDL3_image)
 
 # ── FFmpeg ────────────────────────────────────────────────────
 find_package(FFmpeg REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWSCALE SWRESAMPLE)
@@ -58,7 +44,7 @@ FetchContent_MakeAvailable(tomlplusplus)
 # ── Sources ──────────────────────────────────────────────────
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
-# (1.8.1) Everything under src/core/ links without SDL2 and FFmpeg. The
+# (1.8.1) Everything under src/core/ links without SDL and FFmpeg. The
 # unit-test suite reuses exactly this list, which is what lets it build
 # and run on a machine that has neither installed.
 file(GLOB SATYR_CORE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/core/*.cpp)
@@ -68,11 +54,27 @@ add_executable(satyr-av ${SOURCES})
 # Windows icon
 if(WIN32)
 	target_sources(satyr-av PRIVATE src/satyr-av.rc)
+
+	# (2.0.0) Build as a GUI-subsystem binary so launching the .exe does not
+	# also open a console window.
+	#
+	# This was implicit under SDL2: the SDL2::SDL2main imported target added
+	# `-mwindows` to the link line on MinGW. SDL3::SDL3main deliberately does
+	# not — SDL3 leaves the subsystem choice to the application — so without
+	# this the exe links as a console binary and Windows opens a terminal
+	# alongside it. WIN32_EXECUTABLE is the portable way to say `-mwindows`.
+	#
+	# Safe with <SDL3/SDL_main.h> in main.cpp: that renames main() to
+	# SDL_main(), and SDL3::SDL3main supplies the WinMain entry point that
+	# calls it. Note that stdout/stderr go nowhere in this subsystem — the
+	# file logger under Documents\SatyrAV\log is the diagnostic channel.
+	set_target_properties(satyr-av PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 
+# SDL3's imported targets carry their own include directories, so there is
+# no SDL3_INCLUDE_DIRS to add here (SDL2 needed one).
 target_include_directories(satyr-av PRIVATE
 	src
-	${SDL2_INCLUDE_DIRS}
 	${FFMPEG_INCLUDE_DIRS}
 )
 
@@ -80,18 +82,17 @@ target_compile_definitions(satyr-av PRIVATE
 	SATYR_AV_VERSION="${SATYR_VERSION}"
 )
 
-# On Windows, SDL2main must come BEFORE SDL2, and mingw32 before both
-if(WIN32)
-	target_link_libraries(satyr-av PRIVATE mingw32)
-	if(TARGET SDL2::SDL2main)
-		target_link_libraries(satyr-av PRIVATE SDL2::SDL2main)
-	endif()
+# (2.0.0) SDL3 replaces the SDL2main/mingw32 link-order dance with a single
+# SDL3::SDL3main target, used together with <SDL3/SDL_main.h> in main.cpp.
+# It must be linked before SDL3::SDL3.
+if(TARGET SDL3::SDL3main)
+	target_link_libraries(satyr-av PRIVATE SDL3::SDL3main)
 endif()
 
 target_link_libraries(satyr-av PRIVATE
-	${SDL2_LINK}
-	${SDL2_TTF_LINK}
-	${SDL2_IMAGE_LINK}
+	${SDL3_LINK}
+	${SDL3_TTF_LINK}
+	${SDL3_IMAGE_LINK}
 	tomlplusplus::tomlplusplus
 	${FFMPEG_LIBRARIES}
 )

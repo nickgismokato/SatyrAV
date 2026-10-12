@@ -1,7 +1,8 @@
+#include "render/RectF.hpp"
 #include "screens/MainMenuScreen.hpp"
 #include "App.hpp"
 #include "core/AssetPath.hpp"
-#include <SDL2/SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 #include <cstdio>
 
 namespace SatyrAV{
@@ -17,7 +18,7 @@ void MainMenuScreen::OnEnter(){
 			logoH = surface->h;
 			auto* renderer = app->GetRenderer().GetMaster();
 			logoTexture = SDL_CreateTextureFromSurface(renderer, surface);
-			SDL_FreeSurface(surface);
+			SDL_DestroySurface(surface);
 		}
 	}
 }
@@ -72,8 +73,8 @@ void MainMenuScreen::Draw(Renderer& r, TextRenderer& text){
 		int drawX = centerX - drawW / 2;
 		int drawY = screenH / 3 - drawH / 2;
 
-		SDL_Rect dst = {drawX, drawY, drawW, drawH};
-		SDL_RenderCopy(renderer, logoTexture, nullptr, &dst);
+		SDL_FRect dst = FRectI(drawX, drawY, drawW, drawH);
+		SDL_RenderTexture(renderer, logoTexture, nullptr, &dst);
 	}
 
 	// Menu options below logo

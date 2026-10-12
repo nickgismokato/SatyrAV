@@ -25,7 +25,7 @@ Section "Install"
     File /r "..\assets\*.*"
     SetOutPath $INSTDIR
 
-    ; All DLLs from build directory (SDL2, FFmpeg, MinGW runtime)
+    ; All DLLs from build directory (SDL3, FFmpeg, MinGW runtime)
     File "..\build-win\*.dll"
 
     ; Create shortcuts with icon

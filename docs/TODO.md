@@ -2,7 +2,7 @@
 
 Future work, newest first. Shipped features live in [CHANGELOG.md](CHANGELOG.md).
 
-> **Current release: 1.8.4.** The 1.8 cycle is complete — all five sub-versions have shipped. The next planned work is **2.0.0**, the SDL3 backend migration.
+> **Current release: 2.0.0.** The SDL3 backend migration has shipped. Next is **2.0.1**, a bug-fix release for the items marked *(2.0.1)* under [Known bugs](#known-bugs), then **2.1.0**.
 
 The lists, with the exception of the bug list, is in no particular order. Some have the (**Critical**) on them which means they are important and should be looked at first in the update version, before the others, if it makes sense.
 
@@ -11,7 +11,7 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 ---
 
 ## Planned for 2.2.0
-
+- Add powerpoint animetions transitions for picture to picture. Essentially making it possible to run a slideshow like in powerpoint.
 - Add an application-window capture source (Windows only) so we can stream another running program onto the slave display. Video only — no audio capture.
 	- **Backend.** Windows Graphics Capture (WGC) via `GraphicsCaptureItem::CreateFromHWND` &rarr; `Direct3D11CaptureFramePool` &rarr; `FrameArrived`, sharing the existing D3D11 device with SDL/FFmpeg so the captured BGRA texture stays on the GPU. Requires Win11 (no yellow capture border).
 	- **Cue integration.** New `capture "<window-title>"` keyword in `SceneParser`, new `CommandType::Capture`, dispatched through `CueEngine` &rarr; `SlaveWindow`. Tear-down via a `stopCapture` command (or fold into existing clear semantics — decide during design).
@@ -35,6 +35,14 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 		```
 	- The file should be named the project name and the date it has been created and then a number (or something similar) if you have started the show more than once during the day.
 	- The exact details of what it should show has not been decided. A design run through may be needed. But essentially everytime we change a scene or show something, like an image, movie or text.
+- (**Critical**) Add a control to press a button such that the log, logs what active line of kode has an error. This will be used to highlight lines we need to fix later.
+- *(Maybe — more information needed before this counts as a bug.)* F-key toggling when several sounds are layered.
+	- **Confirmed working in 2.0.0 testing:** different F-keys bound to different files can each be started and stopped independently, on top of each other and on top of video sound.
+	- **Known and accepted:** a sound is identified by its file, so the same file bound to two F-keys is one sound; the second key restarts it rather than layering a copy.
+	- **The open question comes from reading the code, not from anything seen in use.** `PerformanceScreen` remembers only the *last* F-key pressed (`currentHotkeyNum`) and decides "stop or play" by asking `MediaPlayer::IsAudioPlaying()`, which is also true whenever a video with sound is playing. On paper that gives two odd cases:
+		1. Press F1, then F2, then F1 again while F1's sound is still going: F1 would restart from the beginning instead of stopping.
+		2. With a video with sound playing, press an F-key, let its sound finish, press the same key again: the press would be taken as "stop" and nothing would play until a second press.
+	- **To settle it:** try those two sequences exactly. If neither happens, delete this item. If either does, the fix is small — ask the player whether *that* sound is playing instead of tracking one key number.
 - OSC Receiver, i.e. listen for OSC messages from lightning desk to control cues. Mainly interested in QLab and maybe GrandMA. 
 - Expose HTTP/WebSocket endpoint to send out message of which Scene and akt we are currently on.
 - Create full physics model for particle systems, accelerated with hardware
@@ -43,6 +51,7 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 	- Probably should just go forward or backward with 5 seconds interval using key `,`/`.`.
 	- A restart from the beginning function is also needed.
 	- *Why deferred:* needs `av_seek_frame` + decode-ring flush inside `VideoPlayback` — the exact code 2.0.0 rebuilds for zero-copy decode. The 2.0.0 redo leaves the pipeline seek-capable; this item is the user-facing commands on top of it.
+	- *Status after 2.0.0:* the plumbing exists and is tested on all three decode paths — `MediaPlayer::SeekVideo(seconds)`, `GetVideoPosition()` and `GetVideoDuration()`. What is left for this item is the commands, the key bindings, and one behaviour to decide: a seek made while paused currently shows its new picture only when playback resumes.
 - *(moved from 1.8.0)* Create a true folder chooser for the folder picker inside Options.
 	- When pressing the folder-choose control for where projects are stored, a native folder dialog should open so the user can pick the storage folder.
 	- *Why deferred:* SDL3 ships [`SDL_ShowOpenFolderDialog`](https://wiki.libsdl.org/SDL3/SDL_ShowOpenFolderDialog) (cross-platform). Doing this pre-SDL3 means hand-rolling a Win32 COM `IFileDialog` path that would then be thrown away — exactly the double work to avoid.
@@ -54,25 +63,18 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 
 ---
 
-## Planned for 2.0.0
+## 2.0.0 — shipped
 
-**General notes about this major update:** A backend-only release — user-facing functionality should not change, with one deliberate exception (see *Audio* below). Migrating to `SDL3` gives a renderer that auto-selects D3D11/D3D12/Vulkan/Metal/OpenGL (better integrated-GPU coverage), a real audio-stream abstraction, and the interop needed for zero-copy video. The SDL3 feature list was reviewed and trimmed — see *Decided against* for what was evaluated and dropped, so it doesn't get re-litigated later.
+The SDL2 → SDL3 backend migration, plus the work that depended on it. See [CHANGELOG.md](CHANGELOG.md) for the detail.
 
-> **Terminology:** earlier drafts said "hardware encoding/decoding". SatyrAV never encodes video — it only decodes and plays. Every item below concerns hardware **decode** and the GPU upload path.
+- **SDL3.** The whole render, input and audio layer moved to SDL3 on the existing 2D renderer. Display selection, window creation and text input were adapted without changing any config file or `schema.toml`.
+- **Zero-copy hardware video.** On Windows a decoded frame goes from the decoder to the screen without leaving the GPU; the old read-back path remains as the automatic fall-back. Controlled by `[video] zero_copy` in `config.toml`.
+- **Overlapping audio** — the one deliberate change in behaviour. F-key sounds play over video sound and over each other. Plus an opt-in `AudioFade` option that makes `play` fade times fade the sound as well as the picture.
+- **Seek support in the video pipeline** — plumbing only; the commands are the 2.1.0 fast-forward item.
+- **Diagnostics.** Failures are written to the log instead of a console that does not exist on Windows, and the debug overlay shows which decode path is in use and how many sounds are playing.
+- **Fixed:** the capture mirror losing resolution when the targeted-display rect is shrunk.
 
-### Core migration
-
-- Update `SDL2` &rarr; `SDL3`, migrating the existing 2D renderer (`SDL_Render`).
-	- Staying on `SDL_Render` (**not** the new low-level `SDL_GPU`) already delivers D3D11/D3D12/Vulkan/Metal/OpenGL backend selection and better integrated-GPU support for free. See *Decided against* for why `SDL_GPU` was rejected.
-	- **Async window state.** SDL3 window operations (move / resize / fullscreen) are asynchronous on some backends. Every place that sets slave / capture-mirror window geometry and then reads it back (`GetCanvasWidth/Height`, slave bounds) must call [`SDL_SyncWindow`](https://wiki.libsdl.org/SDL3/SDL_SyncWindow) (SDL 3.2.0+) — or set the global sync hint — or it will read stale geometry. This is a migration-correctness task, not a new feature.
-	- **Filesystem.** Optionally adopt the `SDL3 Filesystem API` where it simplifies code, but `std::filesystem` (C++17) already covers the current file pipeline — opportunistic, not a headline item.
-	- All new `SDL3` features: https://wiki.libsdl.org/SDL3/NewFeatures.
-- **Zero-copy video decode.** Redo the hardware playback path so the final `VRAM` &rarr; `RAM` &rarr; `VRAM` readback is eliminated — keep decoded frames in VRAM and hand the D3D11VA output texture to the renderer via D3D11 interop. This is the headline backend win (see [video-pipeline.md](video-pipeline.md) *Known limitations*).
-	- Leave the rebuilt pipeline **seek-capable** so the 2.1.0 fast-forward / rewind / restart commands can be added without re-architecting it.
-- **Audio.** Adopt `SDL3 Audio Streams` (proper buffering + per-stream gain) and `SDL3 Logical Audio Devices`. Together these remove the close/reopen-device churn and the hand-rolled `audioBuffer` ring.
-	- *Deliberate functionality change (confirmed in-scope for 2.0.0):* this enables **overlapping audio** — F-key SFX can play on top of video audio, which the one-device-at-a-time model cannot do today.
-- Re-test the windowed-mode Slave Display bugs after the migration — SDL3's reworked window handling may resolve them outright; fix any that remain. *(moved from 1.8.0 — the bugs live in window/renderer creation code SDL3 rewrites, and windowed mode is a dev-only convenience)*
-- Make it clear in the debug overlay whether hardware decode is active or it has fallen back to software decode.
+Not finished in 2.0.0, and carried under [Known bugs](#known-bugs): the capture mirror's stutter, `stop FILE`, `K`-pause silencing F-key sounds, video size on the fall-back paths, and the last frames of a clip being dropped. Windowed dev mode was not re-tested on the SDL3 build.
 
 ### Decided against
 
@@ -87,9 +89,7 @@ Evaluated during the scoping review and dropped from 2.0.0:
 
 ## 1.8 — shipped (five sub-versions)
 
-**The 1.8 cycle is complete; 1.8.4 is the current release.** It shipped as five sub-versions ordered **easiest &rarr; hardest**, each landing and being verified on its own before the next began. Nothing in it depended on the 2.0.0 SDL3 migration — see the *Decided against* / move notes in the 2.0.0 and 2.1.0 sections for what was pulled out of this cycle along the way.
-
-Next up is **2.0.0**, the SDL3 backend migration.
+**The 1.8 cycle is complete.** It shipped as five sub-versions ordered **easiest &rarr; hardest**, each landing and being verified on its own before the next began. Nothing in it depended on the 2.0.0 SDL3 migration — see the *Decided against* / move notes in the 2.0.0 and 2.1.0 sections for what was pulled out of this cycle along the way.
 
 ### 1.8.0 — shipped
 
@@ -155,10 +155,24 @@ Bug-fix release plus one small feature: `play` videos gained optional fade-in / 
 
 ## Known bugs
 
-Most critical first. Bugs scheduled into a specific sub-version are listed there instead of here.
+Most critical first. Items marked *(2.0.1)* are the planned content of the next bug-fix release.
 
-- Run doesn't work as intended in macro environment. 
-- Scaling via the Debug menu will make the third output screen/monitor have less resolution when zooming in too much.
-	- Essentially, making the secondary target display too small, will make the output for the third monitor more "pixelated". This, I think, is because of how the resolution is rendered from the second to the third screen. The optimal rendering would be that the third screen display the secondary screen "pre" target display, essentially the resolution of the secondary display.
+- (**Critical**) **The capture mirror stutters during video and particles.** Which screens are affected has depended on which physical monitor each window is on.
+	- **History.** Before 2.0.0 the report was the other way round: the slave stuttered and the capture mirror looked smooth. Zero-copy video made the slave much smoother, so decoding was a real part of the slave's problem and that part is fixed. What remains shows on the capture mirror.
+	- **Two suspects, from reading the frame loop. Neither is confirmed — this needs measurement, not more reasoning.**
+		1. **A full GPU→CPU read-back every frame.** `Renderer::UpdateCaptureFromSlaveTarget` calls `SDL_RenderReadPixels` over the whole canvas — about 33 MB per frame at 4K — and the GPU must drain before it returns. The capture window is a separate renderer on a separate D3D11 device, which is why the frame has to cross through system RAM at all. Since zero-copy landed this is the leading suspect.
+		2. **Three serialised vsync waits per frame.** `PresentSlave` ([PerformanceScreen.cpp](../src/screens/PerformanceScreen.cpp)), then `PresentMaster` and `PresentCapture` ([App.cpp](../src/App.cpp)) all run on the main thread with vsync on. The monitors are not the same refresh rate, so the loop waits on three independent vblanks that drift in and out of phase.
+	- **Before fixing, instrument.** A frame-time breakdown in the debug overlay and the log: total frame time, read-back time, and each present's blocking time separately. "Sometimes stutters" is exactly the shape of bug where fixing the wrong suspect looks like success for ten minutes.
+	- **Likely remedies once measured:** hand the frame between the two D3D11 devices as a shared texture instead of reading it back (2.0.0's thread-safe, shared-device work makes this realistic), and vsync on the slave only — tearing matters on the audience output, while the master is an operator screen and a capture card samples at its own rate.
+	- The particle half of the original report has not been looked at separately. If particles still stutter on the slave with no video playing, that is its own bug with its own cause.
+- *(2.0.1)* **`stop FILE` does nothing.** A regression in 2.0.0. Sounds are now identified by their full path so that several can play at once, but the `stop FILE` command passes the bare file name written in the scene, which never matches. Plain `stop` (everything) still works. Fix: resolve the name against the project the same way `play` does before calling `MediaPlayer::StopAudio` — one line in `PerformanceScreen::OnSlaveCommand`.
+- *(2.0.1)* **`K` (video pause) also pauses every F-key sound, and `M` (audio pause) also pauses video sound.** *(found in 2.0.0 testing)*
+	- *Cause:* since 2.0.0 every sound is an `SDL_AudioStream` bound to one shared logical device. `MediaPlayer::ToggleVideoPause` and `ToggleAudioPause` call `SDL_PauseAudioStreamDevice(stream)`, which — despite taking a stream — pauses the whole **device** that stream is bound to.
+	- *Likely fix:* pause a single source by unbinding its stream (`SDL_UnbindAudioStream`, which keeps the queued audio) and re-binding it on resume. Small, but the video clock reads the stream's queue, so resume needs checking for A/V sync before it ships.
+- *(2.0.1)* **On the fall-back video paths the picture is decoded at the size of the targeted-display rect.** Left over from the 2.0.0 capture-mirror resolution fix. `PerformanceScreen` still passes the rect's size to `PlayVideo` and `PreloadVideosForScenes`, so on the read-back and software paths a shrunk rect gives a low-resolution video that the capture mirror then stretches back up. The zero-copy path is not affected (it always keeps the source size), so on Windows with hardware decode this only shows for 10-bit clips or with `zero_copy = false`; on Linux it always applies. Fix: pass the canvas size at those two call sites. The cost is more CPU on those paths when the rect is shrunk.
+- *(2.0.1)* **The last frames of every clip are dropped.** The decoder is never flushed at end of file, so whatever it is still holding is lost. With hardware decode that is a few frames; with software decode it is up to one frame per decoder thread, which on a many-core machine can be most of a second. Predates 2.0.0. Fix: send the decoder an end-of-stream packet and drain it before the decode thread parks.
+- **Windowed dev mode has not been re-tested on the SDL3 build.** The 2.0.0 roadmap asked for its old bugs to be re-checked after the migration; the two slave/capture problems above were looked at instead. Open the slave in `Windowed (dev)` mode and check resizing, the letterbox, and the Display Rect editor.
+- Run doesn't work as intended in macro environment.
 - Maybe only one image can be shown at a time. This need to be tested.
 - Not a bug, but we have to check what bit our movies is compatible with. 8/10 and 16 bit should all be suported.
+	- *State in 2.0.0:* 8-bit H.264 is the tested case and uses the zero-copy path. A 10-bit source is deliberately kept on the read-back path, where it is converted down to 8-bit for display, so it should play but without its extra depth. That has **not** been tested with a real 10-bit file, and 16-bit has not been looked at.

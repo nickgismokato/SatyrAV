@@ -73,6 +73,11 @@ public:
 	// Video preload
 	int videoPreloadBudgetMB  = 4096; // 4 GB total across all preloaded videos
 	int videoPreloadMaxSeconds = 60;  // per-video cap on preload length
+	// (2.0.0) Safety switch for the zero-copy hardware path. When false the
+	// decoder goes back to its own D3D11 device and the read-back route used
+	// before 2.0.0 — a way out, without rebuilding, if a venue machine's GPU
+	// driver misbehaves. `[video] zero_copy` in config.toml.
+	bool videoZeroCopy = true;
 
 private:
 	Config() = default;

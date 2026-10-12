@@ -103,21 +103,28 @@ void OptionsScreen::PopulateDisplays(){
 }
 
 void OptionsScreen::PopulateAudioDevices(){
-	// (1.6.3) Enumerate playback devices. SDL_GetNumAudioDevices(0) →
-	// output count; index 0 in the dropdown maps to the empty string
-	// (system default), keeping older configs that have no [audio] block
-	// working unchanged.
+	// (1.6.3) Enumerate playback devices. Index 0 in the dropdown maps to
+	// the empty string (system default), keeping older configs that have no
+	// [audio] block working unchanged.
+	//
+	// (2.0.0) SDL3 returns an allocated array of SDL_AudioDeviceIDs instead
+	// of a count to index. Config still stores the device *name*, so the
+	// stored value stays compatible across the migration.
 	audioDeviceNames.clear();
 	std::vector<std::string> labels;
 	audioDeviceNames.push_back("");
 	labels.push_back("Default");
 
-	int count = SDL_GetNumAudioDevices(0);
-	for(int i = 0; i < count; i++){
-		const char* nm = SDL_GetAudioDeviceName(i, 0);
-		if(!nm) continue;
-		audioDeviceNames.emplace_back(nm);
-		labels.emplace_back(nm);
+	int count = 0;
+	SDL_AudioDeviceID* ids = SDL_GetAudioPlaybackDevices(&count);
+	if(ids){
+		for(int i = 0; i < count; i++){
+			const char* nm = SDL_GetAudioDeviceName(ids[i]);
+			if(!nm) continue;
+			audioDeviceNames.emplace_back(nm);
+			labels.emplace_back(nm);
+		}
+		SDL_free(ids);
 	}
 	audioDeviceDropdown.SetOptions(labels);
 }

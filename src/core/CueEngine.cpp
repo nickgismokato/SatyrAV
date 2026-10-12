@@ -240,6 +240,16 @@ bool CueEngine::GetEffectiveCapitalize() const{
 	return projectData.schema.capitalize;
 }
 
+// (2.0.0) Same cascade shape as Capitalize: a scene can switch audio fading
+// on, and the project sets the baseline. A scene cannot switch it back off —
+// that matches the existing boolean-option convention rather than inventing
+// a second one.
+bool CueEngine::GetEffectiveAudioFade() const{
+	auto* scene = GetCurrentScene();
+	if(scene && scene->audioFade) return true;
+	return projectData.schema.audioFade;
+}
+
 std::string CueEngine::GetFunctionKeyAudio(int num) const{
 	auto& m = projectData.schema.functionKeyAudio;
 	auto it = m.find(num);

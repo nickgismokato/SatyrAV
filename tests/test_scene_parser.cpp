@@ -153,6 +153,14 @@ TEST_CASE("[Options] cap accepts true and 1"){
 	CHECK(ParseScene("[Options]\ncap = 1\n").capitalize);
 	CHECK_FALSE(ParseScene("[Options]\ncap = false\n").capitalize);
 	CHECK_FALSE(ParseScene("[Options]\ncap = yes\n").capitalize);
+
+	// (2.0.0) audioFade accepts the same truthy spellings, and defaults off
+	// when the key is absent entirely.
+	CHECK(ParseScene("[Options]\naudioFade = true\n").audioFade);
+	CHECK(ParseScene("[Options]\naudioFade = 1\n").audioFade);
+	CHECK_FALSE(ParseScene("[Options]\naudioFade = false\n").audioFade);
+	CHECK_FALSE(ParseScene("[Options]\naudioFade = yes\n").audioFade);
+	CHECK_FALSE(ParseScene("[Options]\ncap = true\n").audioFade);
 }
 
 TEST_CASE("[Options] particle tunables are per-field with have-flags"){

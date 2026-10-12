@@ -18,6 +18,7 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `font = <path/to.ttf>` (or bare filename → `FONTS/` *(1.6.1)*)
 - `fontItalic = <path>`, `fontBold = <path>`, `fontBoldItalic = <path>` *(1.6.1)*
 - `cap = true | false`
+- `audioFade = true | false` *(2.0.0)* — `play` fade times also fade the video's sound
 - `<TYPE>.SPEED = <float>`
 - `<TYPE>.DENS = <float>` (alias `<TYPE>.DENSITY`)
 - `<TYPE>.X.DIST = NAME(p1, p2)`
@@ -26,6 +27,8 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 
 ### Project-level `[Options]` (in `schema.toml` only)
 
+- `FontSize`, `TextOutline`, `Capitalize`, `BackgroundColour` — project defaults for the scene keys above
+- `AudioFade = true | false` *(2.0.0)* — project default for `audioFade`
 - `Font`, `FontItalic`, `FontBold`, `FontBoldItalic` — paths or bare filenames *(1.6.1)*
 - `SubtitleItalic = true | false` — default italic for `textD` subtitles *(1.6.1)*
 - `SubtitleColour = "#RRGGBB" | <name>` — default `#AAAAAA` *(1.6.1)*
@@ -78,7 +81,7 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `play FILE`
 - `play FILE FADE_IN_MS, FADE_OUT_MS` *(1.6.6, video only)*
 - `stop`
-- `stop FILE`
+- `stop FILE` *(has no effect in 2.0.0 — known bug)*
 - `stopParticleCont`
 - `stopParticleCont GROUP`
 - `comment "TEXT"`

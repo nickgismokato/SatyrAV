@@ -427,6 +427,10 @@ struct Scene{
 	std::string fontPathBoldItalic;
 	Colour fontColour = {0, 0, 0, 0}; // alpha 0 = not set
 	bool capitalize = false;
+	// (2.0.0) Opt-in: make `play FILE FADE_IN, FADE_OUT` fade the clip's
+	// audio alongside its picture. Off by default so existing scenes sound
+	// exactly as they always have. Scene `[Options] audioFade = true`.
+	bool audioFade = false;
 
 	// (1.4) Per-type particle tunables. Missing entries fall back to
 	// project-level tunings, then to built-in defaults.
@@ -473,8 +477,10 @@ struct RevySchema{
 	std::string fontPathBoldItalic;
 	Colour fontColour = {0, 0, 0, 0};
 	Colour backgroundColor = Colours::BLACK;
-	int textOutline = 4;
-	bool capitalize = false; // outline thickness in points, 0 = disabled
+	int textOutline = 4;     // outline thickness in points, 0 = disabled
+	bool capitalize = false;
+	// (2.0.0) Project-level default for audio fading; see Scene::audioFade.
+	bool audioFade = false;
 
 	// (1.6.1) Project-level defaults for `textD` subtitle rendering.
 	// These can be tuned live via the project's `schema.toml` `[Options]`

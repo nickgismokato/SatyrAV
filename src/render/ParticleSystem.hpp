@@ -1,6 +1,6 @@
 #pragma once
 #include "core/Types.hpp"
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <vector>
 #include <string>
 

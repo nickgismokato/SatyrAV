@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# setup-mingw-deps.sh — Download SDL2 + FFmpeg MinGW dev libs for cross-compilation.
-# Run this once on your Debian/WSL machine before cross-compiling.
+# setup-mingw-deps.sh — Download SDL3 + FFmpeg MinGW dev libs for cross-compilation.
+# Run this once on your Debian/Ubuntu/WSL machine before cross-compiling.
+#
+# (2.0.0) Migrated from SDL2 to SDL3. If you have an old SDL2 mingw-deps
+# directory from a 1.x build, delete it first — mixing the two confuses
+# CMake's find_package, which will happily pick up stale SDL2 configs:
+#   rm -rf ~/mingw-deps
 #
 # Usage:
 #   ./setup-mingw-deps.sh [DEST_DIR]
@@ -16,28 +21,29 @@ trap 'rm -rf "$TMP"' EXIT
 echo "=== Installing MinGW cross-compile dependencies into $DEST ==="
 mkdir -p "$DEST"
 
-# ── SDL2 ──────────────────────────────────────────────────────
-SDL2_VER="2.30.10"
-SDL2_TTF_VER="2.22.0"
-SDL2_IMAGE_VER="2.8.4"
+# ── SDL3 ──────────────────────────────────────────────────────
+# (2.0.0) Versions verified to exist as -mingw.tar.gz release assets.
+SDL3_VER="3.4.14"
+SDL3_TTF_VER="3.2.2"
+SDL3_IMAGE_VER="3.4.4"
 
-echo "[1/5] Downloading SDL2 ${SDL2_VER}..."
-wget -qO "$TMP/sdl2.tar.gz" \
-	"https://github.com/libsdl-org/SDL/releases/download/release-${SDL2_VER}/SDL2-devel-${SDL2_VER}-mingw.tar.gz"
-tar xzf "$TMP/sdl2.tar.gz" -C "$TMP"
-cp -r "$TMP/SDL2-${SDL2_VER}/x86_64-w64-mingw32/"* "$DEST/"
+echo "[1/5] Downloading SDL3 ${SDL3_VER}..."
+wget -qO "$TMP/sdl3.tar.gz" \
+	"https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VER}/SDL3-devel-${SDL3_VER}-mingw.tar.gz"
+tar xzf "$TMP/sdl3.tar.gz" -C "$TMP"
+cp -r "$TMP/SDL3-${SDL3_VER}/x86_64-w64-mingw32/"* "$DEST/"
 
-echo "[2/5] Downloading SDL2_ttf ${SDL2_TTF_VER}..."
-wget -qO "$TMP/sdl2_ttf.tar.gz" \
-	"https://github.com/libsdl-org/SDL_ttf/releases/download/release-${SDL2_TTF_VER}/SDL2_ttf-devel-${SDL2_TTF_VER}-mingw.tar.gz"
-tar xzf "$TMP/sdl2_ttf.tar.gz" -C "$TMP"
-cp -r "$TMP/SDL2_ttf-${SDL2_TTF_VER}/x86_64-w64-mingw32/"* "$DEST/"
+echo "[2/5] Downloading SDL3_ttf ${SDL3_TTF_VER}..."
+wget -qO "$TMP/sdl3_ttf.tar.gz" \
+	"https://github.com/libsdl-org/SDL_ttf/releases/download/release-${SDL3_TTF_VER}/SDL3_ttf-devel-${SDL3_TTF_VER}-mingw.tar.gz"
+tar xzf "$TMP/sdl3_ttf.tar.gz" -C "$TMP"
+cp -r "$TMP/SDL3_ttf-${SDL3_TTF_VER}/x86_64-w64-mingw32/"* "$DEST/"
 
-echo "[3/5] Downloading SDL2_image ${SDL2_IMAGE_VER}..."
-wget -qO "$TMP/sdl2_image.tar.gz" \
-	"https://github.com/libsdl-org/SDL_image/releases/download/release-${SDL2_IMAGE_VER}/SDL2_image-devel-${SDL2_IMAGE_VER}-mingw.tar.gz"
-tar xzf "$TMP/sdl2_image.tar.gz" -C "$TMP"
-cp -r "$TMP/SDL2_image-${SDL2_IMAGE_VER}/x86_64-w64-mingw32/"* "$DEST/"
+echo "[3/5] Downloading SDL3_image ${SDL3_IMAGE_VER}..."
+wget -qO "$TMP/sdl3_image.tar.gz" \
+	"https://github.com/libsdl-org/SDL_image/releases/download/release-${SDL3_IMAGE_VER}/SDL3_image-devel-${SDL3_IMAGE_VER}-mingw.tar.gz"
+tar xzf "$TMP/sdl3_image.tar.gz" -C "$TMP"
+cp -r "$TMP/SDL3_image-${SDL3_IMAGE_VER}/x86_64-w64-mingw32/"* "$DEST/"
 
 # ── FFmpeg ────────────────────────────────────────────────────
 # Using gyan.dev shared+dev build (most common MinGW FFmpeg source)
@@ -93,7 +99,7 @@ fi
 
 # ── Summary ───────────────────────────────────────────────────
 echo ""
-echo "[5/5] Fixing SDL2 cmake config paths..."
+echo "[5/5] Fixing SDL cmake config paths..."
 # The SDL2 MinGW cmake configs contain hardcoded build paths like
 # /tmp/tardir/SDL2-2.30.10/build-mingw/install-x86_64-w64-mingw32
 # We need to replace ALL prefix paths with our actual DEST directory.
@@ -113,8 +119,10 @@ echo ""
 echo "Verifying key files..."
 MISSING=0
 for f in \
-	"$DEST/lib/cmake/SDL2/sdl2-config.cmake" \
-	"$DEST/include/SDL2/SDL.h" \
+	"$DEST/lib/cmake/SDL3/SDL3Config.cmake" \
+	"$DEST/include/SDL3/SDL.h" \
+	"$DEST/include/SDL3_ttf/SDL_ttf.h" \
+	"$DEST/include/SDL3_image/SDL_image.h" \
 	"$DEST/include/libavcodec/avcodec.h" \
 	"$DEST/include/libavformat/avformat.h"; do
 	if [ -f "$f" ]; then

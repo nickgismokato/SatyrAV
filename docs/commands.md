@@ -29,6 +29,7 @@ Per-scene settings that override project-level defaults.
     - `font` — path (relative to project root, or a bare filename resolved against the shared `FONTS/` directory *(1.6.1)*) to a `.ttf` font file.
     - `fontItalic`, `fontBold`, `fontBoldItalic` *(1.6.1)* — paths to the italic / bold / bold-italic typeface variants. Used by `textbf`, `textit`, and inline `bold(...)` / `it(...)`. Empty or missing → falls back to project / global config, then to regular.
     - `cap` — `true` or `false` to capitalize every text line.
+    - `audioFade` *(2.0.0)* — `true` or `false`. When true, the fade times on a `play FILE FADE_IN, FADE_OUT` command ramp the clip's **audio** as well as its picture. Default **false**, so scenes written before 2.0.0 keep fading the picture only and cutting the sound at full volume. Like `cap`, a scene can switch this on but cannot switch off a project that enabled it.
     - `<TYPE>.SPEED`, `<TYPE>.DENS` (or `.DENSITY`), `<TYPE>.X.DIST = NAME(p1, p2)` *(1.4)*, `<TYPE>.VX.DIST`, `<TYPE>.VY.DIST` *(1.5)* — per-particle-type tunables. See [Particle tunables in `[Options]`](#particle-tunables-in-options-14) for details.
 - **Example:**
     ```txt
@@ -270,10 +271,10 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 - **Syntax:** `play FILE` — or `play FILE FADE_IN_MS, FADE_OUT_MS` *(1.6.6)*
 - **Arguments:**
     - `FILE` — audio or video file. Extension determines which.
-    - `FADE_IN_MS`, `FADE_OUT_MS` *(1.6.6)* — optional integer milliseconds for a fade-from-black on start and a fade-to-black on end. `0` on either side disables that side of the fade. Bare `play FILE` is equivalent to `play FILE 0, 0`. Audio is not faded — the fade is visual only.
+    - `FADE_IN_MS`, `FADE_OUT_MS` *(1.6.6)* — optional integer milliseconds for a fade-from-black on start and a fade-to-black on end. `0` on either side disables that side of the fade. Bare `play FILE` is equivalent to `play FILE 0, 0`. By default the fade is visual only and the sound cuts. Set the `audioFade` option (scene) or `AudioFade` (project) to fade a video's sound together with its picture *(2.0.0)*.
 - **Behaviour:**
     - Video (`.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`) — opens the hardware-decoded video pipeline and renders frames into the slave beneath text. The fade pair is applied as a per-frame brightness multiplier on the video texture; 0 % brightness is solid black, 100 % is the decoded frame untouched.
-    - Audio (`.mp3`, `.wav`, etc.) — plays in the background; multiple tracks can play simultaneously. Fade pair is ignored.
+    - Audio (`.mp3`, `.wav`, etc.) — plays in the background. *(2.0.0)* Several tracks can play at once, and over a video's own sound; before 2.0.0 starting a track stopped whatever else was playing, including a video. Playing a file that is already playing restarts it. Fade pair is ignored.
 - **Example:**
     ```txt
     play intro.mp3
@@ -284,7 +285,8 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 ### `stop`
 
 - **Syntax:** `stop` or `stop FILE`
-- **Arguments:** Optional filename. With no argument, stops all playback and particle systems. With a filename, stops only that audio track.
+- **Arguments:** Optional filename. With no argument, stops all playback (video and every sound) and particle systems. With a filename, stops only that audio track.
+- **Known issue in 2.0.0:** `stop FILE` currently has no effect — the named track keeps playing. Plain `stop` works. See *Known bugs* in [TODO.md](TODO.md).
 - **Note:** *(1.4)* Particle systems that are already in smooth-stop mode (see `stopParticleCont`) are **not** affected by `stop`/`clear`/`clearAll` — their endings always play out to completion.
 - **Example:**
     ```txt

@@ -45,6 +45,7 @@ TEST_CASE("Save then Load round-trips every field"){
 	c.captureDisplayIndex  = 3;
 	c.videoPreloadBudgetMB = 2048;
 	c.videoPreloadMaxSeconds = 30;
+	c.videoZeroCopy = false;        // (2.0.0) non-default, to prove the round trip
 	c.audioDeviceName      = "Speakers (USB Audio)";
 	c.lastProject          = (tmp.Path() / "projects" / "MyRevy").string();
 
@@ -75,6 +76,7 @@ TEST_CASE("Save then Load round-trips every field"){
 	CHECK(c.captureDisplayIndex  == 3);
 	CHECK(c.videoPreloadBudgetMB == 2048);
 	CHECK(c.videoPreloadMaxSeconds == 30);
+	CHECK(c.videoZeroCopy == false);
 	CHECK(c.audioDeviceName      == "Speakers (USB Audio)");
 	CHECK(c.projectsDir          == projects);
 	CHECK(c.fontsDir             == fonts);
@@ -158,6 +160,7 @@ TEST_CASE("An empty config file gives the documented default values"){
 	CHECK(c.captureDisplayIndex  == 0);
 	CHECK(c.videoPreloadBudgetMB == 4096);
 	CHECK(c.videoPreloadMaxSeconds == 60);
+	CHECK(c.videoZeroCopy == true);  // (2.0.0) on unless switched off
 	CHECK(c.audioDeviceName.empty());
 	CHECK(c.fontPath.empty());
 	// projectsDir / fontsDir were empty in the file, so EnsureDefaults

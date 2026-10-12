@@ -205,7 +205,8 @@ private:
 	void RenderTextureFitted(SDL_Renderer* r, SDL_Texture* tex,
 		int texW, int texH, int screenW, int screenH,
 		const RenderModifiers& mods,
-		float spawnTimeSec = 0.0f, float* currentSpin = nullptr);
+		float spawnTimeSec = 0.0f, float* currentSpin = nullptr,
+		const SDL_FRect* srcRect = nullptr);
 };
 
 } // namespace SatyrAV

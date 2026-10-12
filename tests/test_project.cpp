@@ -147,6 +147,7 @@ TEST_CASE("(1.8.0) Every generated option equals its built-in default"){
 
 	CHECK(generated.textOutline == builtin.textOutline);
 	CHECK(generated.capitalize  == builtin.capitalize);
+	CHECK(generated.audioFade   == builtin.audioFade);   // (2.0.0)
 	CHECK(generated.fontPath           == builtin.fontPath);
 	CHECK(generated.fontPathItalic     == builtin.fontPathItalic);
 	CHECK(generated.fontPathBold       == builtin.fontPathBold);

@@ -1,5 +1,6 @@
+#include "render/RectF.hpp"
 #include "render/SlaveWindow.hpp"
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <cmath>
 #include <cstdio>
 #include <algorithm>
@@ -554,9 +555,15 @@ void SlaveWindow::DrawMedia(Renderer& r, MediaPlayer& media){
 		auto* tex = media.GetVideoTexture();
 		if(tex){
 			RenderModifiers noMods;
+			// (2.0.0) On the zero-copy path the texture is the decoder's padded
+			// surface, so crop to the picture. GetVideoWidth/Height are the
+			// picture's own size on every path, which keeps the aspect right.
+			SDL_FRect crop;
+			const bool cropped = media.GetVideoSrcRect(&crop);
 			RenderTextureFitted(renderer, tex,
 				media.GetVideoWidth(), media.GetVideoHeight(),
-				slaveW, slaveH, noMods);
+				slaveW, slaveH, noMods, 0.0f, nullptr,
+				cropped ? &crop : nullptr);
 		}
 	}
 
@@ -946,7 +953,11 @@ void SlaveWindow::ClearCountdowns(){
 void SlaveWindow::RenderTextureFitted(SDL_Renderer* r, SDL_Texture* tex,
 	int texW, int texH, int screenW, int screenH,
 	const RenderModifiers& mods,
-	float spawnTimeSec, float* currentSpin){
+	float spawnTimeSec, float* currentSpin,
+	const SDL_FRect* srcRect){
+	// (2.0.0) `srcRect` selects the part of the texture to draw; null means
+	// all of it. Only the zero-copy video texture needs it, because that
+	// texture is the decoder's padded surface rather than just the picture.
 	if(!tex || texW <= 0 || texH <= 0) return;
 
 	int drawW, drawH, drawX, drawY;
@@ -989,13 +1000,13 @@ void SlaveWindow::RenderTextureFitted(SDL_Renderer* r, SDL_Texture* tex,
 	uint8_t alpha = (uint8_t)(std::clamp(mods.transparency, 0.0f, 1.0f) * 255.0f);
 	SDL_SetTextureAlphaMod(tex, alpha);
 
-	SDL_Rect dst = {drawX, drawY, drawW, drawH};
+	SDL_FRect dst = FRectI(drawX, drawY, drawW, drawH);
 
 	if(rotation != 0.0f){
-		SDL_RenderCopyEx(r, tex, nullptr, &dst,
+		SDL_RenderTextureRotated(r, tex, srcRect, &dst,
 			(double)rotation, nullptr, SDL_FLIP_NONE);
 	} else{
-		SDL_RenderCopy(r, tex, nullptr, &dst);
+		SDL_RenderTexture(r, tex, srcRect, &dst);
 	}
 
 	// Reset alpha

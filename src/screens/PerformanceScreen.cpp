@@ -93,10 +93,12 @@ void PerformanceScreen::HandleInput(InputAction action){
 			// (1.6.3) F1..F12 audio hotkey. Same key pressed twice while
 			// the same hotkey audio is still playing → stop (toggle).
 			// Useful for long ambient loops (knocking, alarm) where the
-			// performer drives both start and stop with one key. A
-			// different F-key while one is already playing replaces the
-			// running sound, since `PlayAudio` closes the existing
-			// standalone audio before opening the new one.
+			// performer drives both start and stop with one key.
+			// (2.0.0) A different F-key no longer replaces the running
+			// sound: `PlayAudio` now layers sounds, so several keys can
+			// play at once and over a video. Note that this still tracks
+			// only the last key pressed — see the "maybe" item about F-key
+			// toggling under 2.1.0 in docs/TODO.md before changing it.
 			int num = app->GetInput().GetLastFunctionKey();
 			std::string fname = engine.GetFunctionKeyAudio(num);
 			if(fname.empty()) break;
@@ -160,21 +162,32 @@ void PerformanceScreen::Draw(Renderer& r, TextRenderer& text){
 	// which is then composited into the physical slave (with the area outside
 	// the targeted rect painted solid black).
 	if(r.GetSlave()){
-		int tw = targetedDisplay.width  > 0 ? targetedDisplay.width  : r.GetCanvasWidth();
-		int th = targetedDisplay.height > 0 ? targetedDisplay.height : r.GetCanvasHeight();
+		// (2.0.0) The offscreen target is always at **canvas** (slave-logical)
+		// resolution, never the TargetedDisplay rect.
+		//
+		// It used to be sized to the rect, which meant shrinking the rect
+		// shrank the surface every content layer rendered into. The physical
+		// slave still looked sharp — that small texture is composited into a
+		// correspondingly small area, roughly 1:1 — but the capture mirror
+		// stretches the same texture back to full screen, so it showed a
+		// genuine upscale of pixels that were never rendered. The capture is
+		// meant to mirror the *pre*-targeted-display composite at slave
+		// resolution, independent of the rect.
+		//
+		// CompositeTargetedDisplay scales this full-size target down into the
+		// rect, so the physical slave output is unchanged.
+		int tw = r.GetCanvasWidth();
+		int th = r.GetCanvasHeight();
 		if(r.EnsureSlaveTarget(tw, th)){
 			r.BeginSlaveContent();
-			// (1.5) Canvas-relative text: scale slave glyph rendering by
-			// the ratio of the current TargetedDisplay height to the full
-			// slave height. At default (full-size rect) scale == 1.0 and
-			// behaviour matches pre-1.5; at smaller rects text shrinks
-			// proportionally, which keeps its apparent size constant on
-			// the capture mirror after SDL_RenderSetLogicalSize stretches
-			// the canvas back up.
-			text.SetSlaveScale(r.GetSlaveContentScale());
+			// Slave glyphs render at full canvas size and are scaled down with
+			// everything else at composite time. The old pre-shrink (scaling
+			// text by rect/canvas so it survived the capture's upscale) was
+			// compensating for the resolution loss above; with the target at
+			// full resolution there is nothing to compensate for, and glyphs
+			// are supersampled down rather than rasterised small.
 			slaveUI.Update(r, media, deltaTime);
 			slaveUI.DrawText(r, text);
-			text.SetSlaveScale(1.0f); // Reset for master-UI text paths.
 			r.EndSlaveContent();
 			// (1.5) Readback the pre-targeted composite for the capture
 			// mirror. No-op if capture isn't open. Must happen before
@@ -230,6 +243,9 @@ void PerformanceScreen::ApplySceneOptionsCascade(){
 		cfg.ResolveFontPath(engine.GetEffectiveFontPath(true,  true)));
 	slaveUI.SetBackgroundColour(engine.GetEffectiveBackgroundColour());
 	slaveUI.SetCapitalize(engine.GetEffectiveCapitalize());
+	// (2.0.0) Re-evaluated alongside the other cascaded options, so a scene
+	// that opts into audio fading takes effect as soon as it is entered.
+	media.SetAudioFade(engine.GetEffectiveAudioFade());
 }
 
 void PerformanceScreen::PreloadForCurrentScene(){
@@ -853,6 +869,14 @@ void PerformanceScreen::UpdateDebugInfo(){
 	dbg.preloadedFiles = cache.GetFileCount();
 	dbg.videoBufferedFrames = media.GetBufferedFrames();
 	dbg.videoRingSize = media.GetVideoRingCapacity();
+	// (2.0.0) IsUsingHwDecode() reports false both for software decode and
+	// for "nothing loaded", so HasVideo() separates the two — otherwise an
+	// idle player would read as a hardware-decode failure.
+	dbg.videoDecodeMode = !media.HasVideo()
+		? DecodeMode::None
+		: (media.IsVideoZeroCopy() ? DecodeMode::HardwareZeroCopy
+		   : (media.IsUsingHwDecode() ? DecodeMode::Hardware : DecodeMode::Software));
+	dbg.activeSounds = media.GetActiveSoundCount();
 }
 
 } // namespace SatyrAV

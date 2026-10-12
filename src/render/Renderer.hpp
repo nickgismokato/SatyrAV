@@ -1,8 +1,8 @@
 #pragma once
 #include "core/Types.hpp"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_ttf.h>
-#include <SDL2/SDL_image.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
+#include <SDL3_image/SDL_image.h>
 #include <string>
 #include <vector>
 
@@ -62,13 +62,13 @@ public:
 	int GetTargetWidth() const;
 	int GetTargetHeight() const;
 
-	// (1.5) Ratio of the current content-target height to the reference
-	// slave height (physical fullscreen bounds, or intendedSlaveH in
-	// windowed-dev mode). Used by TextRenderer to render glyphs at a size
-	// proportional to the TargetedDisplay rect — which is what makes the
-	// capture mirror show constant-size text across rect resizes.
-	// Returns 1.0 when there's no meaningful reference.
-	float GetSlaveContentScale() const;
+	// (2.0.0) `GetSlaveContentScale()` was removed here. It scaled slave
+	// glyphs by the ratio of the TargetedDisplay rect to the full slave, so
+	// that text kept a constant apparent size once the capture mirror
+	// stretched the (then rect-sized) content target back up. Now that the
+	// content target is always at canvas resolution, the capture performs no
+	// upscale and there is nothing to compensate for — text scales with the
+	// rest of the content at composite time.
 
 	// (1.5) Capture-mirror window. Third OS window on a separate display
 	// that shows the slave's pre-targeted-display composite at native
@@ -94,6 +94,18 @@ public:
 	std::string GetDisplayName(int index) const;
 
 private:
+	// (2.0.0) SDL3 replaced SDL2's 0-based display *indices* with opaque
+	// SDL_DisplayIDs, which start at 1 and are not guaranteed contiguous.
+	// Config files, schema.toml and the Options UI all still store a
+	// 0-based index, so these two helpers are the single bridge between
+	// the two worlds. Keeping the public API index-based is deliberate:
+	// a project that selected "display 1" in 1.8.4 must keep selecting the
+	// same monitor after the migration.
+	//
+	// Returns 0 (an invalid SDL_DisplayID) when the index is out of range.
+	static int           DisplayCount();
+	static SDL_DisplayID DisplayIdForIndex(int index);
+
 	SDL_Window* masterWindow     = nullptr;
 	SDL_Renderer* masterRenderer = nullptr;
 	SDL_Window* slaveWindow      = nullptr;
@@ -126,9 +138,9 @@ private:
 	int captureLogicalW = 0;
 	int captureLogicalH = 0;
 	int captureDisplayIdx = -1;
-	// CPU staging buffer for the per-frame GPU→CPU→GPU readback hop.
-	// Sized to captureLogicalW * captureLogicalH * 4 (ARGB8888).
-	std::vector<unsigned char> capturePixels;
+	// (2.0.0) The CPU staging buffer that used to live here is gone —
+	// SDL3's SDL_RenderReadPixels returns its own surface, which we upload
+	// from directly.
 	bool captureTextureReady = false;
 };
 

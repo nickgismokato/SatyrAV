@@ -154,6 +154,7 @@ void Project::GenerateDefaultSchema(const std::string& path, const ProjectData& 
 FontSize             = 60        # Slave text size, in points
 TextOutline          = 4         # Black outline thickness in points, 0 = off
 Capitalize           = false     # Uppercase every line of slave text
+AudioFade            = false     # Let `play` fade times fade the sound too, not just the picture
 BackgroundColour     = "black"   # black | blue | red | green | white
 Font                 = ""        # Regular face: full path, or a bare FONTS/ filename
 FontItalic           = ""        # Italic face, used by textit and it(...)

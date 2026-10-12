@@ -24,6 +24,7 @@ TEST_CASE("An empty schema yields every built-in default"){
 	CHECK(s.fontSize    == 25);
 	CHECK(s.textOutline == 4);
 	CHECK(s.capitalize  == false);
+	CHECK(s.audioFade   == false);  // (2.0.0) opt-in, so absent means off
 	CHECK(s.fontPath.empty());
 	CHECK(s.fontPathItalic.empty());
 	CHECK(s.fontPathBold.empty());
@@ -56,10 +57,12 @@ TEST_CASE("[Options] scalar keys are read"){
 FontSize    = 40
 TextOutline = 0
 Capitalize  = true
+AudioFade   = true
 )");
 	CHECK(s.fontSize    == 40);
 	CHECK(s.textOutline == 0);
 	CHECK(s.capitalize  == true);
+	CHECK(s.audioFade   == true);
 }
 
 TEST_CASE("[Options] font faces are read independently"){
