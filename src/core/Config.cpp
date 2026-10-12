@@ -50,6 +50,7 @@ void Config::Load(const std::string& path){
 		fontsDir       = tbl["paths"]["fonts"].value_or(std::string(""));
 		videoPreloadBudgetMB   = tbl["video"]["preload_budget_mb"].value_or(4096);
 		videoPreloadMaxSeconds = tbl["video"]["preload_max_seconds"].value_or(60);
+		videoZeroCopy          = tbl["video"]["zero_copy"].value_or(true);
 		audioDeviceName        = tbl["audio"]["device"].value_or(std::string(""));
 	} catch(const toml::parse_error&){
 		// Use defaults
@@ -95,7 +96,8 @@ void Config::Save(const std::string& path){
 	out << "fonts = '" << fontsDir << "'\n\n";
 	out << "[video]\n";
 	out << "preload_budget_mb = " << videoPreloadBudgetMB << "\n";
-	out << "preload_max_seconds = " << videoPreloadMaxSeconds << "\n\n";
+	out << "preload_max_seconds = " << videoPreloadMaxSeconds << "\n";
+	out << "zero_copy = " << (videoZeroCopy ? "true" : "false") << "\n\n";
 	// (1.6.3) Output device by name. Empty string = system default.
 	// Literal-string quoting because device names on Windows can contain
 	// backslashes and parentheses that are unsafe in basic TOML strings.

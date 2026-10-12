@@ -8,6 +8,9 @@
 		{ "include": "#commands" },
 		{ "include": "#group-block" },
 		{ "include": "#loop-block" },
+		{ "include": "#run-block" },
+		{ "include": "#macro-call" },
+		{ "include": "#option-keys" },
 		{ "include": "#particle-types" },
 		{ "include": "#modifiers" },
 		{ "include": "#strings" },
@@ -40,6 +43,25 @@
 			"match": "(?<![A-Za-z0-9_])(loop)\\s*\\(",
 			"captures": {
 				"1": { "name": "keyword.control.loop.ngk" }
+			}
+		},
+		"run-block": {
+			"match": "(?<![A-Za-z0-9_])(run)(?=\\s*\\{)",
+			"captures": {
+				"1": { "name": "keyword.control.run.ngk" }
+			}
+		},
+		"macro-call": {
+			"match": "(?<![A-Za-z0-9_])(macro)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+			"captures": {
+				"1": { "name": "keyword.control.macro.ngk" },
+				"2": { "name": "entity.name.function.macro.ngk" }
+			}
+		},
+		"option-keys": {
+			"match": "^\\s*(bc|FontSize|font|fontItalic|fontBold|fontBoldItalic|cap|audioFade)(?=\\s*=)",
+			"captures": {
+				"1": { "name": "variable.parameter.option.ngk" }
 			}
 		},
 		"particle-types": {

@@ -41,6 +41,7 @@ Creator = "Nick"          # (1.6.2) Persisted authorship — shown in Load Proje
 FontSize             = 60        # Slave text size, in points
 TextOutline          = 4         # Black outline thickness in points, 0 = off
 Capitalize           = false     # Uppercase every line of slave text
+AudioFade            = false     # Let `play` fade times fade the sound too, not just the picture
 BackgroundColour     = "black"   # black | blue | red | green | white
 Font                 = ""        # Regular face: full path, or a bare FONTS/ filename
 FontItalic           = ""        # (1.6.1) Italic face, used by textit and it(...)
@@ -109,6 +110,7 @@ Settings are resolved in priority order: scene → project → global config.
 | Font size | `FontSize = 30` | `FontSize = 60` *(1.8.4; generated value — a schema with no `FontSize` key at all still falls back to 25)* | Config font size |
 | Background | `bc = blue` | `BackgroundColour = black` | Black |
 | Capitalize | `cap = true` | `Capitalize = false` | false |
+| Audio fade *(2.0.0)* | `audioFade = true` | `AudioFade = false` | false |
 | Text outline | — | `TextOutline = 4` | 4 |
 | Font | `font = path.ttf` | `Font = path.ttf` | System default |
 | Particle speed *(1.4)* | `RAIN.SPEED = 1.5` | `[Particle.RAIN] Speed = 1.5` | `1.0` |
@@ -119,6 +121,26 @@ Settings are resolved in priority order: scene → project → global config.
 | Bold-italic font *(1.6.1)* | `fontBoldItalic = path.ttf` | `FontBoldItalic = path.ttf` | `[font] bold_italic = ...` in `config.toml` (or bundled DejaVu) |
 
 If a scene sets `FontSize = 30`, that overrides the project's `FontSize` for that scene only; all other scenes keep the project value. Particle tunings cascade per-field — setting only `SPEED` in a scene still inherits `DENS` and `X.DIST` from the project level. The same applies to font slots: a scene can override only the bold face and still pick up project-level italic / bold-italic / regular.
+
+## Global settings — `config.toml`
+
+Settings that belong to the machine rather than to a project. The file lives at `Documents\SatyrAV\config.toml` on Windows and `~/.config/satyrav/config.toml` on Linux. It is written by the Options screen; every key can also be edited by hand. Wrap paths in single quotes, so that backslashes are not read as escapes.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `[font] size` | `25` | Master (operator) text size. Also the slave size when neither project nor scene sets one. |
+| `[font] path`, `italic`, `bold`, `bold_italic` | empty | Font faces. Empty means the bundled DejaVu Sans family. |
+| `[display] width`, `height` | `1280`, `720` | Size of the master window. |
+| `[display] fullscreen` | `false` | Read and saved, but not currently used by anything. |
+| `[display] slave_index` | `1` | Which display the slave opens on, counting from 0. |
+| `[display] slave_windowed` | `false` | Open the slave as a window instead of fullscreen (development). |
+| `[display] capture_enabled`, `capture_display` | `false`, `0` | The capture mirror and the display it opens on. |
+| `[paths] projects`, `fonts` | empty | Where projects and shared fonts live. Empty means the default locations below. |
+| `[paths] last_project` | empty | Remembered by the application. |
+| `[video] preload_budget_mb` | `4096` | Total budget for preloaded video. |
+| `[video] preload_max_seconds` | `60` | Longest look-ahead buffer per clip on the paths that buffer in RAM. |
+| `[video] zero_copy` *(2.0.0)* | `true` | Keep hardware-decoded video on the GPU. Set to `false` to get the pre-2.0.0 route back if a machine's graphics driver misbehaves. See [video-pipeline.md](video-pipeline.md). |
+| `[audio] device` *(1.6.3)* | empty | Output device by name. Empty means the system default. |
 
 ## Shared directories *(1.6.1+)*
 

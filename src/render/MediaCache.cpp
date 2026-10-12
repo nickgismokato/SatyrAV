@@ -1,5 +1,6 @@
 #include "render/MediaCache.hpp"
-#include <SDL2/SDL_image.h>
+#include "core/Logger.hpp"
+#include <SDL3_image/SDL_image.h>
 #include <filesystem>
 #include <cstdio>
 #include <algorithm>
@@ -125,7 +126,7 @@ CachedMedia* MediaCache::LoadImage(const std::string& path, SDL_Renderer* render
 
 	SDL_Surface* surface = IMG_Load(path.c_str());
 	if(!surface){
-		fprintf(stderr, "MediaCache: cannot load '%s': %s\n", path.c_str(), IMG_GetError());
+		Logger::Instance().Errorf("MediaCache: cannot load '%s': %s", path.c_str(), SDL_GetError());
 		return nullptr;
 	}
 
@@ -133,10 +134,10 @@ CachedMedia* MediaCache::LoadImage(const std::string& path, SDL_Renderer* render
 	entry.path = path;
 	entry.width = surface->w;
 	entry.height = surface->h;
-	entry.sizeBytes = (size_t)surface->w * surface->h * surface->format->BytesPerPixel;
+	entry.sizeBytes = (size_t)surface->w * surface->h * SDL_BYTESPERPIXEL(surface->format);
 	entry.texture = SDL_CreateTextureFromSurface(renderer, surface);
 	entry.isImage = true;
-	SDL_FreeSurface(surface);
+	SDL_DestroySurface(surface);
 
 	if(!entry.texture) return nullptr;
 
@@ -157,17 +158,17 @@ CachedMedia* MediaCache::LoadAnimation(const std::string& path, SDL_Renderer* re
 		// Fallback: treat as a static image (first frame only).
 		SDL_Surface* surface = IMG_Load(path.c_str());
 		if(!surface){
-			fprintf(stderr, "MediaCache: cannot load '%s': %s\n", path.c_str(), IMG_GetError());
+			Logger::Instance().Errorf("MediaCache: cannot load '%s': %s", path.c_str(), SDL_GetError());
 			return nullptr;
 		}
 		CachedMedia entry;
 		entry.path = path;
 		entry.width = surface->w;
 		entry.height = surface->h;
-		entry.sizeBytes = (size_t)surface->w * surface->h * surface->format->BytesPerPixel;
+		entry.sizeBytes = (size_t)surface->w * surface->h * SDL_BYTESPERPIXEL(surface->format);
 		entry.texture = SDL_CreateTextureFromSurface(renderer, surface);
 		entry.isImage = true;
-		SDL_FreeSurface(surface);
+		SDL_DestroySurface(surface);
 		if(!entry.texture) return nullptr;
 		cache[path] = entry;
 		return &cache[path];
@@ -193,7 +194,7 @@ CachedMedia* MediaCache::LoadAnimation(const std::string& path, SDL_Renderer* re
 		// default (10 fps) so the animation actually advances.
 		if(delay <= 0) delay = 100;
 		entry.frameDelaysMs.push_back(delay);
-		entry.sizeBytes += (size_t)s->w * s->h * s->format->BytesPerPixel;
+		entry.sizeBytes += (size_t)s->w * s->h * SDL_BYTESPERPIXEL(s->format);
 	}
 	IMG_FreeAnimation(anim);
 

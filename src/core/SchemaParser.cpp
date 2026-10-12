@@ -92,6 +92,8 @@ RevySchema SchemaParser::ParseFile(const std::string& schemaPath){
 		schema.fontPathBold       = tbl["Options"]["FontBold"].value_or(std::string(""));
 		schema.fontPathBoldItalic = tbl["Options"]["FontBoldItalic"].value_or(std::string(""));
 		schema.capitalize = tbl["Options"]["Capitalize"].value_or(false);
+		// (2.0.0) Project-level default for opt-in audio fading.
+		schema.audioFade  = tbl["Options"]["AudioFade"].value_or(false);
 
 		auto bc = tbl["Options"]["BackgroundColour"].value_or(std::string(""));
 		if(bc == "black")      schema.backgroundColor = Colours::BLACK;

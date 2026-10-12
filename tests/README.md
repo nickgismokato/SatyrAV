@@ -4,8 +4,8 @@ The core regression suite, added in **1.8.1**. It covers `src/core/` only —
 `SceneParser`, `SchemaParser`, `CueEngine`, `Config`, `Project`, and `Types`.
 
 Those modules have **no SDL and no FFmpeg dependency**, which is the whole
-point: the suite survives the 2.0.0 SDL3 migration untouched and acts as the
-regression net while SDL2 is ripped out.
+point: the suite survived the 2.0.0 SDL3 migration untouched, and was the
+regression net while SDL2 was replaced.
 
 ## Tests are off by default
 
@@ -36,10 +36,10 @@ Or run the binary directly for doctest's own per-case output:
 Useful doctest flags: `--list-test-cases`, `-ts=<file>` to filter by suite,
 `-tc="*cascade*"` to filter by case name, `-s` to show successful assertions.
 
-### Without SDL2 / FFmpeg
+### Without SDL3 / FFmpeg
 
 `tests/CMakeLists.txt` can be configured on its own, which skips the root
-`find_package(SDL2 …)` entirely — handy for CI or a machine that has no media
+`find_package(SDL3 …)` entirely — handy for CI or a machine that has no media
 libraries installed:
 
 ```bash
@@ -58,6 +58,8 @@ cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/saty
 | `test_cue_engine.cpp` | navigation, comment-skipping indices, dispatch, the options cascade, `ReloadScenes` |
 | `test_config.cpp` | `config.toml` round-trip, the 1.5.1 Windows-backslash regression, `ResolveFontPath` |
 | `test_project.cpp` | project scaffolding and the 1.8.0 generators |
+| `test_latex_symbols.cpp` | *(1.8.2)* LaTeX symbol macros in displayed text |
+| `test_cue_notes.cpp` | *(1.8.4)* the `[Cue]` section, `\Name` references and their warnings |
 
 ## What is deliberately not tested
 
@@ -66,8 +68,9 @@ show is. The following are out of scope on purpose:
 
 - **Everything visual.** `render/`, `ui/`, `screens/`, `input/`. These are
   SDL-bound and are verified by running the program. Render / audio /
-  `MediaPlayer` tests are deferred to **2.1.0**, after the SDL3 backend has
-  settled — testing them against SDL2 now would mean writing them twice.
+  `MediaPlayer` tests are deferred to **2.1.0**. They were held back until
+  the SDL3 backend landed in 2.0.0, since testing against SDL2 would have
+  meant writing them twice.
 - **Stubs and placeholders.** `CueEngine::StopAllMedia` / `ToggleVideo` /
   `ToggleMusic` and `SceneParser::ParseLoop` have no behaviour yet. A test
   would pin the placeholder rather than the feature. Each carries a

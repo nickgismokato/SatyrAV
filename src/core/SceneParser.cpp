@@ -1446,6 +1446,9 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 						scene.fontPathBoldItalic = val;
 					} else if(key == "cap"){
 						scene.capitalize = (val == "true" || val == "1");
+					} else if(key == "audioFade"){
+						// (2.0.0) Opt-in audio fading for `play` fade times.
+						scene.audioFade = (val == "true" || val == "1");
 					} else{
 						// (1.4) Particle tunables: <TYPE>.SPEED, <TYPE>.DENS,
 						// <TYPE>.X.DIST = NAME(p1, p2). Case-insensitive type.

@@ -5,6 +5,16 @@
 
 namespace SatyrAV{
 
+// (2.0.0) Which decode path the *currently active* video is using.
+// Preloaded-but-idle videos each choose independently at Setup time; this
+// reports the one actually on screen, which is what the operator cares about.
+enum class DecodeMode{
+	None,      // no video loaded
+	HardwareZeroCopy, // D3D11VA, frames never leave the GPU (2.0.0)
+	Hardware,  // D3D11VA, frames read back through system RAM
+	Software   // FFmpeg multi-threaded software decoders
+};
+
 struct DebugInfo{
 	// Last command
 	std::string lastCommand;
@@ -19,6 +29,10 @@ struct DebugInfo{
 	int preloadedFiles = 0;
 	int videoBufferedFrames = 0;
 	int videoRingSize = 0;
+	DecodeMode videoDecodeMode = DecodeMode::None;
+	// (2.0.0) Standalone sounds playing concurrently. Can exceed 1 now that
+	// SFX mix rather than replacing one another.
+	int activeSounds = 0;
 
 	// Display
 	int slaveWidth = 0;

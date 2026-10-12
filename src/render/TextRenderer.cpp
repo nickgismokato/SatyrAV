@@ -1,3 +1,5 @@
+#include "render/RectF.hpp"
+#include "core/Logger.hpp"
 #include "render/TextRenderer.hpp"
 #include <cstdio>
 
@@ -17,8 +19,9 @@ bool TextRenderer::Init(const std::string& fontPath, int fontSize,
 	const std::string& fontPathItalic,
 	const std::string& fontPathBold,
 	const std::string& fontPathBoldItalic){
-	if(TTF_Init() < 0){
-		fprintf(stderr, "TTF_Init failed: %s\n", TTF_GetError());
+	// (2.0.0) SDL3_ttf returns true on success, like the rest of SDL3.
+	if(!TTF_Init()){
+		Logger::Instance().Errorf("TTF_Init failed: %s", SDL_GetError());
 		return false;
 	}
 
@@ -30,18 +33,18 @@ bool TextRenderer::Init(const std::string& fontPath, int fontSize,
 
 	fonts[0] = TTF_OpenFont(fontPath.c_str(), fontSize);
 	if(!fonts[0]){
-		fprintf(stderr, "Failed to load font '%s': %s\n",
-			fontPath.c_str(), TTF_GetError());
+		Logger::Instance().Errorf("Failed to load font '%s': %s",
+			fontPath.c_str(), SDL_GetError());
 		return false;
 	}
-	lineHeight = TTF_FontLineSkip(fonts[0]);
+	lineHeight = TTF_GetFontLineSkip(fonts[0]);
 
 	for(int i = 1; i < 4; i++){
 		if(!fontPaths[i].empty()){
 			fonts[i] = TTF_OpenFont(fontPaths[i].c_str(), fontSize);
 			if(!fonts[i]){
-				fprintf(stderr, "Note: optional font slot %d ('%s') failed: %s — falling back to regular.\n",
-					i, fontPaths[i].c_str(), TTF_GetError());
+				Logger::Instance().Warnf("optional font slot %d ('%s') failed: %s — falling back to regular.",
+					i, fontPaths[i].c_str(), SDL_GetError());
 			}
 		}
 	}
@@ -69,12 +72,12 @@ void TextRenderer::OpenSlaveFonts(){
 		if(slaveFontPaths[i].empty()) continue;
 		slaveFonts[i] = TTF_OpenFont(slaveFontPaths[i].c_str(), slaveFontSize);
 		if(!slaveFonts[i] && i != 0){
-			fprintf(stderr, "Note: slave font slot %d ('%s') failed at size %d: %s\n",
-				i, slaveFontPaths[i].c_str(), slaveFontSize, TTF_GetError());
+			Logger::Instance().Warnf("slave font slot %d ('%s') failed at size %d: %s",
+				i, slaveFontPaths[i].c_str(), slaveFontSize, SDL_GetError());
 		}
 	}
 	if(slaveFonts[0]){
-		slaveLineHeight = TTF_FontLineSkip(slaveFonts[0]);
+		slaveLineHeight = TTF_GetFontLineSkip(slaveFonts[0]);
 	}
 }
 
@@ -104,15 +107,15 @@ void TextRenderer::DrawText(SDL_Renderer* renderer,
 	if(!f || text.empty()) return;
 
 	SDL_Color sdlColour = {colour.r, colour.g, colour.b, colour.a};
-	SDL_Surface* surface = TTF_RenderUTF8_Blended(f, text.c_str(), sdlColour);
+	SDL_Surface* surface = TTF_RenderText_Blended(f, text.c_str(), 0, sdlColour);
 	if(!surface) return;
 
 	SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-	SDL_Rect dst = {x, y, surface->w, surface->h};
-	SDL_RenderCopy(renderer, texture, nullptr, &dst);
+	SDL_FRect dst = FRectI(x, y, surface->w, surface->h);
+	SDL_RenderTexture(renderer, texture, nullptr, &dst);
 
 	SDL_DestroyTexture(texture);
-	SDL_FreeSurface(surface);
+	SDL_DestroySurface(surface);
 }
 
 void TextRenderer::DrawTextCentered(SDL_Renderer* renderer,
@@ -136,31 +139,31 @@ void TextRenderer::DrawTextSlave(SDL_Renderer* renderer,
 	if(outlineThickness > 0){
 		TTF_SetFontOutline(f, outlineThickness);
 		SDL_Color black = {0, 0, 0, 255};
-		SDL_Surface* outSurface = TTF_RenderUTF8_Blended(f, text.c_str(), black);
+		SDL_Surface* outSurface = TTF_RenderText_Blended(f, text.c_str(), 0, black);
 		if(outSurface){
 			SDL_Texture* outTex = SDL_CreateTextureFromSurface(renderer, outSurface);
 			int outW = (int)(outSurface->w * s);
 			int outH = (int)(outSurface->h * s);
 			int offs = (int)(outlineThickness * s);
-			SDL_Rect outDst = {x - offs, y - offs, outW, outH};
-			SDL_RenderCopy(renderer, outTex, nullptr, &outDst);
+			SDL_FRect outDst = FRectI(x - offs, y - offs, outW, outH);
+			SDL_RenderTexture(renderer, outTex, nullptr, &outDst);
 			SDL_DestroyTexture(outTex);
-			SDL_FreeSurface(outSurface);
+			SDL_DestroySurface(outSurface);
 		}
 		TTF_SetFontOutline(f, 0);
 	}
 
 	// Foreground text
 	SDL_Color sdlColour = {colour.r, colour.g, colour.b, colour.a};
-	SDL_Surface* surface = TTF_RenderUTF8_Blended(f, text.c_str(), sdlColour);
+	SDL_Surface* surface = TTF_RenderText_Blended(f, text.c_str(), 0, sdlColour);
 	if(!surface) return;
 
 	SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-	SDL_Rect dst = {x, y, (int)(surface->w * s), (int)(surface->h * s)};
-	SDL_RenderCopy(renderer, texture, nullptr, &dst);
+	SDL_FRect dst = FRectI(x, y, (int)(surface->w * s), (int)(surface->h * s));
+	SDL_RenderTexture(renderer, texture, nullptr, &dst);
 
 	SDL_DestroyTexture(texture);
-	SDL_FreeSurface(surface);
+	SDL_DestroySurface(surface);
 }
 
 void TextRenderer::DrawTextCenteredSlave(SDL_Renderer* renderer,
@@ -170,7 +173,7 @@ void TextRenderer::DrawTextCenteredSlave(SDL_Renderer* renderer,
 	if(!f || text.empty()) return;
 
 	int w = 0, h = 0;
-	TTF_SizeUTF8(f, text.c_str(), &w, &h);
+	TTF_GetStringSize(f, text.c_str(), 0, &w, &h);
 	// Use the scaled width for centering so the text visually centres on
 	// centerX after DrawTextSlave applies slaveScale.
 	int scaledW = (int)(w * slaveScale);
@@ -190,32 +193,32 @@ void TextRenderer::DrawTextSlaveRotated(SDL_Renderer* renderer,
 	if(outlineThickness > 0){
 		TTF_SetFontOutline(f, outlineThickness);
 		SDL_Color black = {0, 0, 0, 255};
-		SDL_Surface* outSurface = TTF_RenderUTF8_Blended(f, text.c_str(), black);
+		SDL_Surface* outSurface = TTF_RenderText_Blended(f, text.c_str(), 0, black);
 		if(outSurface){
 			SDL_Texture* outTex = SDL_CreateTextureFromSurface(renderer, outSurface);
 			int outW = (int)(outSurface->w * s);
 			int outH = (int)(outSurface->h * s);
 			int offs = (int)(outlineThickness * s);
-			SDL_Rect outDst = {x - offs, y - offs, outW, outH};
-			SDL_RenderCopyEx(renderer, outTex, nullptr, &outDst,
+			SDL_FRect outDst = FRectI(x - offs, y - offs, outW, outH);
+			SDL_RenderTextureRotated(renderer, outTex, nullptr, &outDst,
 				(double)rotationDeg, nullptr, SDL_FLIP_NONE);
 			SDL_DestroyTexture(outTex);
-			SDL_FreeSurface(outSurface);
+			SDL_DestroySurface(outSurface);
 		}
 		TTF_SetFontOutline(f, 0);
 	}
 
 	SDL_Color sdlColour = {colour.r, colour.g, colour.b, colour.a};
-	SDL_Surface* surface = TTF_RenderUTF8_Blended(f, text.c_str(), sdlColour);
+	SDL_Surface* surface = TTF_RenderText_Blended(f, text.c_str(), 0, sdlColour);
 	if(!surface) return;
 
 	SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-	SDL_Rect dst = {x, y, (int)(surface->w * s), (int)(surface->h * s)};
-	SDL_RenderCopyEx(renderer, texture, nullptr, &dst,
+	SDL_FRect dst = FRectI(x, y, (int)(surface->w * s), (int)(surface->h * s));
+	SDL_RenderTextureRotated(renderer, texture, nullptr, &dst,
 		(double)rotationDeg, nullptr, SDL_FLIP_NONE);
 
 	SDL_DestroyTexture(texture);
-	SDL_FreeSurface(surface);
+	SDL_DestroySurface(surface);
 }
 
 void TextRenderer::MeasureSlave(const std::string& text, int& w, int& h,
@@ -223,7 +226,7 @@ void TextRenderer::MeasureSlave(const std::string& text, int& w, int& h,
 	w = h = 0;
 	TTF_Font* f = PickSlaveFont(bold, italic);
 	if(!f || text.empty()) return;
-	TTF_SizeUTF8(f, text.c_str(), &w, &h);
+	TTF_GetStringSize(f, text.c_str(), 0, &w, &h);
 	// Return scaled dims so callers laying out runs use the on-screen size.
 	w = (int)(w * slaveScale);
 	h = (int)(h * slaveScale);
@@ -272,7 +275,7 @@ int TextRenderer::GetLineHeight() const{ return lineHeight; }
 int TextRenderer::MeasureWidth(const std::string& text) const{
 	if(!fonts[0]) return 0;
 	int w = 0, h = 0;
-	TTF_SizeUTF8(fonts[0], text.c_str(), &w, &h);
+	TTF_GetStringSize(fonts[0], text.c_str(), 0, &w, &h);
 	return w;
 }
 

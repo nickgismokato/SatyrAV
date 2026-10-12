@@ -14,7 +14,7 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	int totalW = colW * 2 + 40;
 	// Count max lines in either column to compute height
 	int leftLines = 12; // version + scene(3) + command(4) + display(3)
-	int rightLines = 10; // fonts(4) + cache(3) + blank(3)
+	int rightLines = 12; // fonts(4) + cache(3) + video(4) + blank(1)
 	int maxLines = (leftLines > rightLines) ? leftLines : rightLines;
 	int totalH = maxLines * lineH + 60 + lineH + 8; // + footer hint row
 
@@ -25,6 +25,7 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	Colour txt = Colours::WHITE;
 	Colour ok  = Colours::LIME_GREEN;
 	Colour err = {0xFF, 0x44, 0x44, 0xFF};
+	Colour dim = {0x90, 0xA0, 0xB0, 0xFF};
 
 	// ── Left column ──────────────────────────────────────
 	int lx = boxX + 16;
@@ -81,14 +82,39 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	text.DrawText(renderer, "Video buffer", rx, y, hdr); y += lineH;
 	std::string vbuf = "  Frames: " + std::to_string(info.videoBufferedFrames)
 		+ " / " + std::to_string(info.videoRingSize);
-	text.DrawText(renderer, vbuf, rx, y, txt);
+	text.DrawText(renderer, vbuf, rx, y, txt); y += lineH;
+
+	// (2.0.0) Decode path. Software is drawn in orange rather than red: it is
+	// a working state, just an expensive one, and on Linux it is the only
+	// path there is. Green for hardware makes "did D3D11VA engage?" a glance
+	// instead of a guess.
+	const char* modeStr = "-";
+	Colour modeCol = txt;
+	switch(info.videoDecodeMode){
+		// Zero-copy is the intended state and is the only one drawn green.
+		// Read-back is hardware decode working, but through the slower route:
+		// plain white, so it reads as fine but is distinguishable at a glance.
+		case DecodeMode::HardwareZeroCopy:
+			modeStr = "Hardware (zero-copy)"; modeCol = ok; break;
+		case DecodeMode::Hardware:
+			modeStr = "Hardware (read-back)"; modeCol = txt; break;
+		case DecodeMode::Software:
+			modeStr = "Software"; modeCol = Colours::ORANGE; break;
+		case DecodeMode::None:
+			modeStr = "no video"; modeCol = dim; break;
+	}
+	text.DrawText(renderer, std::string("  Decode: ") + modeStr, rx, y, modeCol); y += lineH;
+
+	// (2.0.0) Concurrent standalone sounds — more than one is now possible.
+	text.DrawText(renderer,
+		"  Sounds: " + std::to_string(info.activeSounds), rx, y,
+		info.activeSounds > 0 ? txt : dim);
 
 	// (1.6) Footer hint — sub-menus reachable from this popup.
 	int footerY = boxY + totalH - lineH - 10;
-	Colour hint = {0x90, 0xA0, 0xB0, 0xFF};
 	text.DrawTextCentered(renderer,
 		"Press S: Display rect    O: Overview Debug",
-		boxX + totalW / 2, footerY, hint);
+		boxX + totalW / 2, footerY, dim);
 }
 
 } // namespace SatyrAV

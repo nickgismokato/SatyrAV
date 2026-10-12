@@ -1,158 +1,154 @@
 # Video pipeline
 
-This document describes how SatyrAV plays video files: the D3D11VA hardware decode path, the software decode fallback, the preload window, and the audio/video synchronisation strategy.
+How SatyrAV plays a video file: the three ways a frame can reach the screen, the preload window, how sound and picture are kept together, and what runs on which thread. Current as of **2.0.0**. Everything here lives in [`MediaPlayer.cpp`](../src/render/MediaPlayer.cpp) and [`D3D11Interop.cpp`](../src/render/D3D11Interop.cpp).
 
-## Decode strategy
+## Three decode paths
 
-SatyrAV v1.1.0 uses a **two-tier decode strategy**:
+Each clip picks one path when it is set up, and keeps it for its lifetime.
 
-1. **D3D11VA hardware decode (Windows, primary).** The GPU's video decode engine (DXVA2/D3D11VA) decodes H.264/HEVC frames directly into VRAM textures. The decode thread holds `AVFrame` references to these GPU textures in a small ring (4–16 slots). On the main thread, `av_hwframe_transfer_data` reads the NV12 data from the idle GPU texture into a pre-allocated system-memory frame, then `SDL_UpdateNVTexture` uploads it to SDL's streaming texture for display. Because the source texture has been idle for several ring slots by the time it's displayed, the transfer returns quickly with no GPU pipeline stall.
+| Path | Used when | Where the frame travels |
+|---|---|---|
+| **Zero-copy** *(2.0.0)* | Windows, D3D11 renderer, hardware decode available, 8-bit source, `zero_copy = true` | Decoder → GPU copy → screen. Never leaves VRAM. |
+| **Hardware read-back** | Hardware decode available but zero-copy is not (10-bit source, `zero_copy = false`, or zero-copy setup failed) | Decoder (VRAM) → system RAM → `sws_scale` → VRAM |
+| **Software** | Linux, or a codec the GPU cannot decode | CPU decoder → `sws_scale` → VRAM |
 
-2. **Software decode fallback (Linux, or when D3D11VA is unavailable).** FFmpeg's multi-threaded software decoders (H.264/HEVC, `FF_THREAD_FRAME | FF_THREAD_SLICE`) produce YUV420P frames; `sws_scale` converts to NV12 (and optionally downscales to slave resolution) directly into pre-allocated ring frames. `SDL_UpdateNVTexture` uploads to the GPU, and SDL's D3D11/OpenGL renderer does the YUV→RGB conversion in-shader.
+The debug overlay (`D`) names the path the playing clip is on: `Hardware (zero-copy)` in green, `Hardware (read-back)` in white, `Software` in orange. The log records the choice for every clip, including clips that are only preloaded.
 
-Both paths are combined with the **preload architecture** described below — videos are decoded ahead of time during scene preload, so the decode thread is already well ahead of the playback clock when the operator fires the cue.
+### Zero-copy
 
-## Why preload
+The decoder runs on the **slave renderer's own D3D11 device** rather than a private one. A decoded frame is a surface in VRAM; the frame ring stores a *reference* to it. When the frame is due, the main thread copies that surface into an NV12 texture with a single GPU-to-GPU `CopySubresourceRegion` and drops the reference, which hands the surface back to the decoder.
 
-Video cues in theatre shows are scripted — the operator knows the next few scenes in advance. SatyrAV exploits that: instead of putting decoding on the critical path at play-time, videos referenced by the current, next, and previous scene are **decoded into the ring in the background** while the operator is still driving earlier cues. When the operator hits ENTER on a `play movie.mkv` command the decode thread is already ahead of the playback clock, so the first frames go out instantly.
+It is a copy rather than a hand-over because decoder surfaces are decoder-only slices of one texture array, and SDL cannot sample from those. The copy is cheap (it is submitted in microseconds and done by the GPU), and it has a useful side effect: the picture lives on in SatyrAV's own texture, which is what keeps the last frame on screen during a pause.
 
-v1.0 opened, decoded, and played all at once when the cue fired. At 4K60 that path could not sustain real-time software decode + YUV→RGBA conversion + upload, so the ring drained and playback stuttered or froze. v1.1.0 adds hardware decode as the primary path and moves all remaining work off the critical path via preloading.
+Three details follow from this design:
 
-## Architecture
+- **The texture is the size of the decoder surface, not the picture.** A 1080p H.264 clip decodes into 1920×1088 surfaces; HEVC pads further. The video is therefore drawn with a source rectangle that crops to the picture (`MediaPlayer::GetVideoSrcRect`), stopping half a texel short of the padding so that scaling up cannot blend padding into the edge.
+- **No CPU scaling.** The frame stays at source resolution and the renderer scales it when drawing.
+- **The decoder must be given enough surfaces.** Its default pool is about 20. The ring holds 32 references, so the decoder is opened with `extra_hw_frames` to cover the ring plus a few spare.
 
-### Per-video decode contexts
+### Hardware read-back and software
 
-`MediaPlayer` owns a map of `VideoPlayback` instances keyed by resolved file path:
+These are the pre-2.0.0 paths and are unchanged. Both end with YUV420P frames in system RAM, scaled down to fit the slave if the source is larger, uploaded with `SDL_UpdateYUVTexture` to an IYUV texture.
 
-```cpp
-std::unordered_map<std::string, std::unique_ptr<VideoPlayback>> videos;
-VideoPlayback* active = nullptr;
-```
+- **Read-back:** the decode thread calls `av_hwframe_transfer_data` to pull the frame out of VRAM, then `sws_scale` converts it. The transfer format is whatever the driver produces (usually NV12), so the conversion context is created on the first frame once the real format is known.
+- **Software:** FFmpeg's multi-threaded decoders produce the frame and `sws_scale` converts it straight into the ring.
 
-Each `VideoPlayback` is a fully self-contained decode context: it owns its `AVFormatContext`, video + optional audio `AVCodecContext`, `SwsContext`, `SwrContext`, a pre-allocated NV12 ring, a per-video audio buffer, and its own decode thread. Multiple instances can exist concurrently — one is `active` (currently playing to the slave window and driving the audio device); the others are preloaded and idle.
+The ring is YUV420P rather than NV12 because libswscale's NV12-to-NV12 path was found to leave the UV plane empty, giving a green picture.
 
-### NV12 ring
+### Falling back
 
-The ring serves two modes:
+Every step down is automatic and logged:
 
-- **HW mode (D3D11VA):** Ring slots hold `AVFrame` clones containing references to D3D11 textures in VRAM. The ring is small (4–16 slots) because GPU decoder surfaces are a finite hardware resource. When a frame is consumed, the main thread calls `av_hwframe_transfer_data` to read the NV12 planes into a pre-allocated `transferFrame`, then uploads via `SDL_UpdateNVTexture`. The clone is freed, returning the decoder surface to the pool.
+- No D3D11 renderer, or the device refuses multithread protection → the decoder creates a device of its own and uses read-back.
+- The decoder will not open on the shared device → it retries on a device of its own.
+- A 10-bit source → read-back, where it is converted down to 8-bit for display.
+- No hardware decode for the codec → software.
+- A clip's **first** zero-copy frame cannot be presented → zero-copy is switched off for the rest of the session and that clip restarts on the read-back path.
 
-- **SW mode:** Ring slots are `AVFrame`s allocated once via `av_frame_get_buffer(f, 32)`, each with its own NV12 Y+UV planes. `sws_scale` writes directly into `dst->data`/`dst->linesize` — zero intermediate copies. The main thread reads `f->data[0]`/`f->data[1]` and calls `SDL_UpdateNVTexture`. Ring frames are recycled for the life of the `VideoPlayback`; no allocation churn.
+`[video] zero_copy = false` in `config.toml` forces read-back on a device of the decoder's own, which is exactly the 1.x route.
 
-### Resolution handling
+## Why the shared device has to be thread-safe
 
-- **HW mode:** The texture is created at source resolution. The GPU decoder produces frames at the native size; scaling to the slave display happens for free during `SDL_RenderCopy` at present-time.
-- **SW mode:** The ring texture is created at **slave resolution**. For a 4K source on a 1080p slave, `sws_scale` downscales as part of its NV12 conversion, capping main-thread upload cost at 1080p regardless of source resolution. Smaller-than-slave sources keep their native resolution; the GPU upscales for free at present-time.
+The decoder works on the decode thread while SDL draws on the main thread, both through one D3D11 device. SDL creates its device **single-threaded** unless `SDL_HINT_RENDER_DIRECT3D_THREADSAFE` is set before the renderer is created, and a single-threaded device used from two threads is undefined behaviour that does not announce itself. `Renderer.cpp` sets the hint for every renderer, and `D3D11Interop::CreateSharedDeviceCtx` switches the device into multithread-protected mode and refuses to share it if that fails. The GPU copy itself is made under the same lock FFmpeg's decoder uses.
 
-### 4 GB budget, priority fill
+## Preload
 
-When the operator enters a scene (or the scene window slides via navigation), `PerformanceScreen::PreloadForCurrentScene` builds a priority-ordered list of video paths — current scene in command order, then next scene, then previous scene — and calls `MediaPlayer::PreloadVideosForScenes`. For each path in order:
+Video cues are scripted, so the next few are known in advance. When the operator enters a scene, `PerformanceScreen::PreloadForCurrentScene` lists the videos of the current scene, then the next, then the previous, and `MediaPlayer::PreloadVideosForScenes` sets each one up in that order. Every `VideoPlayback` is self-contained: its own demuxer, decoders, ring, audio stream and decode thread. Clips that fall out of the three-scene window are evicted at once.
 
-1. Probe the container for source resolution, fps, duration.
-2. Compute `frameBytes = outWidth * outHeight * 3/2`.
-3. Compute `ringFrames = min(clipFrames, maxSecondsCap * fps, remainingBudget / frameBytes)`.
-4. If `ringFrames` is big enough to be useful (≥60 frames ≈ 1 s at 60fps), create the `VideoPlayback` and spawn its decode thread. Otherwise stop — remaining videos fall through to the on-demand path.
+A preloaded clip decodes ahead and then waits, so when `play` fires the first frames are already there.
 
-Videos that have dropped out of the prev/curr/next window are evicted immediately (their decode threads are stopped and their RAM is returned to the budget). Videos still in the window are held across scene transitions.
+### How far ahead
 
-Both the budget (`videoPreloadBudgetMB`, default 4096) and the per-video cap (`videoPreloadMaxSeconds`, default 60) live in the global config under `[video]` and can be overridden by the user.
+| Path | Ring depth | Held in |
+|---|---|---|
+| Zero-copy | 32 frames, fixed | VRAM |
+| Read-back, software | up to `preload_max_seconds` (default 60 s), limited by the budget | System RAM |
+
+The zero-copy ring is shallow because decoder surfaces are a finite pool. Thirty-two frames is about half a second at 60 fps: enough for an instant start, with the hardware decoder refilling it many times faster than playback drains it. What is given up, compared with the RAM ring, is cushion against a slow disk.
+
+### Budget
+
+`[video] preload_budget_mb` (default 4096) caps the total across all preloaded clips, filled in priority order. A RAM ring costs `width × height × 1.5` bytes per frame at output size. A zero-copy clip is charged an estimate of its VRAM: the decoder's whole surface pool (about 56 surfaces) at padded source size, roughly 175 MB for a 1080p clip and 700 MB for 4K.
+
+| Output size | Per frame | 60 s at 60 fps (RAM ring) |
+|---|---|---|
+| 1080p | 3.1 MB | ~11 GB, so the budget caps it at ~22 s |
+| 1440p | 5.5 MB | capped at ~13 s |
+| 4K | 12.4 MB | capped at ~6 s |
 
 ### Back-pressure
 
-The decode thread produces video frames until the ring is full, then `SDL_CondWait`s on `frameConsumed`. This is exactly the right behaviour for both modes:
+The decode thread fills the ring and then waits for the main thread to consume a frame. Sound is throttled separately: at most about 8 seconds of audio are queued per clip.
 
-- **Preload**: the ring fills completely in the background, the thread parks, and the `VideoPlayback` sits Ready. No CPU spent until playback starts or the slot is freed.
-- **Playback**: the main thread consumes a frame per tick, signalling `frameConsumed` — the decode thread wakes, decodes the next frame, parks again. Steady-state, the ring stays near full.
+On the zero-copy path the wait is not idle. The playback clock runs on audio, and a thread that stops reading the file when 32 frames are buffered also stops reading audio. If a file interleaves its audio further apart than those 32 frames cover (routine at 60 fps), the audio runs dry, the clock stops, no frame is consumed, and the ring never drains. So while it waits for a free slot, the decode thread keeps reading the file whenever less than about 2 seconds of audio is queued: audio packets are decoded at once, and video packets are parked, still compressed, until slots free up.
 
-Audio packets from the same container are never blocked by the video ring: the decode thread decodes and resamples them immediately into the per-video audio buffer. If the audio buffer fills (during preload of a long clip) the thread briefly `SDL_Delay`s and retries — it does not drop audio, and it does not block video decode (the video path only blocks on the video ring).
+## Sound
 
-### Play-time dispatch
+*(Rewritten in 2.0.0.)* One logical audio device is opened on first use and held open for the life of the application. Every source of sound owns an `SDL_AudioStream` bound to it, and SDL mixes them:
 
-`PerformanceScreen::OnSlaveCommand` still calls `media.PlayVideo(path, …)`. `PlayVideo` now checks whether the path is already preloaded:
+- Each video creates its stream at setup and leaves it **unbound**, so a preloaded clip can queue its sound ahead of time. Starting the clip binds the stream.
+- Each standalone sound (`play x.mp3`, F-key hotkeys) has its own stream. Several can play at once, over each other and over a video's sound.
 
-- **Preloaded** → `StartPreloadedVideo` transitions it to the `active` slot, opens the SDL audio device with its sample rate and channel count, waits up to 1 second for 60 frames of headroom (usually returns immediately), and starts playback.
-- **Not preloaded** (budget exhausted, unexpected path, or standalone test) → falls through to an on-demand synchronous preload: creates a new `VideoPlayback`, spawns its decode thread, then activates it the same way. The 1 s / 60-frame wait is the fallback's initial buffering.
+Streams convert independently into the device's format, so clips with different sample rates coexist without the device being reopened. The device follows `[audio] device` in `config.toml` and falls back to the system default if the named device is missing.
 
-### Activation and audio routing
-
-There is one `SDL_AudioDeviceID` at a time. When a video becomes active, the device is closed and reopened with `userdata = &active->audioBuffer` and a callback that reads directly from that buffer. When a video finishes or `StopAll` is called, the device is closed and the VideoPlayback is erased from the map.
-
-Standalone audio (`.wav`/`.mp3` cues) uses its own `StandaloneAudio` state and a shared `standaloneBuf`; starting standalone audio closes any active video and reopens the device pointed at `standaloneBuf`.
+The optional `AudioFade` project/scene option ramps a video stream's gain together with the picture fade. SDL applies stream gain when the device pulls audio, not when it is queued, so a fade is heard immediately even though seconds of audio are already queued.
 
 ## Clock
 
-The audio-master clock is unchanged from v1.0 in principle: when `active->hasAudio`, the clock is derived from `active->audioBuffer.totalConsumed` — the exact byte count the SDL callback has pulled out of the buffer, which is driven by the sound card's DAC and therefore cannot drift.
+Sound is the master. For a clip with audio:
 
 ```
-audioPosition = audioStartPTS + (totalConsumed / bytesPerSecond)
+position = audioStartPTS + (bytesPushed − bytesStillQueued) / bytesPerSecond
 ```
 
-For video-only files, `SDL_GetPerformanceCounter` drives the clock. Either way, the main thread scans the ring for the latest frame whose PTS is ≤ the clock, skips any earlier frames, uploads that one via `SDL_UpdateNVTexture`, and signals `frameConsumed`.
+`bytesPushed` is what the decode thread has handed to the stream; `SDL_GetAudioStreamQueued` reports what the device has not yet taken. The difference is what the sound card has actually consumed, so the clock is driven by the hardware and does not drift. Between the device's pulls the value is interpolated with wall-clock time so it advances smoothly every frame.
 
-## Lifecycle summary
+A clip without audio uses the wall clock. Either way, each frame the main thread takes the newest ring frame whose timestamp is not later than the clock, skips any older ones, and presents it.
+
+## Seeking
+
+*(2.0.0, plumbing only.)* `MediaPlayer::SeekVideo(seconds)` jumps the active clip to a time. Nothing in the application calls it yet; the fast-forward, rewind and restart commands are planned for 2.1.0.
+
+The main thread files the request; the decode thread carries it out at the top of its loop, the one point where it holds no half-produced frame. It empties the ring, seeks the file to the keyframe before the target, flushes both decoders, clears the queued audio, and then discards the frames and audio between that keyframe and the requested time, so playback resumes where asked. While the request is pending the main thread presents nothing from the ring.
+
+At end of file the decode thread parks instead of exiting, which is what allows a clip to be rewound after its decoding has finished.
+
+## Threads
 
 ```
-Scene preload (background):
-    probe → compute ringFrames from budget → Setup → spawn decode thread
-    decode thread: read packets → decode → sws → ring slot → block when full
-
-Play command:
-    if preloaded → activate (close/reopen audio device, wait ≤1s for 60 frames)
-    else         → synchronous preload + activate
-
-Playback:
-    main thread UpdateVideoFrame (per tick):
-        compute clock from audio buffer consumed bytes
-        scan ring → pick latest frame with pts ≤ clock
-        SDL_UpdateNVTexture(ring frame's Y + UV planes)
-        signal frameConsumed
-    SDL audio callback: read from active->audioBuffer → DAC
-
-Scene navigation:
-    rebuild priority list → evict out-of-window videos → preload new ones
-
-End of clip:
-    bufferedFrames hits 0 with threadRunning == false
-    → erase from videos map, audio device closes
+Main thread                 Decode thread (one per clip)        SDL audio thread
+  UpdateVideoFrame            read packet                          pull from every
+    read the clock            audio → decode → audio stream          bound stream,
+    pick the due frame        video → decode → ring slot             mix, play
+    zero-copy: GPU copy         (zero-copy: a surface reference;
+    otherwise: texture upload    otherwise: pixels in RAM)
+  draw, present               wait when the ring is full
+                              park at end of file
 ```
 
-## Memory usage
+Preloaded clips that have filled their ring use no CPU. Only the playing clip's decode thread does ongoing work.
 
-| Slave output | Per slot (NV12) | Per 60 s at 60 fps |
+## Renderer
+
+`Renderer` asks SDL for the `direct3d11` driver by name and falls back to SDL's own choice if that fails (on Linux this gives OpenGL). SDL converts YUV to RGB in a shader on every path. Both the NV12 and IYUV textures use SDL's default colour conversion (BT.601, limited range), so a clip looks the same whichever path it takes.
+
+## Settings
+
+In `config.toml`:
+
+| Key | Default | Meaning |
 |---|---|---|
-| 1080p | 3.1 MB  | ~186 MB |
-| 1440p | 5.5 MB  | ~330 MB |
-| 4K    | 12.4 MB | ~744 MB |
-
-At the 4 GB default budget you can preload ~22 minutes of 1080p video, or ~4 minutes at native 4K. Since the scene window only holds prev/curr/next, the budget in practice is dedicated to whichever 1–4 clips are currently in-window.
-
-## Threading model
-
-```
-Main thread               Decode thread(s)          SDL audio thread
-   |                          | (one per                |
-   |                          |  VideoPlayback)         |
-   | UpdateVideoFrame         | av_read_frame           | AudioCallback
-   |   find best frame        |   audio → audioBuffer   |   read from
-   |   SDL_UpdateNVTexture    |   video → sws → ring    |     active->audioBuffer
-   |   signal frameConsumed   |   block when ring full  |   increment totalConsumed
-   | Present                  |                         |
-```
-
-Idle preloaded videos consume zero CPU — their decode threads are parked on `frameConsumed`. Only the active video's decode thread is doing ongoing work.
-
-## Renderer backend
-
-`Renderer::InitMaster` sets `SDL_HINT_RENDER_DRIVER=direct3d11` on Windows. This is critical for two reasons:
-
-1. SDL's D3D11 renderer has a built-in NV12→RGB shader, so `SDL_UpdateNVTexture` + `SDL_RenderCopy` does YUV→RGB conversion entirely on the GPU.
-2. `SDL_RenderGetD3D11Device` returns the `ID3D11Device*` that we pass to FFmpeg's `AVD3D11VADeviceContext`, so the hardware decoder and SDL share the same D3D11 device. This avoids cross-device copies.
-
-On Linux, SDL falls through to its OpenGL renderer, which also supports NV12. D3D11VA is not available; the software decode path is used.
+| `[video] zero_copy` | `true` | Allow the zero-copy path. `false` restores the 1.x read-back route. |
+| `[video] preload_budget_mb` | `4096` | Total budget across preloaded clips. |
+| `[video] preload_max_seconds` | `60` | Longest RAM ring per clip. |
+| `[audio] device` | empty | Output device by name; empty means the system default. |
 
 ## Known limitations
 
-- **YUV420P / NV12 assumed.** 10-bit (P010) sources are not supported unless the decoder silently downcasts.
-- **No seeking.** Playback is strictly linear from start to EOF.
-- **One active video at a time.** Multiple preloaded instances can coexist; only one plays.
-- **HW readback still involves a copy.** `av_hwframe_transfer_data` copies NV12 from VRAM to system RAM, then `SDL_UpdateNVTexture` copies it back. True zero-copy (wrapping the D3D11VA output texture directly as an SDL texture) would eliminate both copies but requires SDL3 or direct D3D11 interop. The current path is still dramatically faster than software decode because the GPU's video decode engine runs in parallel with the CPU and the readback latency is hidden by the ring buffer.
+- **One video plays at a time.** Several can be preloaded; one is active.
+- **10-bit sources lose their extra depth.** They are kept off the zero-copy path and converted to 8-bit. This has not been tested with a real 10-bit file.
+- **The last frames of a clip are dropped,** because the decoder is not flushed at end of file. A few frames with hardware decode; up to one per decoder thread with software decode.
+- **On the read-back and software paths the video is decoded at the size of the targeted-display rect,** so a shrunk rect lowers the resolution the capture mirror receives. Zero-copy is not affected.
+- **`K` pauses every sound, not only the video's.** See [TODO.md](TODO.md).
+- **The capture mirror still reads the composed frame back through system RAM** every frame. That is separate from video decoding and is the leading suspect for the capture mirror's stutter.
+- **Seeking has no commands yet,** and a seek made while paused shows its picture only on resume.

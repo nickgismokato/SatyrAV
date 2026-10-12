@@ -11,15 +11,18 @@
 #include "screens/OptionsScreen.hpp"
 #include "screens/PerformanceScreen.hpp"
 #include "input/KeyBindings.hpp"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
+#include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
 #include <cstdio>
 
 namespace SatyrAV{
 
 bool App::Init(){
-	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) < 0){
-		fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+	// (2.0.0) SDL3 returns true on success — the old `< 0` test could never
+	// fire, in either direction. SDL_INIT_TIMER is gone; timers are always
+	// available.
+	if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)){
+		Logger::Instance().Errorf("SDL_Init failed: %s", SDL_GetError());
 		return false;
 	}
 
@@ -36,12 +39,16 @@ bool App::Init(){
 		return false;
 	}
 
+	// (2.0.0) SDL3 scopes text input per-window; register the master window
+	// so the screens' SetTextInputMode(bool) calls keep working unchanged.
+	input.SetTextInputWindow(renderer.GetMasterWindow());
+
 	// Set window icon
 	std::string iconPath = FindAsset("satyr-av-logo.png");
 	SDL_Surface* iconSurface = IMG_Load(iconPath.c_str());
 	if(iconSurface){
 		SDL_SetWindowIcon(renderer.GetMasterWindow(), iconSurface);
-		SDL_FreeSurface(iconSurface);
+		SDL_DestroySurface(iconSurface);
 	}
 
 	// (1.6.1) Font paths in config.toml may be bare filenames — resolve
@@ -87,7 +94,7 @@ bool App::Init(){
 
 	if(!textRenderer.Init(fontPath, config.fontSize,
 			fontPathItalic, fontPathBold, fontPathBoldIt)){
-		fprintf(stderr, "Warning: Text rendering unavailable\n");
+		Logger::Instance().Warnf("Text rendering unavailable");
 	}
 
 	RegisterScreens();
@@ -175,25 +182,25 @@ void App::Run(){
 
 		SDL_Event event;
 		while(SDL_PollEvent(&event)){
-			if(event.type == SDL_QUIT){
+			if(event.type == SDL_EVENT_QUIT){
 				running = false;
 				break;
 			}
 
 			// Mouse events for popup dragging
-			if(event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT){
+			if(event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT){
 				helpPopup.HandleMouseDown(event.button.x, event.button.y);
 				debugPopup.HandleMouseDown(event.button.x, event.button.y);
 				sizePopup.HandleMouseDown(event.button.x, event.button.y);
 				overviewPopup.HandleMouseDown(event.button.x, event.button.y);
 			}
-			if(event.type == SDL_MOUSEBUTTONUP){
+			if(event.type == SDL_EVENT_MOUSE_BUTTON_UP){
 				helpPopup.HandleMouseUp();
 				debugPopup.HandleMouseUp();
 				sizePopup.HandleMouseUp();
 				overviewPopup.HandleMouseUp();
 			}
-			if(event.type == SDL_MOUSEMOTION){
+			if(event.type == SDL_EVENT_MOUSE_MOTION){
 				helpPopup.HandleMouseMove(event.motion.x, event.motion.y);
 				debugPopup.HandleMouseMove(event.motion.x, event.motion.y);
 				sizePopup.HandleMouseMove(event.motion.x, event.motion.y);
@@ -205,10 +212,10 @@ void App::Run(){
 			// swallowed (Z/X/Q/E/WASD hold-keys are polled via SDL keyboard
 			// state in Update, optionally with SHIFT for precision).
 			if(sizePopup.IsVisible()){
-				if(event.type == SDL_KEYDOWN){
-					if(event.key.keysym.sym == Keys::QUIT){
+				if(event.type == SDL_EVENT_KEY_DOWN){
+					if(event.key.key == Keys::QUIT){
 						sizePopup.Close();
-					} else if(event.key.keysym.sym == SDLK_c){
+					} else if(event.key.key == SDLK_C){
 						sizePopup.ResetToDefault();
 					}
 				}
@@ -216,8 +223,8 @@ void App::Run(){
 			}
 
 			// ── Open size popup: S while debug popup is open, in project. ──
-			if(event.type == SDL_KEYDOWN &&
-				event.key.keysym.sym == SDLK_s &&
+			if(event.type == SDL_EVENT_KEY_DOWN &&
+				event.key.key == SDLK_S &&
 				debugPopup.IsVisible() &&
 				inProject){
 				auto* perfScreen = static_cast<PerformanceScreen*>(
@@ -239,8 +246,8 @@ void App::Run(){
 			// Mirrors the D→S chord for the rect editor. Walks every scene
 			// of the active project and reports parser warnings + missing
 			// media files.
-			if(event.type == SDL_KEYDOWN &&
-				event.key.keysym.sym == SDLK_o &&
+			if(event.type == SDL_EVENT_KEY_DOWN &&
+				event.key.key == SDLK_O &&
 				debugPopup.IsVisible() &&
 				inProject){
 				auto* perfScreen = static_cast<PerformanceScreen*>(
@@ -257,12 +264,12 @@ void App::Run(){
 			// scrolls; everything else is swallowed so the underlying
 			// screen doesn't react.
 			if(overviewPopup.IsVisible()){
-				if(event.type == SDL_KEYDOWN){
-					if(event.key.keysym.sym == Keys::QUIT){
+				if(event.type == SDL_EVENT_KEY_DOWN){
+					if(event.key.key == Keys::QUIT){
 						overviewPopup.Close();
-					} else if(event.key.keysym.sym == SDLK_UP){
+					} else if(event.key.key == SDLK_UP){
 						overviewPopup.ScrollUp();
-					} else if(event.key.keysym.sym == SDLK_DOWN){
+					} else if(event.key.key == SDLK_DOWN){
 						overviewPopup.ScrollDown();
 					}
 				}

@@ -378,6 +378,31 @@ TEST_CASE("Capitalize ORs scene onto project"){
 	CHECK(c.GetEffectiveCapitalize());
 }
 
+TEST_CASE("AudioFade ORs scene onto project"){
+	// (2.0.0) Opt-in audio fading follows the same cascade as Capitalize:
+	// a scene may switch it on, the project sets the baseline, and neither
+	// can be switched back off by the other. Default must be OFF so scenes
+	// written before 2.0.0 keep cutting their audio rather than fading it.
+	auto build = [](bool project, bool scene){
+		auto p = MakeProject(1, 1);
+		p.schema.audioFade = project;
+		p.schema.akts[0].scenes[0].audioFade = scene;
+		return p;
+	};
+
+	CueEngine off; off.LoadProject(build(false, false));
+	off.SelectAkt(0); off.SelectScene(0);
+	CHECK_FALSE(off.GetEffectiveAudioFade());   // the default that protects old shows
+
+	CueEngine sceneOn; sceneOn.LoadProject(build(false, true));
+	sceneOn.SelectAkt(0); sceneOn.SelectScene(0);
+	CHECK(sceneOn.GetEffectiveAudioFade());
+
+	CueEngine projOn; projOn.LoadProject(build(true, false));
+	projOn.SelectAkt(0); projOn.SelectScene(0);
+	CHECK(projOn.GetEffectiveAudioFade());
+}
+
 TEST_CASE("Text outline is project-level only"){
 	CueEngine e;
 	auto p = MakeProject(1, 1);

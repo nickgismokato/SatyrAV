@@ -1,5 +1,5 @@
 #pragma once
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -38,11 +38,18 @@ class InputHandler{
 public:
 	InputAction Poll(SDL_Event& event);
 
+	// (2.0.0) SDL3 scopes text input to a specific window rather than
+	// globally. SatyrAV only ever accepts typing on the master window, so
+	// it is registered once at startup and SetTextInputMode keeps its
+	// existing bool-only signature — leaving all eight screen call sites
+	// unchanged.
+	void SetTextInputWindow(SDL_Window* w);
+
 	// Text input mode — screens enable this when a text field is focused
 	bool IsTextInputMode() const;
 	void SetTextInputMode(bool enabled);
 
-	// The last character(s) entered via SDL_TEXTINPUT (valid after TextInput action)
+	// The last character(s) entered via SDL_EVENT_TEXT_INPUT (valid after TextInput action)
 	const std::string& GetLastTextInput() const;
 
 	// (1.6.3) Last F-number pressed; valid only on the same Poll() that
@@ -50,6 +57,7 @@ public:
 	int GetLastFunctionKey() const;
 
 private:
+	SDL_Window* textInputWindow = nullptr;
 	bool textInputMode = false;
 	std::string lastTextInput;
 	int  lastFunctionKey = 0;

@@ -1,8 +1,10 @@
+#include "render/RectF.hpp"
+#include "core/Logger.hpp"
 #include "screens/SplashScreen.hpp"
 #include "App.hpp"
 #include "core/Types.hpp"
 #include "core/AssetPath.hpp"
-#include <SDL2/SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 #include <cstdio>
 #include <string>
 
@@ -11,13 +13,13 @@ namespace SatyrAV{
 static SDL_Texture* LoadTexture(const std::string& path, SDL_Renderer* r, int& w, int& h){
 	SDL_Surface* surface = IMG_Load(path.c_str());
 	if(!surface){
-		fprintf(stderr, "SplashScreen: cannot load '%s': %s\n", path.c_str(), IMG_GetError());
+		Logger::Instance().Errorf("SplashScreen: cannot load '%s': %s", path.c_str(), SDL_GetError());
 		return nullptr;
 	}
 	w = surface->w;
 	h = surface->h;
 	SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surface);
-	SDL_FreeSurface(surface);
+	SDL_DestroySurface(surface);
 	return tex;
 }
 
@@ -80,8 +82,8 @@ static void DrawTextureCentered(SDL_Renderer* r, SDL_Texture* tex,
 	int drawH = (int)(texH * scale);
 	int drawX = screenW / 2 - drawW / 2;
 	int drawY = centerY - drawH / 2;
-	SDL_Rect dst = {drawX, drawY, drawW, drawH};
-	SDL_RenderCopy(r, tex, nullptr, &dst);
+	SDL_FRect dst = FRectI(drawX, drawY, drawW, drawH);
+	SDL_RenderTexture(r, tex, nullptr, &dst);
 }
 
 void SplashScreen::Draw(Renderer& r, TextRenderer& text){

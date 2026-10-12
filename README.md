@@ -3,7 +3,7 @@
 An AV cue controller for SaTyR revyer. Dual-display output with keyboard-first
 navigation through acts, scenes, and commands.
 
-**Current version:** 1.8.4 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
+**Current version:** 2.0.0 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
 
 Full documentation lives in [docs/](docs/README.md).
 
@@ -52,8 +52,12 @@ Full documentation lives in [docs/](docs/README.md).
   the animation as a whole.
 - Video playback with D3D11VA hardware decode on Windows (H.264 / HEVC via the
   GPU decode engine) and a multi-threaded software fallback on Linux or
-  unsupported codecs. YUV→RGB conversion runs on the GPU via
-  `SDL_UpdateNVTexture`.
+  unsupported codecs. *(2.0.0)* On Windows the decoded frame stays on the GPU
+  all the way to the screen (zero-copy), with the previous read-back route as
+  the automatic fallback.
+- *(2.0.0)* Overlapping sound: F-key sound effects and `play` audio tracks
+  play over each other and over a video's own sound. An opt-in `AudioFade`
+  option makes a video's fade times fade its sound as well as its picture.
 - Preload-driven playback: videos in the current, previous, and next scene are
   decoded into a ring buffer ahead of time so the first frames go out
   instantly when `play` fires. Configurable RAM budget
@@ -133,7 +137,7 @@ Full documentation lives in [docs/](docs/README.md).
 ### Display and output
 
 - Targeted-display rectangle inside the physical slave, with a hidden size
-  menu (Debug → `S`, adjust with `Z/X/Q/E/WASD`, `SHIFT` = 10× precision,
+  menu (Debug → `S`, adjust with `Z/X/Q/E/WASD`, `SHIFT` = 10× finer steps,
   `C` = reset, `ESC` = save).
 - Capture-mirror window (third OS window) for feeding a capture card or
   recorder. A borderless fullscreen output mirrors the slave's logical content
@@ -160,10 +164,13 @@ Full documentation lives in [docs/](docs/README.md).
 Full build instructions, including cross-compilation, are in
 [docs/building.md](docs/building.md).
 
-### Linux (Debian 13)
+### Linux
+
+SatyrAV needs SDL3 (3.2 or newer), SDL3_ttf and SDL3_image *(2.0.0)*. Debian 13
+packages them:
 
 ```bash
-sudo apt install cmake g++ libsdl2-dev libsdl2-ttf-dev libsdl2-image-dev \
+sudo apt install cmake g++ libsdl3-dev libsdl3-ttf-dev libsdl3-image-dev \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev
 
 mkdir build && cd build
@@ -171,12 +178,17 @@ cmake ..
 make -j$(nproc)
 ```
 
-### Cross-compile for Windows (MinGW via WSL or Debian)
+Ubuntu 24.04 does not package SDL3. There, build it from source into
+`~/sdl3-prefix` first and add `-DCMAKE_PREFIX_PATH=$HOME/sdl3-prefix` to the
+`cmake` line, as described in [docs/building.md](docs/building.md).
+
+### Cross-compile for Windows (MinGW via WSL, Debian or Ubuntu)
 
 ```bash
-sudo apt install mingw-w64 p7zip-full wget
+sudo apt install mingw-w64 mingw-w64-tools p7zip-full wget
 chmod +x setup-mingw-deps.sh
-./setup-mingw-deps.sh           # installs to ~/mingw-deps by default
+rm -rf ~/mingw-deps             # only if it still holds SDL2 from a 1.x build
+./setup-mingw-deps.sh           # installs SDL3 + FFmpeg to ~/mingw-deps
 
 mkdir build-win && cd build-win
 cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/MinGW-w64.cmake \
@@ -204,7 +216,7 @@ ctest --output-on-failure
 
 The suite covers the SDL-independent core (`SceneParser`, `SchemaParser`,
 `CueEngine`, `Config`, `Project`, `Types`), so it also builds standalone on a
-machine with no SDL2 or FFmpeg installed:
+machine with no SDL3 or FFmpeg installed:
 
 ```bash
 cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/satyr-tests
@@ -226,9 +238,9 @@ packages (Linux) or as dynamically linked DLLs next to the executable
 
 | Library | License | Role |
 |---|---|---|
-| [SDL2](https://www.libsdl.org/) | zlib | Window, input, rendering |
-| [SDL2_ttf](https://github.com/libsdl-org/SDL_ttf) | zlib | TrueType text rendering |
-| [SDL2_image](https://github.com/libsdl-org/SDL_image) | zlib | Image and GIF loading |
+| [SDL3](https://www.libsdl.org/) | zlib | Window, input, rendering |
+| [SDL3_ttf](https://github.com/libsdl-org/SDL_ttf) | zlib | TrueType text rendering |
+| [SDL3_image](https://github.com/libsdl-org/SDL_image) | zlib | Image and GIF loading |
 | [FFmpeg](https://ffmpeg.org/) — libavcodec, libavformat, libavutil, libswscale, libswresample | LGPL-2.1-or-later | Video and audio decoding, hardware acceleration |
 | [toml++](https://github.com/marzer/tomlplusplus) | MIT | TOML parsing for `config.toml` and `schema.toml` |
 | MinGW-w64 runtime (libstdc++-6, libgcc_s_seh-1, libwinpthread-1) | GCC Runtime Library Exception | C++ runtime on Windows builds |

@@ -19,6 +19,7 @@ fontItalic = DejaVuSans-Oblique.ttf       # (1.6.1) Italic face for textit / it(
 fontBold   = DejaVuSans-Bold.ttf          # (1.6.1) Bold face for textbf / bold(...)
 fontBoldItalic = DejaVuSans-BoldOblique.ttf # (1.6.1) Combined face — used when a run is both bold + italic
 cap = true          # Capitalize all text output
+audioFade = true    # (2.0.0) Let `play` fade times fade the sound too, not just the picture
 
 # (1.4) Per-particle-type tunables — scene overrides project defaults.
 RAIN.SPEED   = 1.5                  # velocity multiplier
@@ -54,7 +55,7 @@ F2  = "knock-loop.mp3"   # long looping knock — press F2 to start, F2 again to
 F12 = "applause.mp3"
 ```
 
-Press a key during a performance to play; press the **same** key again while its sound is still going to stop it (toggle behaviour, useful for long ambient loops). Pressing a different F-key while one is already playing replaces the running sound.
+Press a key during a performance to play; press the **same** key again while its sound is still going to stop it (toggle behaviour, useful for long ambient loops). *(2.0.0)* Different F-keys layer: their sounds play over each other and over a video's own sound. A sound is identified by its file, so the same file bound to two keys counts as one sound.
 
 ### [Cue] *(1.8.4)*
 
@@ -122,7 +123,7 @@ show anim.gif            Display an animated GIF — frames cycle at file-define
 play file.mp3            Play audio file
 play movie.mkv           Play video file (with embedded audio)
 stop                     Stop all media playback and ungrouped particles
-stop file.mp3            Stop specific audio file
+stop file.mp3            Stop one audio file (has no effect in 2.0.0 — known bug)
 stopParticleCont         Stop spawning ungrouped particles, let live ones finish (1.4)
 stopParticleCont NAME    Same, scoped to a single group                      (1.4)
 comment "note"           Non-executable navigator row                      (1.2)

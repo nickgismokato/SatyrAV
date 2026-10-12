@@ -1,3 +1,4 @@
+#include "render/RectF.hpp"
 #include "render/ParticleSystem.hpp"
 #include <cstdlib>
 #include <cstdint>
@@ -668,11 +669,11 @@ void ParticleSystem::Draw(SDL_Renderer* renderer){
 					float midY = (headY + tail.y) * 0.5f + (float)p.texH * 0.5f;
 					int sw = (int)len + p.texW;
 					int sh = p.texH;
-					SDL_Rect sdst = {(int)midX - sw / 2, (int)midY - sh / 2, sw, sh};
+					SDL_FRect sdst = FRectI((int)midX - sw / 2, (int)midY - sh / 2, sw, sh);
 					double angDeg = std::atan2(dy, dx) * 57.2957795f;
 					uint8_t sa = (uint8_t)(std::clamp(p.alpha * 0.5f, 0.0f, 1.0f) * 255.0f);
 					SDL_SetTextureAlphaMod(tex, sa);
-					SDL_RenderCopyEx(renderer, tex, nullptr, &sdst,
+					SDL_RenderTextureRotated(renderer, tex, nullptr, &sdst,
 						angDeg, nullptr, SDL_FLIP_NONE);
 				}
 			} else{
@@ -689,11 +690,11 @@ void ParticleSystem::Draw(SDL_Renderer* renderer){
 					int tdh = (int)(p.texH * scl);
 					int tdx = (int)s.x - (tdw - p.texW) / 2;
 					int tdy = (int)s.y - (tdh - p.texH) / 2;
-					SDL_Rect tdst = {tdx, tdy, tdw, tdh};
+					SDL_FRect tdst = FRectI(tdx, tdy, tdw, tdh);
 					float fade = std::exp(-s.age * decayRate);
 					uint8_t ta = (uint8_t)(std::clamp(s.alpha * fade, 0.0f, 1.0f) * 255.0f);
 					SDL_SetTextureAlphaMod(tex, ta);
-					SDL_RenderCopyEx(renderer, tex, nullptr, &tdst,
+					SDL_RenderTextureRotated(renderer, tex, nullptr, &tdst,
 						(double)s.rotation, nullptr, SDL_FLIP_NONE);
 				}
 
@@ -707,11 +708,11 @@ void ParticleSystem::Draw(SDL_Renderer* renderer){
 		int dh = (int)(p.texH * p.scale);
 		int dx = (int)p.x - (dw - p.texW) / 2;
 		int dy = (int)p.y - (dh - p.texH) / 2;
-		SDL_Rect dst = {dx, dy, dw, dh};
+		SDL_FRect dst = FRectI(dx, dy, dw, dh);
 
 		uint8_t alpha = (uint8_t)(std::clamp(p.alpha, 0.0f, 1.0f) * 255.0f);
 		SDL_SetTextureAlphaMod(tex, alpha);
-		SDL_RenderCopyEx(renderer, tex, nullptr, &dst,
+		SDL_RenderTextureRotated(renderer, tex, nullptr, &dst,
 			(double)p.rotation, nullptr, SDL_FLIP_NONE);
 	}
 
