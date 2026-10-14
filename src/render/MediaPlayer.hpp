@@ -96,6 +96,21 @@ struct VideoPlayback{
 	// main thread presents nothing from the ring.
 	std::atomic<bool> seekPending{false};
 	double seekTargetSec = 0.0;
+
+	// (2.0.1) Playing without sound. Set when there is no audio device to
+	// play the clip's sound on, or when the device stops taking sound part
+	// way through. The decode thread then discards audio, and the clock
+	// runs on wall time. Before 2.0.1 a clip in this state froze on its
+	// first frame, because its clock is "how much sound has been played".
+	std::atomic<bool> audioSilenced{false};
+	// (2.0.1) True once the clip's clock has moved from the sound card to
+	// wall time — after audioSilenced, or when the sound track simply ended
+	// before the picture did.
+	bool     wallClockFallback = false;
+	// (2.0.1) Clock watchdog: the consumed-byte count last seen, and when it
+	// last changed. Zero tick means "start watching afresh".
+	size_t   wdLastConsumed   = 0;
+	uint64_t wdLastChangeTick = 0;
 	AVFrame* transferFrame         = nullptr; // CPU frame from av_hwframe_transfer_data
 	AVPixelFormat hwTransferFmt    = AV_PIX_FMT_NONE; // actual fmt detected after first transfer
 	int hwTransferW                = 0;       // actual coded width after transfer (may != srcWidth)
@@ -172,7 +187,7 @@ struct VideoPlayback{
 	// renderer's own device — see D3D11Interop. Null means "create your own".
 	bool Setup(const std::string& path, SDL_Renderer* renderer,
 		int slaveW, int slaveH, int capFrames, AVBufferRef* sharedHw = nullptr,
-		bool allowZeroCopy = true);
+		bool allowZeroCopy = true, bool allowAudio = true);
 	void StopAndClose();
 	void DecodeLoop();
 
@@ -302,6 +317,13 @@ private:
 	// screen. Zero-copy is then off for the rest of the session and clips use
 	// the read-back path — a driver that fails once will fail every time.
 	bool zeroCopyDisabled = false;
+
+	// (2.0.1) Opening the audio device is retried every time a clip is set
+	// up; this keeps a machine with no device from logging the failure for
+	// every clip. Cleared when a device opens.
+	bool audioOpenFailureLogged = false;
+	// Detaches a video's sound and moves its clock to wall time.
+	void SilenceVideoAudio(VideoPlayback* vp, const char* reason);
 
 	// Concurrently-playing standalone sounds.
 	std::vector<std::unique_ptr<StandaloneAudio>> sfx;

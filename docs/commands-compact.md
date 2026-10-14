@@ -13,12 +13,15 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 
 ## `[Options]` keys
 
-- `bc = black | blue | red | green | white`
+Same names in a scene and in `schema.toml`; case does not matter *(2.0.1)*.
+
+- `BackgroundColour = <colour>` — unset: the project's, then black
+- `TextColour = <colour>` *(2.0.1)* — default text colour; unset: the project's, then white
 - `FontSize = <int>`
-- `font = <path/to.ttf>` (or bare filename → `FONTS/` *(1.6.1)*)
-- `fontItalic = <path>`, `fontBold = <path>`, `fontBoldItalic = <path>` *(1.6.1)*
-- `cap = true | false`
-- `audioFade = true | false` *(2.0.0)* — `play` fade times also fade the video's sound
+- `Font = <path/to.ttf>` (or bare filename → `FONTS/` *(1.6.1)*)
+- `FontItalic = <path>`, `FontBold = <path>`, `FontBoldItalic = <path>` *(1.6.1)*
+- `Capitalize = true | false`
+- `AudioFade = true | false` *(2.0.0)* — `play` fade times also fade the video's sound
 - `<TYPE>.SPEED = <float>`
 - `<TYPE>.DENS = <float>` (alias `<TYPE>.DENSITY`)
 - `<TYPE>.X.DIST = NAME(p1, p2)`
@@ -27,11 +30,10 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 
 ### Project-level `[Options]` (in `schema.toml` only)
 
-- `FontSize`, `TextOutline`, `Capitalize`, `BackgroundColour` — project defaults for the scene keys above
-- `AudioFade = true | false` *(2.0.0)* — project default for `audioFade`
-- `Font`, `FontItalic`, `FontBold`, `FontBoldItalic` — paths or bare filenames *(1.6.1)*
+- Every scene key above (except the particle tunables) — the project default for it
+- `TextOutline = <int>` — outline thickness in points, `0` = off
 - `SubtitleItalic = true | false` — default italic for `textD` subtitles *(1.6.1)*
-- `SubtitleColour = "#RRGGBB" | <name>` — default `#AAAAAA` *(1.6.1)*
+- `SubtitleColour = <colour>` — default `#AAAAAA`; `grey` here also means `#AAAAAA` *(1.6.1)*
 - `SubtitleTransparency = <0–100>` — percent, default 0 *(1.6.1)*
 - `SubtitlePosY = <0–100>` — percent of canvas, default 90 *(1.6.1)*
 
@@ -81,7 +83,7 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `play FILE`
 - `play FILE FADE_IN_MS, FADE_OUT_MS` *(1.6.6, video only)*
 - `stop`
-- `stop FILE` *(has no effect in 2.0.0 — known bug)*
+- `stop FILE` — stops that one sound; others keep playing
 - `stopParticleCont`
 - `stopParticleCont GROUP`
 - `comment "TEXT"`
@@ -96,7 +98,7 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 
 ## Modifiers
 
-- `color(COLOUR, content)`
+- `colour(COLOUR, content)`
 - `trans(PERCENT, content)`
 - `bold(content)` *(1.6.1, text only)*
 - `it(content)` *(1.6.1, text only)*
@@ -139,8 +141,9 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 
 ## Colours
 
-- `red`, `green`, `blue`, `white`, `black`, `yellow`, `orange`, `purple`, `pink`, `cyan`, `lime`, `grey`
-- `#RRGGBB`
+- `red`, `green`, `blue`, `white`, `black`, `yellow`, `orange`, `purple`, `pink`, `cyan`, `lime`, `grey` (or `gray`) — any case
+- `#RRGGBB`, or `#RGB` *(2.0.1)*
+- Same set for `colour(...)`, `BackgroundColour`, `TextColour` and `SubtitleColour` *(2.0.1)*
 
 ## Position tokens
 

@@ -12,7 +12,7 @@ Full reference for every command, modifier, and section available in a SatyrAV `
 
 Commands are grouped by role: scene-file sections, executable commands, modifiers, and structural blocks (`loop`, `run`, `group`, `macro`).
 
-> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, *(1.6.3)*, *(1.6.6)*, and *(1.7)* indicate the version they were introduced. Everything unmarked was already in 1.0.
+> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, *(1.6.3)*, *(1.6.6)*, *(1.7)*, *(1.8.x)*, *(2.0.0)* and *(2.0.1)* indicate the version they were introduced. Everything unmarked was already in 1.0.
 
 ---
 
@@ -23,18 +23,22 @@ Commands are grouped by role: scene-file sections, executable commands, modifier
 Per-scene settings that override project-level defaults.
 
 - **Syntax:** `[Options]` on its own line, followed by `key = value` pairs.
+- **Names** *(2.0.1)*: an option has one name, the same here and in the project's `schema.toml`, and case does not matter (`TextColour`, `textcolour` and `TEXTCOLOUR` are the same option). A value may be wrapped in quotes, which is needed for a font path with spaces.
 - **Keys:**
-    - `bc` — background colour (`black`, `blue`, `red`, `green`, `white`). Default: black.
+    - `BackgroundColour` — background colour: any [colour](#colours). A scene that does not set it uses the project's `BackgroundColour`, which is black unless the project says otherwise. *(2.0.1: any colour, including hex; before that only black, blue, red, green and white. Before 2.0.1 a scene that did not set it was always black, whatever the project said.)*
+    - `TextColour` *(2.0.1)* — default colour of the scene's slave text: any [colour](#colours). Text with its own `colour(...)` keeps that colour. A scene that does not set it uses the project's `TextColour`, then white. Countdowns use it too; `textD` subtitle lines use `SubtitleColour` instead.
     - `FontSize` — slave font size in points. Overrides the project `FontSize`.
-    - `font` — path (relative to project root, or a bare filename resolved against the shared `FONTS/` directory *(1.6.1)*) to a `.ttf` font file.
-    - `fontItalic`, `fontBold`, `fontBoldItalic` *(1.6.1)* — paths to the italic / bold / bold-italic typeface variants. Used by `textbf`, `textit`, and inline `bold(...)` / `it(...)`. Empty or missing → falls back to project / global config, then to regular.
-    - `cap` — `true` or `false` to capitalize every text line.
-    - `audioFade` *(2.0.0)* — `true` or `false`. When true, the fade times on a `play FILE FADE_IN, FADE_OUT` command ramp the clip's **audio** as well as its picture. Default **false**, so scenes written before 2.0.0 keep fading the picture only and cutting the sound at full volume. Like `cap`, a scene can switch this on but cannot switch off a project that enabled it.
+    - `Font` — path (relative to project root, or a bare filename resolved against the shared `FONTS/` directory *(1.6.1)*) to a `.ttf` font file.
+    - `FontItalic`, `FontBold`, `FontBoldItalic` *(1.6.1)* — paths to the italic / bold / bold-italic typeface variants. Used by `textbf`, `textit`, and inline `bold(...)` / `it(...)`. Empty or missing → falls back to project / global config, then to regular.
+    - `Capitalize` — `true` or `false` to capitalize every text line.
+    - `AudioFade` *(2.0.0)* — `true` or `false`. When true, the fade times on a `play FILE FADE_IN, FADE_OUT` command ramp the clip's **audio** as well as its picture. Default **false**, so scenes written before 2.0.0 keep fading the picture only and cutting the sound at full volume. Like `Capitalize`, a scene can switch this on but cannot switch off a project that enabled it.
     - `<TYPE>.SPEED`, `<TYPE>.DENS` (or `.DENSITY`), `<TYPE>.X.DIST = NAME(p1, p2)` *(1.4)*, `<TYPE>.VX.DIST`, `<TYPE>.VY.DIST` *(1.5)* — per-particle-type tunables. See [Particle tunables in `[Options]`](#particle-tunables-in-options-14) for details.
+- **Hex values:** *(2.0.1)* `TextColour = #FF8800` works unquoted. A `#` straight after the `=` followed by 3 or 6 hex digits is the colour; any later `#` starts a comment as usual.
 - **Example:**
     ```txt
     [Options]
-    bc = black
+    BackgroundColour = black
+    TextColour = #FFD700      # gold
     FontSize = 30
     RAIN.SPEED  = 1.5
     RAIN.X.DIST = NORMAL(0.5, 0.1)
@@ -133,13 +137,13 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 
 - **Syntax:** `text "MESSAGE"` — or `text SEGMENT + SEGMENT + ...` *(1.4)*
 - **Arguments:** `MESSAGE` — quoted string. `\n` inside the string inserts a line break (each line becomes its own entry in the stack).
-- **Behaviour:** Appends a text line onto the slave's text stack. Multiple `text` commands stack vertically, centred by default unless a `pos()` / `move()` modifier overrides. With the *(1.4)* `+` operator, multiple styled segments render side-by-side on a single line — each segment can wrap its own `color(...)` / `trans(...)` (see [the `+` operator](#-concatenation-14)).
+- **Behaviour:** Appends a text line onto the slave's text stack. Multiple `text` commands stack vertically, centred by default unless a `pos()` / `move()` modifier overrides. With the *(1.4)* `+` operator, multiple styled segments render side-by-side on a single line — each segment can wrap its own `colour(...)` / `trans(...)` (see [the `+` operator](#-concatenation-14)).
 - **Output:** The message appears on the slave screen with the current font, colour, and outline.
 - **Example:**
     ```txt
     text "Welcome!"
     text "Line 1\nLine 2"
-    text color(RED, "Hello, ") + color(BLUE, "World!")
+    text colour(RED, "Hello, ") + colour(BLUE, "World!")
     ```
 
 ### `textCont` *(1.4)*
@@ -180,16 +184,16 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 
 ### `textD "PRIMARY", "SECONDARY"` *(1.6.1)*
 
-- **Syntax:** Two quoted strings separated by a comma. Whitespace around the comma is irrelevant. Either side accepts the full `+` / `bold(...)` / `it(...)` / `color(...)` machinery.
+- **Syntax:** Two quoted strings separated by a comma. Whitespace around the comma is irrelevant. Either side accepts the full `+` / `bold(...)` / `it(...)` / `colour(...)` machinery.
 - **Behaviour:** Pushes the primary text as a normal centred-stack entry (identical to `text`) **and** pushes the secondary text as a separate bottom-anchored subtitle with project-configured italic / colour / transparency / position defaults applied. Intended for bilingual revues — the primary line is the language the audience hears, the secondary line is the translation.
 - **Single-arg form:** if only one quoted string is given, `textD` collapses to plain `Text` semantics (no subtitle entry pushed).
 - **Subtitle stacking:** multiple `textD` cues stack — the most-recently pushed subtitle sits at the configured `SubtitlePosY`; older subtitles move one line up each. `clearText` / `clear` / `clearAll` clear subtitles along with regular text since they share the same entry list.
 - **Project defaults** (in `[Options]`):
     - `SubtitleItalic` — bool, default `true`.
-    - `SubtitleColour` — named colour or `#RRGGBB`, default `#AAAAAA` (light grey).
+    - `SubtitleColour` — any [colour](#colours), default `#AAAAAA` (light grey). `grey` here means that same `#AAAAAA`.
     - `SubtitleTransparency` — percent (0 = opaque, 100 = invisible), default `0`.
     - `SubtitlePosY` — percent of canvas height where the bottom edge of the newest subtitle sits, default `90.0`.
-- **Per-run override:** inline modifiers inside the secondary string still win — e.g. `color(YELLOW, "Watch out!")` keeps the project's italic default but overrides the colour.
+- **Per-run override:** inline modifiers inside the secondary string still win — e.g. `colour(YELLOW, "Watch out!")` keeps the project's italic default but overrides the colour.
 - **Example:**
     ```txt
     textD "Vi har started nu!", "We have started now!"
@@ -286,7 +290,7 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 
 - **Syntax:** `stop` or `stop FILE`
 - **Arguments:** Optional filename. With no argument, stops all playback (video and every sound) and particle systems. With a filename, stops only that audio track.
-- **Known issue in 2.0.0:** `stop FILE` currently has no effect — the named track keeps playing. Plain `stop` works. See *Known bugs* in [TODO.md](TODO.md).
+- **File names** resolve the same way as `play`: against the project folder, then `pictures/`, `movies/` and `sound/`, so `stop music.mp3` stops the sound that `play music.mp3` started. Other sounds keep playing. *(Broken in 2.0.0 — it had no effect — and fixed in 2.0.1.)*
 - **Note:** *(1.4)* Particle systems that are already in smooth-stop mode (see `stopParticleCont`) are **not** affected by `stop`/`clear`/`clearAll` — their endings always play out to completion.
 - **Example:**
     ```txt
@@ -321,7 +325,7 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
     - `LANG` — optional language tag: `"en"` → prefix `"Countdown: "`, `"da"` → prefix `"Nedtælling: "`. Any other value (or omitting the argument entirely) renders only the digits — useful when the countdown is meant as a neutral overlay without an explicit label.
 - **Behaviour:** Pushes a live timer onto the slave. The display ticks down once per second in real time, formatted as zero-padded `MM:SS` (e.g. `02:00`, `00:05`). When the timer reaches `00:00` it **holds at zero** until cleared — the operator decides when to advance. Multiple `countdown(...)` calls stack vertically at the top of the slave in the order they were pushed.
 - **Clear semantics:** `clear` (no name), `clearAll`, and the new `clearCountdown` all remove every countdown. `clearText` and `clearImages` deliberately do NOT touch them, so a timer can survive routine text refreshes during the scene.
-- **Output:** Centred horizontally at the top of the canvas (≈ 8 % from the top edge), rendered in white at the project font size.
+- **Output:** Centred horizontally at the top of the canvas (≈ 8 % from the top edge), at the project font size, in the scene's `TextColour` *(2.0.1; white unless set)*.
 - **Example:**
     ```txt
     countdown(300, "da")     # "Nedtælling: 05:00" → ticks to "00:00"
@@ -345,7 +349,7 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 - **Syntax:** `typewrite(MS_PER_CHAR, TEXT)`
 - **Arguments:**
     - `MS_PER_CHAR` — milliseconds between revealed characters. `0` reveals everything at once (identical to `text`); values are clamped to `0`–`5000`.
-    - `TEXT` — the **full text expression**, exactly as `text` accepts it: quoted strings in any of the three delimiters, `+` concatenation, and every modifier (`color`, `bold`, `it`, `trans`, `pos`, `move`, `spin`, …). The split between the two arguments is on the first **structural** comma, so a comma inside `color(RED, "a, b")` stays part of the text.
+    - `TEXT` — the **full text expression**, exactly as `text` accepts it: quoted strings in any of the three delimiters, `+` concatenation, and every modifier (`colour`, `bold`, `it`, `trans`, `pos`, `move`, `spin`, …). The split between the two arguments is on the first **structural** comma, so a comma inside `colour(RED, "a, b")` stays part of the text.
 - **Behaviour:** Pushes an ordinary text line that reveals itself one character at a time from the moment the cue fires. In every other respect it *is* a text line — it stacks in the same centred layout, word-wraps the same way, honours groups, and is removed by the same `clear` / `clearText` / `clearAll`.
 - **Behaviour:** Revealing is **character-based, not byte-based**, so LaTeX symbols and `æøå` are never cut mid-character.
 - **Behaviour:** A multi-line `typewrite` (one containing `\n`) reveals in reading order — the second line does not begin until the first has finished.
@@ -354,7 +358,7 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 - **Example:**
     ```txt
     typewrite(45, "The letter arrived at dawn...")
-    typewrite(80, color(RED, "DANGER") + " — do not open")
+    typewrite(80, colour(RED, "DANGER") + " — do not open")
     typewrite(30, pos([50, 80], "subtitle style reveal"))
     typewrite(0, "instant — same as text")
     ```
@@ -400,7 +404,7 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
     ```txt
     clear & text "Next slide" & play sting.mp3
     text "Tom & Jerry"                        # one command, ampersand shown
-    clear & text color(RED, "Salt & Pepper")  # one separator, one literal
+    clear & text colour(RED, "Salt & Pepper")  # one separator, one literal
     ```
 
 ### `run{ ... }` *(1.2)*
@@ -473,11 +477,29 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 
 Modifiers wrap around command arguments. They can be nested freely. For `text` they affect colour/rotation/position/animation; for `show` they additionally affect size and particles.
 
-### `color(COLOUR, content)`
+### Colours
 
-- **Arguments:** named colour (`red`, `green`, `blue`, `white`, `black`, `yellow`, `orange`, `purple`, `pink`, `cyan`, `lime`, `grey`) or `#RRGGBB`. Names are case-insensitive; hex accepts either case.
-- **Example:** `text color(RED, "Warning!")`
-- **Example:** `text color(#FF5500, "Custom colour")` — *(fixed in 1.8.2; before that the `#` was read as a comment marker and the rest of the cue was discarded)*
+*(2.0.1)* Every colour in SatyrAV — the `colour(...)` modifier and the `BackgroundColour`, `TextColour` and `SubtitleColour` options — accepts the same values:
+
+| Name | Value | | Name | Value |
+|---|---|---|---|---|
+| `black` | `#000000` | | `orange` | `#FFA500` |
+| `white` | `#FFFFFF` | | `purple` | `#800080` |
+| `red` | `#FF0000` | | `pink` | `#FF69B4` |
+| `green` | `#00FF00` | | `cyan` | `#00FFFF` |
+| `blue` | `#0000FF` | | `lime` | `#32CD32` |
+| `yellow` | `#FFFF00` | | `grey` / `gray` | `#808080` |
+
+- **Hex:** `#RRGGBB`, or the short `#RGB`, where each digit is doubled (`#F80` = `#FF8800`).
+- Names and hex digits are case-insensitive.
+- **One exception:** `SubtitleColour = "grey"` is the lighter `#AAAAAA` it has always been, so existing subtitles do not change shade.
+
+### `colour(COLOUR, content)`
+
+- **Arguments:** any [colour](#colours).
+- **Example:** `text colour(RED, "Warning!")`
+- **Example:** `text colour(#FF5500, "Custom colour")` — *(fixed in 1.8.2; before that the `#` was read as a comment marker and the rest of the cue was discarded)*
+- Without `colour(...)`, text uses the scene's [`TextColour`](#options) *(2.0.1)*, which is white unless set.
 
 ### `trans(PERCENT, content)`
 
@@ -486,7 +508,7 @@ Modifiers wrap around command arguments. They can be nested freely. For `text` t
 
 ### `bold(content)` *(1.6.1)*
 
-- **Behaviour:** Marks a single text segment as bold. Composes with `color(...)`, `trans(...)`, and `it(...)` like any other modifier — order doesn't matter. Only meaningful on `text` / `textCont` / `textD` runs (or their styled variants); ignored elsewhere.
+- **Behaviour:** Marks a single text segment as bold. Composes with `colour(...)`, `trans(...)`, and `it(...)` like any other modifier — order doesn't matter. Only meaningful on `text` / `textCont` / `textD` runs (or their styled variants); ignored elsewhere.
 - **Example:** `text "Plain " + bold("BANG!") + " then plain again"`
 
 ### `it(content)` *(1.6.1)*
@@ -672,12 +694,12 @@ show particle(RAIN, 50, random(heart.png, [50,50], [200,200], true))
 - **Syntax:** `text SEGMENT + SEGMENT + ...` (also works inside `textCont`).
 - **Arguments:** each `SEGMENT` is any expression you would otherwise pass to `text` — a bare quoted string, or a modifier chain wrapping one.
 - **Behaviour:** Splits the argument at top-level `+` tokens (respecting quotes, parens, and brackets), parses every segment independently, and renders them side-by-side on a single line.
-    - **Per-segment modifiers:** `color(...)` and `trans(...)` apply only to their own segment — adjacent segments can therefore differ in colour or transparency.
+    - **Per-segment modifiers:** `colour(...)` and `trans(...)` apply only to their own segment — adjacent segments can therefore differ in colour or transparency.
     - **Line-level modifiers:** `pos(...)`, `move(...)`, `rotate(...)`, `spin(...)`, and `size(...)` act on the whole line. When two segments both try to set the same line-level modifier, **the leftmost wins** — the value from segments further right is silently ignored. Put line-level modifiers on the first segment when possible.
 - **Example:**
     ```txt
-    text color(RED, "Hello, ") + color(BLUE, "World!")
-    text pos([20, 80], "Warning: ") + color(RED, "engine overheating")
+    text colour(RED, "Hello, ") + colour(BLUE, "World!")
+    text pos([20, 80], "Warning: ") + colour(RED, "engine overheating")
     # pos from the first segment wins; a pos on the second segment would be ignored.
     ```
 
@@ -688,7 +710,7 @@ show particle(RAIN, 50, random(heart.png, [50,50], [200,200], true))
 - `\n` inside a quoted `text` string produces a new text entry.
 - `#` starts a line/end-of-line comment — everything after it on the line is discarded. Two exceptions, both cases where the `#` is data rather than a comment marker:
     - *(1.6.6)* `#` inside a quoted string is kept verbatim, so `text "Item #1"` renders the `#` literally.
-    - *(1.8.2)* `#` **inside a modifier argument list** (i.e. between `(` and its matching `)`) is kept verbatim, so `text color(#FF5500, "Warm")` passes the hex colour through. Parentheses are only counted outside strings, so a `)` in displayed text — `text "smile :)"` — cannot confuse the rule. A comment that merely starts with something hex-shaped, such as `#FFFFFF looks nice`, is still a comment.
+    - *(1.8.2)* `#` **inside a modifier argument list** (i.e. between `(` and its matching `)`) is kept verbatim, so `text colour(#FF5500, "Warm")` passes the hex colour through. Parentheses are only counted outside strings, so a `)` in displayed text — `text "smile :)"` — cannot confuse the rule. A comment that merely starts with something hex-shaped, such as `#FFFFFF looks nice`, is still a comment.
 - Blank lines are ignored.
 
 ## LaTeX symbols *(1.8.2)*

@@ -3,7 +3,7 @@
 An AV cue controller for SaTyR revyer. Dual-display output with keyboard-first
 navigation through acts, scenes, and commands.
 
-**Current version:** 2.0.0 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
+**Current version:** 2.0.1 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
 
 Full documentation lives in [docs/](docs/README.md).
 
@@ -16,6 +16,9 @@ Full documentation lives in [docs/](docs/README.md).
 - Keyboard-first navigation through acts, scenes, and commands. `ENTER` fires a
   cue and advances; `U` reloads every `.ngk` in the current project without
   leaving the performance screen.
+- Mark-line log *(2.0.1)*: press `O` during a show to note the last cue's file,
+  line and code in the project's `fix-it/ErrorInFiles-<date>.LOG`, so problems
+  spotted live can be fixed afterwards.
 - `comment "..."` cues show in the master navigator as non-executable rows and
   are skipped during navigation.
 - **Cue Notes column** *(1.8.4)*: a fourth, read-only column right of the
@@ -65,7 +68,7 @@ Full documentation lives in [docs/](docs/README.md).
   order, with a per-video cap (`preload_max_seconds`, default 60). See
   [docs/video-pipeline.md](docs/video-pipeline.md).
 - Styled text with `+` concatenation in `text` and `textCont` — multiple
-  styled segments on a single line, each with its own `color` and `trans`.
+  styled segments on a single line, each with its own `colour` and `trans`.
   Line-level modifiers (`pos`, `move`, `rotate`, `spin`, `size`) apply to the
   whole line.
 - `textCont "..."` appends to the most recently pushed text entry across cues,
@@ -157,7 +160,10 @@ Full documentation lives in [docs/](docs/README.md).
   toggle (folder becomes `<Revy>Jubi_<year>`), and a custom-name field under
   `Other`.
 - Project `schema.toml` defines revy-wide options and particle defaults; scene
-  `[Options]` overrides per scene.
+  `[Options]` overrides per scene. *(2.0.1)* An option has the same name in
+  both places, in any case, and every colour option — including the new
+  `TextColour` default text colour — takes the same colour names, `#RRGGBB`
+  and `#RGB`.
 
 ## Building
 

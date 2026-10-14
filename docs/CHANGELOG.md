@@ -2,6 +2,51 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 2.0.1 — shipped
+
+A bug-fix release for 2.0.0, plus two small additions asked for by the AV team: a default text colour per scene, and a key that notes a line to fix while the show is running. Existing projects and scene files load unchanged — every option name and colour that worked in 2.0.0 still means the same thing. The one change in behaviour is the background colour cascade, under *Changed*.
+
+### Added
+- **`TextColour` option** — the default colour of slave text, in a scene's `[Options]` or in `schema.toml`. Takes any colour, so `TextColour = #FF8800` works. Resolved scene → project → white. Text with its own `colour(...)` keeps that colour, and `textD` subtitle lines keep using `SubtitleColour`.
+    - The colour is fixed when a line is shown, so text still on screen keeps its colour when the next scene starts.
+    - Countdowns use it too; they were always white before.
+- **Mark-line log on `O`.** During a show, `O` writes the last executed cue to `fix-it/ErrorInFiles-YYYY-MM-DD.LOG` in the project folder: the time, the scene file, the line number, and the line of code as written. The master confirms with `Marked Example.ngk line 42 in fix-it` for a few seconds.
+    - One file per day; later runs on the same day append to it. The `fix-it` folder is made when a project is opened, and the day's file only by the first mark, so a show with nothing to fix leaves no file.
+    - The code is quoted as it was when the scene was loaded (or last reloaded with `U`), so editing the file mid-show does not change what a mark says.
+    - `D → O` still opens the Overview popup; that chord is handled before the key reaches the performance screen.
+- **One set of colours everywhere.** The `colour(...)` modifier, `BackgroundColour`, `TextColour` and `SubtitleColour` all read colours through one function (`ParseColour`): 13 names (`grey` and `gray` included), `#RRGGBB`, and the new short `#RGB`. Before, the background accepted only black, blue, red, green and white, and each option had its own list.
+    - `grey` is `#808080` everywhere except `SubtitleColour`, where it stays the lighter `#AAAAAA` it has always been, so existing subtitles keep their shade.
+    - A hex colour straight after an option's `=` — `BackgroundColour = #102030` — is no longer swallowed as a comment. A later `#` on the line is still a comment.
+
+### Changed
+- **One name per option, in any case.** Each option has one documented name, the same in a scene's `[Options]` and in `schema.toml`: `BackgroundColour`, `TextColour`, `FontSize`, `TextOutline`, `Font`, `FontItalic`, `FontBold`, `FontBoldItalic`, `Capitalize`, `AudioFade`, and the four `Subtitle*` keys. Case does not matter. The docs now use only these names and the `colour` spelling.
+    - Every 2.0.0 spelling keeps working without a warning: `bc`, `cap`, `font`, `backgroundColor`, `textColor`, `subtitleColor`, and the `color(...)` modifier. They are simply no longer documented.
+    - If `schema.toml` gives both an old spelling and the documented name, the documented name wins, whichever comes first.
+    - A quoted option value now means its contents, so `Font = "My Font.ttf"` works in a scene as it already did in `schema.toml`.
+- **A scene without `BackgroundColour` now follows the project.** Background resolves scene → project → black, like the font. Before, a scene always won, and a scene that set nothing was black whatever `schema.toml` said. Projects whose `BackgroundColour` is black, and scenes that set their own, look exactly as before.
+- **New projects** get `TextColour = "white"` in `schema.toml` and a `fix-it/` folder. The generated tutorial scenes no longer set a background, so changing the project's colour changes them all; they use the documented option names and `colour(...)`.
+- VSCode extension **0.4.1**: highlights `colour(` and `color(`, and every option name in any case, `TextColour` included.
+
+### Fixed
+- **No audio device froze every video on its first frame.** The video clock runs on sound, and with no device the sound never drained. Now, if no output can be opened, videos play silently on the wall clock and the log says so once. The same happens if the device stops taking sound mid-clip: after 0.75 s without progress the clip drops its sound and keeps going from where it was.
+    - **SatyrAV also starts without sound.** Before, a failure to start SDL's audio system stopped the program at start-up.
+- **`stop FILE` did nothing** *(2.0.0 regression)*. The file name is now resolved the way `play` resolves it, so it matches the sound that is playing; other sounds keep going.
+- **`K` paused F-key sounds, and `M` paused a video's sound** *(2.0.0 regression)*. Pausing now detaches only that source from the shared audio device instead of pausing the device, so `K` pauses the video and its sound, `M` pauses the standalone sounds, and neither touches the other. Resuming re-anchors the video clock, so picture and sound stay in sync.
+
+### Known issues
+
+Carried over from 2.0.0 and tracked under *Known bugs* in [TODO.md](TODO.md):
+
+- **The capture mirror stutters during video and particles.**
+- **On the read-back and software video paths the picture is decoded at the targeted-display rect's size.**
+- **The last frames of every clip are dropped.**
+
+Windowed dev mode was re-tested on the SDL3 build and works as it should.
+
+### Tests
+- Two new files in the core suite, 211 test cases in all. `test_option_names.cpp` covers the option table, both parsers' handling of names and colours, hex in `[Options]`, `TextColour`, and the background cascade; `test_mark_log.cpp` covers the log's names, appending, the per-day file, and which file, line and code a mark records.
+- The audio fixes are not in the core suite, which has no audio device. They were checked with a harness built around the real `MediaPlayer` on Windows: no audio system, a device that stops mid-clip, a sound track shorter than its picture, `K` with an F-key sound playing, `M` with a video playing, and plain playback staying on the sound clock.
+
 ## Version 2.0.0 — shipped
 
 The SDL3 release. The whole render, input and audio backend moved from SDL2 to SDL3, and the two things that depended on that move landed with it: hardware-decoded video that stays on the GPU, and sound sources that mix instead of replacing one another. It is a backend release — existing projects, scene files and config files are read exactly as before — with one deliberate change in behaviour (overlapping audio) and one new opt-in option (`AudioFade`). A handful of problems are known and ship as they are; they are listed under *Known issues* below.

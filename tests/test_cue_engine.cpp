@@ -355,6 +355,39 @@ TEST_CASE("Background colour comes from the scene once one is selected"){
 	CHECK((int)e.GetEffectiveBackgroundColour().r == 0x44); // scene
 }
 
+TEST_CASE("(2.0.1) Background colour: scene, then project, then black"){
+	auto run = [](Colour sceneCol, Colour projectCol){
+		auto p = MakeProject(1, 1);
+		p.schema.backgroundColor = projectCol;
+		p.schema.akts[0].scenes[0].backgroundColor = sceneCol;
+		CueEngine e;
+		e.LoadProject(p);
+		e.SelectAkt(0);
+		e.SelectScene(0);
+		return e.GetEffectiveBackgroundColour();
+	};
+	const Colour unset = {0, 0, 0, 0};
+	const Colour blue  = {0, 0, 0xFF, 0xFF};
+	const Colour red   = {0xFF, 0, 0, 0xFF};
+
+	SUBCASE("a scene that sets nothing takes the project colour"){
+		CHECK((int)run(unset, blue).b == 0xFF);
+	}
+	SUBCASE("a scene colour wins, explicit black included"){
+		CHECK((int)run(red, blue).r == 0xFF);
+		Colour black = run(Colours::BLACK, blue);
+		CHECK((int)black.b == 0);
+		CHECK((int)black.a == 0xFF);
+	}
+	SUBCASE("nothing set anywhere is opaque black"){
+		Colour c = run(unset, RevySchema{}.backgroundColor);
+		CHECK((int)c.r == 0);
+		CHECK((int)c.g == 0);
+		CHECK((int)c.b == 0);
+		CHECK((int)c.a == 0xFF);
+	}
+}
+
 TEST_CASE("Capitalize ORs scene onto project"){
 	// A scene can turn capitalisation on, but cannot turn a project-wide
 	// setting back off — worth pinning so the asymmetry is deliberate.

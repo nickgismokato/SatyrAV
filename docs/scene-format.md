@@ -1,6 +1,6 @@
 # Scene file format (.ngk)
 
-Scene files use a simple INI-like format with four sections. Lines starting with `#` are comments (end-of-line comments are also supported). A `#` is treated as literal data rather than a comment marker in two places: inside a quoted string *(1.6.6)*, and inside a modifier's parentheses *(1.8.2)* — which is what makes `color(#RRGGBB, …)` work. See [commands.md](commands.md#line-endings-and-comments).
+Scene files use a simple INI-like format with four sections. Lines starting with `#` are comments (end-of-line comments are also supported). A `#` is treated as literal data rather than a comment marker in three places: inside a quoted string *(1.6.6)*, inside a modifier's parentheses *(1.8.2)* — which is what makes `colour(#RRGGBB, …)` work — and as a hex colour straight after the `=` of an `[Options]` line *(2.0.1)*, as in `TextColour = #FF8800`. See [commands.md](commands.md#line-endings-and-comments).
 
 > **Canonical reference:** This document is a tutorial introduction to the format. For the complete and authoritative list of every command, modifier, and block — with syntax and a runnable example per entry — see [commands.md](commands.md).
 
@@ -8,18 +8,19 @@ Scene files use a simple INI-like format with four sections. Lines starting with
 
 ### [Options]
 
-Per-scene settings that override project-level defaults. All are optional.
+Per-scene settings that override project-level defaults. All are optional. *(2.0.1)* Each option has the same name here as in the project's `schema.toml`, and case does not matter.
 
 ```ini
 [Options]
-bc = black          # Background colour: black, blue, red, green, white
-FontSize = 30       # Font size for slave display text
-font = path/to/font.ttf  # Regular face — relative path or bare FONTS/ filename (1.6.1)
-fontItalic = DejaVuSans-Oblique.ttf       # (1.6.1) Italic face for textit / it(...)
-fontBold   = DejaVuSans-Bold.ttf          # (1.6.1) Bold face for textbf / bold(...)
-fontBoldItalic = DejaVuSans-BoldOblique.ttf # (1.6.1) Combined face — used when a run is both bold + italic
-cap = true          # Capitalize all text output
-audioFade = true    # (2.0.0) Let `play` fade times fade the sound too, not just the picture
+BackgroundColour = black # Any colour name, #RRGGBB or #RGB. Unset = the project's (black by default)
+TextColour = #FFD700     # (2.0.1) Default text colour. Unset = the project's, then white
+FontSize = 30            # Font size for slave display text
+Font = path/to/font.ttf  # Regular face — relative path or bare FONTS/ filename (1.6.1)
+FontItalic = DejaVuSans-Oblique.ttf         # (1.6.1) Italic face for textit / it(...)
+FontBold   = DejaVuSans-Bold.ttf            # (1.6.1) Bold face for textbf / bold(...)
+FontBoldItalic = DejaVuSans-BoldOblique.ttf # (1.6.1) Combined face — used when a run is both bold + italic
+Capitalize = true        # Capitalize all text output
+AudioFade = true         # (2.0.0) Let `play` fade times fade the sound too, not just the picture
 
 # (1.4) Per-particle-type tunables — scene overrides project defaults.
 RAIN.SPEED   = 1.5                  # velocity multiplier
@@ -104,8 +105,8 @@ text "message"           Display text on the slave screen
 text "line 1\nline 2"    Multi-line text (literal \n in the string)
 text A + B               Styled concatenation — side-by-side runs          (1.4)
 textCont "more"          Append to the previous text line                  (1.4)
-textbf "message"         Bold text (uses fontBold face)                    (1.6.1)
-textit "message"         Italic text (uses fontItalic face)                (1.6.1)
+textbf "message"         Bold text (uses FontBold face)                    (1.6.1)
+textit "message"         Italic text (uses FontItalic face)                (1.6.1)
 textbfCont "message"     Append, inheriting bold style                     (1.6.1)
 textitCont "message"     Append, inheriting italic style                   (1.6.1)
 textD "primary","sub"    Primary line + bottom-anchored italic translation (1.6.1)
@@ -123,7 +124,7 @@ show anim.gif            Display an animated GIF — frames cycle at file-define
 play file.mp3            Play audio file
 play movie.mkv           Play video file (with embedded audio)
 stop                     Stop all media playback and ungrouped particles
-stop file.mp3            Stop one audio file (has no effect in 2.0.0 — known bug)
+stop file.mp3            Stop one audio file; other sounds keep playing
 stopParticleCont         Stop spawning ungrouped particles, let live ones finish (1.4)
 stopParticleCont NAME    Same, scoped to a single group                      (1.4)
 comment "note"           Non-executable navigator row                      (1.2)
@@ -146,20 +147,20 @@ play music.mp3 & show background.png
 
 ```
 text "Tom & Jerry"                        # one command
-clear & text color(RED, "Salt & Pepper")  # one separator, one literal
+clear & text colour(RED, "Salt & Pepper")  # one separator, one literal
 ```
 
 ## Modifiers
 
 Modifiers wrap around command arguments and can be nested. They apply render properties to text or images.
 
-### color(COLOUR, content)
+### colour(COLOUR, content)
 
-Set text colour. Named colours: red, green, blue, white, black, yellow, orange, purple, pink, cyan, lime, grey. Also supports hex: `#RRGGBB`.
+Set text colour. Named colours: red, green, blue, white, black, yellow, orange, purple, pink, cyan, lime, grey (or gray). Also supports hex: `#RRGGBB`, and *(2.0.1)* the short `#RGB`. The same colours work in every colour option — see [Colours](commands.md#colours). Text without `colour(...)` uses the scene's `TextColour` *(2.0.1)*, white unless set.
 
 ```
-text color(RED, "Warning!")
-text color(#FF5500, "Custom colour")
+text colour(RED, "Warning!")
+text colour(#FF5500, "Custom colour")
 ```
 
 > The hex form only started working in **1.8.2** — before that the comment stripper cut the cue at the `#`. Scenes written against older versions that worked around it with a named colour keep working unchanged.
@@ -174,7 +175,7 @@ show trans(50, image.png)
 
 ### bold(content) / it(content) *(1.6.1)*
 
-Per-segment style for `text` runs. Compose with `color`, `trans`, and each other in any order. Only meaningful inside text commands; ignored elsewhere.
+Per-segment style for `text` runs. Compose with `colour`, `trans`, and each other in any order. Only meaningful inside text commands; ignored elsewhere.
 
 ```
 text "Plain " + bold("BANG!") + " then plain"
@@ -336,11 +337,11 @@ show move(S, [25, 25], 800, spin(180, heart.png))
 
 ### `+` concatenation *(1.4)*
 
-Inside `text`, `textCont`, `textbf`, `textit`, `textbfCont`, `textitCont`, and either side of `textD`, multiple styled segments can be joined on a single line with `+`. Each segment carries its own `color()` / `trans()` / `bold()` / `it()`; line-level modifiers (`pos`, `move`, `rotate`, `spin`, `size`) apply to the whole line, and when more than one segment sets the same one, the **leftmost** value wins.
+Inside `text`, `textCont`, `textbf`, `textit`, `textbfCont`, `textitCont`, and either side of `textD`, multiple styled segments can be joined on a single line with `+`. Each segment carries its own `colour()` / `trans()` / `bold()` / `it()`; line-level modifiers (`pos`, `move`, `rotate`, `spin`, `size`) apply to the whole line, and when more than one segment sets the same one, the **leftmost** value wins.
 
 ```
-text color(RED, "Hello, ") + color(BLUE, "World!")
-text pos([20, 80], "Warning: ") + color(RED, "engine overheating")
+text colour(RED, "Hello, ") + colour(BLUE, "World!")
+text pos([20, 80], "Warning: ") + colour(RED, "engine overheating")
 ```
 
 ### `textCont` *(1.4)*

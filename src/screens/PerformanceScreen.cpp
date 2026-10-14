@@ -1,6 +1,7 @@
 #include "screens/PerformanceScreen.hpp"
 #include "App.hpp"
 #include "core/Config.hpp"
+#include "core/Logger.hpp"
 #include <filesystem>
 
 namespace SatyrAV{
@@ -38,6 +39,10 @@ void PerformanceScreen::OnEnter(){
 	primedAkt = -1;
 	primedScene = -1;
 	primedCmd = -1;
+
+	// (2.0.1) Nothing has run in this session yet.
+	haveLastExecuted = false;
+	markStatus.clear();
 }
 
 void PerformanceScreen::OnExit(){
@@ -55,6 +60,13 @@ void PerformanceScreen::OnExit(){
 void PerformanceScreen::SetProject(const ProjectData& project){
 	projectBasePath = project.projectPath;
 	targetedDisplay = project.schema.targetedDisplay;
+
+	// (2.0.1) The fix-it folder for the `O` mark-line log. Opening a
+	// project only makes the folder; the day's file waits for a mark.
+	if(!MarkLog::EnsureFolder(projectBasePath)){
+		Logger::Instance().Warnf("Could not create the fix-it folder in %s",
+			projectBasePath.c_str());
+	}
 
 	// If the project has never had a targeted rect saved, default to
 	// filling the production-slave canvas (intendedSlave dims in windowed
@@ -89,6 +101,7 @@ void PerformanceScreen::HandleInput(InputAction action){
 		case InputAction::ToggleVideo: media.ToggleVideoPause(); break;
 		case InputAction::ToggleMusic: media.ToggleAudioPause(); break;
 		case InputAction::ReloadScenes: ReloadScenes(); break;
+		case InputAction::MarkLine:  MarkLastExecutedLine(); break;
 		case InputAction::FunctionKey:{
 			// (1.6.3) F1..F12 audio hotkey. Same key pressed twice while
 			// the same hotkey audio is still playing → stop (toggle).
@@ -155,6 +168,14 @@ void PerformanceScreen::Draw(Renderer& r, TextRenderer& text){
 	} else if(awaitingFirstCommand){
 		text.DrawTextCentered(renderer, "Scene ready — Press ENTER to begin",
 			r.GetMasterWidth() / 2, statusY, Colours::ORANGE);
+	}
+
+	// (2.0.1) Confirmation for an `O` mark, just above the status line so
+	// it never hides the "Press ENTER" prompts.
+	if(!markStatus.empty() && SDL_GetTicks() / 1000.0f < markStatusUntil){
+		text.DrawTextCentered(renderer, markStatus,
+			r.GetMasterWidth() / 2, statusY - 28,
+			markStatusOk ? Colours::LIME_GREEN : Colours::ORANGE);
 	}
 
 	// Slave display — text always on top of media.
@@ -243,6 +264,8 @@ void PerformanceScreen::ApplySceneOptionsCascade(){
 		cfg.ResolveFontPath(engine.GetEffectiveFontPath(true,  true)));
 	slaveUI.SetBackgroundColour(engine.GetEffectiveBackgroundColour());
 	slaveUI.SetCapitalize(engine.GetEffectiveCapitalize());
+	// (2.0.1) Scene -> project -> white default for uncoloured text.
+	slaveUI.SetDefaultTextColour(engine.GetEffectiveTextColour());
 	// (2.0.0) Re-evaluated alongside the other cascaded options, so a scene
 	// that opts into audio fading takes effect as soon as it is entered.
 	media.SetAudioFade(engine.GetEffectiveAudioFade());
@@ -431,6 +454,15 @@ void PerformanceScreen::ExecuteCommand(){
 	engine.SetCommandIndex(primedCmd);
 	engine.ExecuteCurrentCommand();
 
+	// (2.0.1) Remember what just ran, for the `O` mark-line log. Copied,
+	// so a later U reload cannot change what a mark points at.
+	if(const Scene* sc = engine.GetCurrentScene()){
+		if(const Command* c = engine.GetCurrentCommand()){
+			lastExecuted = MarkLog::MarkFor(*sc, *c);
+			haveLastExecuted = true;
+		}
+	}
+
 	// Advance to the next executable command (skip comments). If nothing
 	// executable remains in this scene, flag for scene advance.
 	int nextExec = engine.NextExecutableIndex(primedAkt, primedScene, primedCmd + 1);
@@ -438,6 +470,29 @@ void PerformanceScreen::ExecuteCommand(){
 		primedCmd = nextExec;
 	} else{
 		awaitingSceneAdvance = true;
+	}
+}
+
+void PerformanceScreen::MarkLastExecutedLine(){
+	markStatusUntil = SDL_GetTicks() / 1000.0f + 3.0f;
+	if(!haveLastExecuted){
+		markStatus = "Nothing to mark yet: no cue has run";
+		markStatusOk = false;
+		return;
+	}
+
+	const std::string where = lastExecuted.fileName + " line "
+		+ std::to_string(lastExecuted.lineNumber);
+	std::string path;
+	if(MarkLog::Append(projectBasePath, lastExecuted, &path)){
+		markStatus = "Marked " + where + " in fix-it";
+		markStatusOk = true;
+		Logger::Instance().Infof("Marked %s in %s", where.c_str(), path.c_str());
+	} else{
+		markStatus = "Could not write the fix-it log";
+		markStatusOk = false;
+		Logger::Instance().Warnf("Could not write the mark-line log in %s",
+			MarkLog::FolderFor(projectBasePath).c_str());
 	}
 }
 
@@ -723,7 +778,10 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 				media.StopAll();
 				slaveUI.StopParticles();
 			} else{
-				media.StopAudio(cmd.argument);
+				// (2.0.1) Resolve the name the same way `play` does: sounds are
+				// identified by full path since 2.0.0, so the bare name from
+				// the scene never matched and `stop FILE` did nothing.
+				media.StopAudio(ResolvePath(projectBasePath, cmd.argument));
 			}
 			break;
 		case CommandType::StopParticleCont:

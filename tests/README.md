@@ -60,6 +60,8 @@ cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/saty
 | `test_project.cpp` | project scaffolding and the 1.8.0 generators |
 | `test_latex_symbols.cpp` | *(1.8.2)* LaTeX symbol macros in displayed text |
 | `test_cue_notes.cpp` | *(1.8.4)* the `[Cue]` section, `\Name` references and their warnings |
+| `test_option_names.cpp` | *(2.0.1)* one name per option in scenes and `schema.toml`, the shared colour reader, hex in `[Options]`, `TextColour` and the background cascade |
+| `test_mark_log.cpp` | *(2.0.1)* the `O` mark-line log — file and folder names, appending, one file per day, what a mark points at |
 
 ## What is deliberately not tested
 

@@ -28,6 +28,11 @@ struct SlaveTextEntry{
 	// translation line. Independent of grouping/clear semantics.
 	bool subtitleAnchor = false;
 
+	// (2.0.1) Colour for runs with no colour of their own: the scene's
+	// TextColour, captured when the line is pushed so text still on screen
+	// keeps its colour when the next scene starts.
+	Colour defaultColour = Colours::WHITE;
+
 	// (1.8.2) Typewriter reveal. 0 — the default for every command except
 	// `typewrite` — means the entry is fully visible from the moment it is
 	// pushed, and the draw path skips the reveal logic entirely.
@@ -81,6 +86,8 @@ struct SlaveCountdownEntry{
 	float startTimeSec = 0.0f;  // SDL_GetTicks-based seconds at push
 	// "" = digits only ("00:42"). "en" → "Countdown: ", "da" → "Nedtælling: ".
 	std::string label;
+	// (2.0.1) The scene's TextColour when the countdown started.
+	Colour colour = Colours::WHITE;
 };
 
 class SlaveWindow{
@@ -123,6 +130,8 @@ public:
 	void ClearTextAll();
 	void SetBackgroundColour(Colour c);
 	void SetCapitalize(bool cap);
+	// (2.0.1) Colour for text pushed from now on that has no colour(...).
+	void SetDefaultTextColour(Colour c);
 
 	// Image with modifiers. Both ungrouped and grouped shows append, so a
 	// scene can stack multiple `show` calls on screen. `clear` /
@@ -179,6 +188,7 @@ private:
 	std::vector<SlaveTextEntry> textEntries;
 	Colour bgColour = Colours::BLACK;
 	bool capitalizeText = false;
+	Colour defaultTextColour = Colours::WHITE;
 
 	// Active images (previously a single texture; now a list so grouped
 	// shows can stack and ungrouped shows replace their own kind only).

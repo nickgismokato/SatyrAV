@@ -108,7 +108,7 @@ static bool IsEightBit420(int pixFmt){
 
 bool VideoPlayback::Setup(const std::string& p, SDL_Renderer* renderer,
 	int slaveW, int slaveH, int capFrames, AVBufferRef* sharedHw,
-	bool allowZeroCopy){
+	bool allowZeroCopy, bool allowAudio){
 	path = p;
 
 	if(avformat_open_input(&formatCtx, path.c_str(), nullptr, nullptr) < 0) return false;
@@ -344,7 +344,9 @@ bool VideoPlayback::Setup(const std::string& p, SDL_Renderer* renderer,
 
 	// ── Audio ────────────────────────────────────────────────
 	hasAudio = false;
-	if(audioStreamIdx >= 0){
+	// (2.0.1) With no audio device to play on, the clip is set up silent:
+	// its sound is never decoded and its clock runs on wall time.
+	if(audioStreamIdx >= 0 && allowAudio){
 		if(OpenCodec(formatCtx, audioCodecCtx, audioStreamIdx)){
 			int sr = audioCodecCtx->sample_rate;
 			int ch = audioCodecCtx->ch_layout.nb_channels;
@@ -409,7 +411,7 @@ void VideoPlayback::DecodeLoop(){
 
 	// Decodes one audio packet and pushes its PCM into the audio stream.
 	auto decodeAudioPacket = [&](AVPacket* pkt){
-		if(!hasAudio || !audioFrame) return;
+		if(!hasAudio || !audioFrame || audioSilenced.load()) return;
 		if(avcodec_send_packet(audioCodecCtx, pkt) < 0) return;
 		while(avcodec_receive_frame(audioCodecCtx, audioFrame) == 0){
 			if(audioFrame->pts != AV_NOPTS_VALUE && audioCodecCtx->sample_rate > 0){
@@ -438,11 +440,11 @@ void VideoPlayback::DecodeLoop(){
 				// depth the old ring was sized to, and park until the device
 				// drains it, exactly as the ring used to make us wait.
 				const int capBytes = audioSampleRate * audioChannels * 2 * 8;
-				while(!stopThread && !seekPending.load() &&
+				while(!stopThread && !seekPending.load() && !audioSilenced.load() &&
 				      SDL_GetAudioStreamQueued(audioStream) > capBytes){
 					SDL_Delay(5);
 				}
-				if(!stopThread && !seekPending.load()){
+				if(!stopThread && !seekPending.load() && !audioSilenced.load()){
 					if(SDL_PutAudioStreamData(audioStream, outPtr, total)){
 						audioBytesPushed.fetch_add((uint64_t)total);
 					} else{
@@ -474,7 +476,8 @@ void VideoPlayback::DecodeLoop(){
 	bool fileEof = false;
 	const size_t kPendingCapBytes = 256u * 1024u * 1024u;
 	auto audioRunningLow = [&]() -> bool{
-		if(!hasAudio || !audioStream) return false;
+		// A silenced clip has no audio to keep up, so no reason to read ahead.
+		if(!hasAudio || !audioStream || audioSilenced.load()) return false;
 		return SDL_GetAudioStreamQueued(audioStream) <
 			audioSampleRate * audioChannels * 2 * 2;
 	};
@@ -550,6 +553,11 @@ void VideoPlayback::DecodeLoop(){
 		// and the start-up wait rely on. A parked thread costs nothing; it
 		// leaves when the video is destroyed.
 		if(atEof){
+			// (2.0.1) The resampler keeps the last few milliseconds of sound
+			// until it is told no more is coming. Flushing lets them play.
+			if(hasAudio && audioStream && !audioSilenced.load()){
+				SDL_FlushAudioStream(audioStream);
+			}
 			SDL_LockMutex(mtx);
 			threadRunning = false;
 			SDL_SignalCondition(frameAvailable);
@@ -795,6 +803,9 @@ bool MediaPlayer::EnsureAudioDevice(){
 	if(audioDevice != 0 && cfg.audioDeviceName == openedDeviceName) return true;
 
 	if(audioDevice != 0) CloseAudioDevice();
+	// (2.0.1) Retried for every clip; only the first failure in a row is
+	// logged, so a machine without a device does not fill the log.
+	const bool quiet = audioOpenFailureLogged;
 
 	// (1.6.3) Honour `Config::audioDeviceName`. Empty = system default. If
 	// the named device is gone (unplugged USB interface, switched HDMI
@@ -802,7 +813,7 @@ bool MediaPlayer::EnsureAudioDevice(){
 	// silently failing.
 	SDL_AudioDeviceID devId = FindPlaybackDeviceByName(cfg.audioDeviceName);
 	if(devId == 0){
-		Logger::Instance().Warnf(
+		if(!quiet) Logger::Instance().Warnf(
 			"MediaPlayer: configured device '%s' not found; falling back to default",
 			cfg.audioDeviceName.c_str());
 		devId = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
@@ -813,15 +824,22 @@ bool MediaPlayer::EnsureAudioDevice(){
 	// to impose one clip's sample rate on the device.
 	audioDevice = SDL_OpenAudioDevice(devId, nullptr);
 	if(audioDevice == 0 && devId != SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK){
-		Logger::Instance().Warnf(
+		if(!quiet) Logger::Instance().Warnf(
 			"MediaPlayer: device '%s' failed to open (%s); falling back to default",
 			cfg.audioDeviceName.c_str(), SDL_GetError());
 		audioDevice = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
 	}
 	if(audioDevice == 0){
-		Logger::Instance().Errorf("MediaPlayer: SDL audio open failed: %s", SDL_GetError());
+		if(!quiet){
+			Logger::Instance().Errorf(
+				"MediaPlayer: no audio output device could be opened (%s) — "
+				"videos will play without sound, standalone sounds will not play",
+				SDL_GetError());
+		}
+		audioOpenFailureLogged = true;
 		return false;
 	}
+	audioOpenFailureLogged = false;
 
 	SDL_zero(deviceSpec);
 	SDL_GetAudioDeviceFormat(audioDevice, &deviceSpec, nullptr);
@@ -832,6 +850,19 @@ bool MediaPlayer::EnsureAudioDevice(){
 		deviceSpec.freq, deviceSpec.channels);
 	SDL_ResumeAudioDevice(audioDevice);
 	return true;
+}
+
+// (2.0.1) Takes a video's sound out of play and moves its clock to wall
+// time, so the picture keeps going. Safe to call more than once.
+void MediaPlayer::SilenceVideoAudio(VideoPlayback* vp, const char* reason){
+	if(!vp || vp->audioSilenced.exchange(true)) return;
+	if(vp->audioStream){
+		SDL_UnbindAudioStream(vp->audioStream);
+		SDL_ClearAudioStream(vp->audioStream);
+	}
+	vp->wallClockFallback = true;
+	Logger::Instance().Warnf("MediaPlayer: %s — playing %s without sound",
+		reason, vp->path.c_str());
 }
 
 void MediaPlayer::CloseAudioDevice(){
@@ -954,6 +985,11 @@ bool MediaPlayer::SeekVideo(double seconds){
 	vp->startTick = SDL_GetPerformanceCounter() -
 		(uint64_t)(seconds * (double)SDL_GetPerformanceFrequency());
 	vp->nextPTS = seconds;
+	// (2.0.1) A clip that fell back to wall time because its sound track had
+	// ended can return to the sound clock after a seek. A silenced clip
+	// cannot: it has no sound to follow.
+	if(!vp->audioSilenced.load()) vp->wallClockFallback = false;
+	vp->wdLastChangeTick = 0;
 	return true;
 }
 
@@ -1045,7 +1081,8 @@ void MediaPlayer::PreloadVideosForScenes(const std::vector<std::string>& priorit
 
 		auto vp = std::make_unique<VideoPlayback>();
 		if(!vp->Setup(path, renderer, slaveW, slaveH, ringFrames,
-				SharedHwDeviceFor(renderer), !zeroCopyDisabled)){
+				SharedHwDeviceFor(renderer), !zeroCopyDisabled,
+				EnsureAudioDevice())){
 			continue;
 		}
 		videos.emplace(path, std::move(vp));
@@ -1082,12 +1119,19 @@ void MediaPlayer::ActivateVideo(VideoPlayback* vp){
 	// (2.0.0) Bind the already-populated stream rather than opening a device.
 	// A preloaded clip has been queueing audio into this stream while
 	// unbound, so playback starts from a full buffer.
-	if(vp->hasAudio && vp->audioStream && EnsureAudioDevice()){
-		if(!SDL_BindAudioStream(audioDevice, vp->audioStream)){
+	//
+	// (2.0.1) If the sound cannot be attached, the clip plays silent on the
+	// wall clock rather than freezing on its first frame.
+	if(vp->hasAudio && vp->audioStream && !vp->audioSilenced.load()){
+		if(!EnsureAudioDevice()){
+			SilenceVideoAudio(vp, "no audio output device");
+		} else if(!SDL_BindAudioStream(audioDevice, vp->audioStream)){
 			Logger::Instance().Errorf("MediaPlayer: failed to bind video audio: %s",
 				SDL_GetError());
+			SilenceVideoAudio(vp, "the video's sound could not be attached to the audio device");
 		}
 	}
+	vp->wdLastChangeTick = 0;
 
 	// Wait up to 1 s for frames
 	// (2.0.0) Capped at the ring's depth. A zero-copy ring holds 32 frames, so
@@ -1147,7 +1191,8 @@ bool MediaPlayer::PlayVideo(const std::string& path, SDL_Renderer* renderer,
 
 	auto vp = std::make_unique<VideoPlayback>();
 	if(!vp->Setup(path, renderer, slaveW, slaveH, ringFrames,
-			SharedHwDeviceFor(renderer), !zeroCopyDisabled)) return false;
+			SharedHwDeviceFor(renderer), !zeroCopyDisabled,
+				EnsureAudioDevice())) return false;
 	VideoPlayback* raw = vp.get();
 	videos.emplace(path, std::move(vp));
 	ActivateVideo(raw);
@@ -1173,8 +1218,47 @@ void MediaPlayer::UpdateVideoFrame(SDL_Renderer* renderer){
 	// presented frame simply stays up for the few milliseconds this takes.
 	if(vp->seekPending.load()) return;
 
+	// (2.0.1) Clock watchdog. The clock is driven by how much sound the device
+	// has taken. If that stops moving while the clip plays, the clip would
+	// freeze — so after a short grace period the clock moves to wall time at
+	// the current position. If sound is still queued, the device has stopped
+	// taking it (unplugged, failed), and the clip is silenced too. If the
+	// queue is empty, the sound track has simply ended before the picture.
+	const double kAudioStallSec = 0.75;
+	if(vp->hasAudio && vp->audioStartPTSSet && !vp->wallClockFallback &&
+	   vp->audioStream){
+		const uint64_t now = SDL_GetPerformanceCounter();
+		const double freq = (double)SDL_GetPerformanceFrequency();
+		const uint64_t pushed = vp->audioBytesPushed.load();
+		int queued = SDL_GetAudioStreamQueued(vp->audioStream);
+		if(queued < 0) queued = 0;
+		const size_t consumed = pushed > (uint64_t)queued
+			? (size_t)(pushed - (uint64_t)queued) : 0;
+		if(vp->wdLastChangeTick == 0 || consumed != vp->wdLastConsumed){
+			vp->wdLastConsumed = consumed;
+			vp->wdLastChangeTick = now;
+		} else if((double)(now - vp->wdLastChangeTick) / freq > kAudioStallSec){
+			double pos = GetAudioClock();
+			if(pos < 0.0) pos = vp->nextPTS;
+			vp->startTick = now - (uint64_t)(pos * freq);
+			// More than a quarter of a second still queued means the device
+			// stopped taking it. Less is the few milliseconds SDL's resampler
+			// holds back at the end of a sound track — not a fault.
+			const int deadDeviceBytes =
+				vp->audioSampleRate * vp->audioChannels * 2 / 4;
+			if(queued > deadDeviceBytes){
+				SilenceVideoAudio(vp, "the audio device stopped playing sound");
+			} else{
+				Logger::Instance().Infof(
+					"MediaPlayer: sound track of %s ended before the picture — "
+					"continuing on the wall clock", vp->path.c_str());
+			}
+			vp->wallClockFallback = true;
+		}
+	}
+
 	double clock;
-	if(vp->hasAudio && vp->audioStartPTSSet){
+	if(vp->hasAudio && vp->audioStartPTSSet && !vp->wallClockFallback){
 		clock = GetAudioClock();
 		if(clock < 0.0){
 			clock = (double)(SDL_GetPerformanceCounter() - vp->startTick) /
@@ -1330,13 +1414,20 @@ void MediaPlayer::ToggleVideoPause(){
 		active->startTick = SDL_GetPerformanceCounter() -
 			(uint64_t)(active->nextPTS * SDL_GetPerformanceFrequency());
 	}
-	// KNOWN BUG (2.0.0, see docs/TODO.md): despite taking a stream, this call
-	// pauses the whole logical *device* the stream is bound to — and every
-	// sound shares that device, so K-pause silences layered SFX as well.
-	// The fix is to unbind / re-bind this one stream instead.
-	if(active->hasAudio && active->audioStream){
-		if(videoPaused) SDL_PauseAudioStreamDevice(active->audioStream);
-		else            SDL_ResumeAudioStreamDevice(active->audioStream);
+	// (2.0.1) Pause only this video's sound. SDL_PauseAudioStreamDevice, used
+	// in 2.0.0, pauses the whole device the stream is bound to — and every
+	// sound shares that device, so K silenced F-key sounds too. Detaching the
+	// stream stops it being played but keeps its queued sound, and the clock
+	// (pushed minus queued) simply stops while it is detached.
+	if(active->hasAudio && active->audioStream && !active->audioSilenced.load()){
+		if(videoPaused) SDL_UnbindAudioStream(active->audioStream);
+		else if(audioDevice) SDL_BindAudioStream(audioDevice, active->audioStream);
+	}
+	if(!videoPaused){
+		// Re-anchor the smoothed clock now, rather than interpolating across
+		// the pause, and give the watchdog a fresh start.
+		active->audioClockAnchored = false;
+		active->wdLastChangeTick = 0;
 	}
 }
 
@@ -1466,12 +1557,12 @@ void MediaPlayer::StopAudio(const std::string& path){
 
 void MediaPlayer::ToggleAudioPause(){
 	audioPaused = !audioPaused;
-	// KNOWN BUG (2.0.0, see docs/TODO.md): same as ToggleVideoPause — this
-	// pauses the shared device, so it also silences video audio.
+	// (2.0.1) Detach / re-attach each standalone sound's own stream, so a
+	// video's sound keeps playing (see ToggleVideoPause for why).
 	for(auto& s : sfx){
 		if(!s->stream) continue;
-		if(audioPaused) SDL_PauseAudioStreamDevice(s->stream);
-		else            SDL_ResumeAudioStreamDevice(s->stream);
+		if(audioPaused) SDL_UnbindAudioStream(s->stream);
+		else if(audioDevice) SDL_BindAudioStream(audioDevice, s->stream);
 	}
 }
 

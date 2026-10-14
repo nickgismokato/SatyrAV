@@ -68,6 +68,7 @@ InputAction InputHandler::TranslateKey(SDL_Keycode key, uint16_t mod){
 	if(key == Keys::HELP)       return InputAction::Help;
 	if(key == Keys::DEBUG)      return InputAction::Debug;
 	if(key == Keys::RELOAD_SCENES) return InputAction::ReloadScenes;
+	if(key == Keys::MARK_LINE)  return InputAction::MarkLine;
 	if(key == Keys::QUIT)       return InputAction::Quit;
 
 	return InputAction::None;

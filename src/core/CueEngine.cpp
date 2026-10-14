@@ -217,8 +217,18 @@ int CueEngine::GetEffectiveFontSize() const{
 
 Colour CueEngine::GetEffectiveBackgroundColour() const{
 	auto* scene = GetCurrentScene();
-	if(scene) return scene->backgroundColor;
+	// (2.0.1) Scene -> project -> black, the same cascade as the font.
+	// The project's own default is black (RevySchema).
+	if(scene && scene->backgroundColor.a > 0) return scene->backgroundColor;
 	return projectData.schema.backgroundColor;
+}
+
+Colour CueEngine::GetEffectiveTextColour() const{
+	// Alpha 0 = "not set" at both levels.
+	auto* scene = GetCurrentScene();
+	if(scene && scene->textColour.a > 0) return scene->textColour;
+	if(projectData.schema.textColour.a > 0) return projectData.schema.textColour;
+	return Colours::WHITE;
 }
 
 int CueEngine::GetTextOutline() const{

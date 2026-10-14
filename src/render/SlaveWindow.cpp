@@ -114,11 +114,13 @@ void SlaveWindow::Clear(Renderer& r, Colour bg){
 // Resolve a run's effective text colour: the per-run colour (set by
 // color(...) on this segment) takes precedence, then the entry-level
 // mods.textColour (set by a legacy color(...) wrapping the whole line),
-// then the default white. Alpha 0 = "not set".
-static Colour ResolveRunColour(const TextRun& run, const RenderModifiers& mods){
+// then the entry's default (the scene's TextColour, white unless set).
+// Alpha 0 = "not set".
+static Colour ResolveRunColour(const TextRun& run, const RenderModifiers& mods,
+	Colour fallback){
 	if(run.colour.a > 0) return run.colour;
 	if(mods.textColour.a > 0) return mods.textColour;
-	return Colours::WHITE;
+	return fallback;
 }
 
 // (1.6.4) Slave word-wrap. Splits each run into whitespace / non-whitespace
@@ -491,7 +493,7 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 			int cursorX = lineX;
 			for(size_t k = 0; k < lineRuns.size(); k++){
 				const TextRun& run = lineRuns[k];
-				Colour c = ResolveRunColour(run, entry.mods);
+				Colour c = ResolveRunColour(run, entry.mods, entry.defaultColour);
 
 				if(rotation != 0.0f){
 					text.DrawTextSlaveRotated(renderer, run.text, cursorX, lineY, c,
@@ -534,7 +536,7 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 				body += digits;
 
 				text.DrawTextCenteredSlave(renderer, body, centerX, yCursor,
-					Colours::WHITE, false, false);
+					e.colour, false, false);
 				yCursor += lineH;
 			}
 		}
@@ -654,6 +656,7 @@ void SlaveWindow::PushTextRuns(const std::vector<TextRun>& runs,
 		entry.mods = mods;
 		entry.spawnTimeSec = now;
 		entry.groupName = groupName;
+		entry.defaultColour = defaultTextColour;
 		textEntries.push_back(std::move(entry));
 	};
 
@@ -781,6 +784,10 @@ void SlaveWindow::SetBackgroundColour(Colour c){
 
 void SlaveWindow::SetCapitalize(bool cap){
 	capitalizeText = cap;
+}
+
+void SlaveWindow::SetDefaultTextColour(Colour c){
+	defaultTextColour = c;
 }
 
 void SlaveWindow::ShowImage(SDL_Texture* tex, int w, int h,
@@ -943,6 +950,7 @@ void SlaveWindow::StartCountdown(int seconds, const std::string& label){
 	e.durationSec  = seconds;
 	e.startTimeSec = SDL_GetTicks() / 1000.0f;
 	e.label        = label;
+	e.colour       = defaultTextColour;
 	countdownEntries.push_back(std::move(e));
 }
 

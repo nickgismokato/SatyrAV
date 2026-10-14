@@ -217,6 +217,25 @@ TEST_CASE("Every scene named in the schema exists on disk"){
 
 // ── Generated scenes ─────────────────────────────────────────
 
+TEST_CASE("(2.0.1) New projects: black once in schema.toml, scenes inherit it"){
+	TempDir tmp("bgcascade");
+	CreateIn(tmp);
+	auto schema = SchemaParser::ParseFile(
+		(tmp.Path() / "MyRevy" / "schema.toml").string());
+	CHECK((int)schema.backgroundColor.r == 0);
+	CHECK((int)schema.backgroundColor.g == 0);
+	CHECK((int)schema.backgroundColor.b == 0);
+	CHECK((int)schema.backgroundColor.a == 0xFF);
+	for(const char* name : kSceneNames){
+		CAPTURE(name);
+		auto scene = SceneParser::ParseFile(
+			(tmp.Path() / "MyRevy" / "scenes" / (std::string(name) + ".ngk"))
+				.string());
+		CHECK((int)scene.backgroundColor.a == 0); // not set: follows the project
+	}
+}
+
+
 TEST_CASE("(1.8.0) Every generated scene parses without warnings"){
 	// A typo in a generated scene would greet every new user with a
 	// warning in the Overview Debug popup.

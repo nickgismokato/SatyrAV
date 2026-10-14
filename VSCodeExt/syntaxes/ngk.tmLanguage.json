@@ -59,7 +59,7 @@
 			}
 		},
 		"option-keys": {
-			"match": "^\\s*(bc|FontSize|font|fontItalic|fontBold|fontBoldItalic|cap|audioFade)(?=\\s*=)",
+			"match": "(?i)^\\s*(fontsize|fontbolditalic|fontbold|fontitalic|font|textoutline|capitalize|cap|audiofade|backgroundcolou?r|bc|textcolou?r|subtitleitalic|subtitlecolou?r|subtitletransparency|subtitleposy)(?=\\s*=)",
 			"captures": {
 				"1": { "name": "variable.parameter.option.ngk" }
 			}
@@ -69,7 +69,7 @@
 			"name": "constant.language.particle.ngk"
 		},
 		"modifiers": {
-			"match": "(?<![A-Za-z0-9_])(color|trans|rotate|move|pathMove|spin|pos|size|scale|layer|particle|randomImages|randomSize|random|bold|it|trail|trailGlow|bounce)(?=\\s*\\()",
+			"match": "(?<![A-Za-z0-9_])(colour|color|trans|rotate|move|pathMove|spin|pos|size|scale|layer|particle|randomImages|randomSize|random|bold|it|trail|trailGlow|bounce)(?=\\s*\\()",
 			"name": "support.function.modifier.ngk"
 		},
 		"strings": {

@@ -93,6 +93,10 @@ Streams convert independently into the device's format, so clips with different 
 
 The optional `AudioFade` project/scene option ramps a video stream's gain together with the picture fade. SDL applies stream gain when the device pulls audio, not when it is queued, so a fade is heard immediately even though seconds of audio are already queued.
 
+*(2.0.1)* **Pausing one source.** `K` pauses the video and its sound; `M` pauses the standalone sounds. Neither pauses the device, because pausing the device would silence every source on it. A paused source's stream is unbound instead (its queued audio is kept) and bound again on resume, so the other sources play on.
+
+*(2.0.1)* **No sound device.** If no audio output can be opened — no device at start-up, or a device that stops taking audio mid-clip — videos play without sound on the wall clock instead of waiting for audio that never drains. This is logged once. Standalone sounds cannot play in that state.
+
 ## Clock
 
 Sound is the master. For a clip with audio:
@@ -103,7 +107,7 @@ position = audioStartPTS + (bytesPushed − bytesStillQueued) / bytesPerSecond
 
 `bytesPushed` is what the decode thread has handed to the stream; `SDL_GetAudioStreamQueued` reports what the device has not yet taken. The difference is what the sound card has actually consumed, so the clock is driven by the hardware and does not drift. Between the device's pulls the value is interpolated with wall-clock time so it advances smoothly every frame.
 
-A clip without audio uses the wall clock. Either way, each frame the main thread takes the newest ring frame whose timestamp is not later than the clock, skips any older ones, and presents it.
+A clip without audio uses the wall clock. *(2.0.1)* So does a clip whose sound stops reaching the device: a watchdog notices when the consumed count has not moved for 0.75 s, re-anchors the wall clock at the current position and carries on, so the picture never freezes waiting for sound. A sound track that is simply shorter than the picture takes the same route. Either way, each frame the main thread takes the newest ring frame whose timestamp is not later than the clock, skips any older ones, and presents it.
 
 ## Seeking
 
@@ -149,6 +153,5 @@ In `config.toml`:
 - **10-bit sources lose their extra depth.** They are kept off the zero-copy path and converted to 8-bit. This has not been tested with a real 10-bit file.
 - **The last frames of a clip are dropped,** because the decoder is not flushed at end of file. A few frames with hardware decode; up to one per decoder thread with software decode.
 - **On the read-back and software paths the video is decoded at the size of the targeted-display rect,** so a shrunk rect lowers the resolution the capture mirror receives. Zero-copy is not affected.
-- **`K` pauses every sound, not only the video's.** See [TODO.md](TODO.md).
 - **The capture mirror still reads the composed frame back through system RAM** every frame. That is separate from video decoding and is the leading suspect for the capture mirror's stutter.
 - **Seeking has no commands yet,** and a seek made while paused shows its picture only on resume.

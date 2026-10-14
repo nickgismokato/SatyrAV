@@ -57,6 +57,9 @@ public:
 	// Options cascade: scene -> project -> global
 	int GetEffectiveFontSize() const;
 	Colour GetEffectiveBackgroundColour() const;
+	// (2.0.1) Default slave text colour: scene TextColour, then project
+	// TextColour, then white.
+	Colour GetEffectiveTextColour() const;
 	int GetTextOutline() const;
 	int GetProjectFontSize() const;
 	int GetSceneFontSize() const;

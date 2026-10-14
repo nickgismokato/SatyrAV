@@ -1,4 +1,5 @@
 #include "core/SceneParser.hpp"
+#include "core/OptionKeys.hpp"
 #include "core/LatexSymbols.hpp"
 #include "core/Platform.hpp"
 #include <fstream>
@@ -98,6 +99,35 @@ static size_t FindStructural(const std::string& line, char target, size_t from =
 
 // Start of a `#` line comment, or npos. See FindStructural.
 static size_t FindCommentStart(const std::string& line){
+	return FindStructural(line, '#');
+}
+
+// (2.0.1) Comment start for a line in a scene's `[Options]` section, where a
+// value may itself begin with `#`: a hex colour such as
+// `TextColour = #FF8800`. Before 2.0.1 that `#` was read as a comment, so
+// the option silently received an empty value.
+//
+// Only a `#` that starts the value and is followed by exactly 3 or 6 hex
+// digits is protected. A later `#` still starts a comment
+// (`bc = #102030   # warm blue`), and so does any `#` before the `=`.
+static size_t FindOptionCommentStart(const std::string& line){
+	const size_t eq = line.find('=');
+	if(eq != std::string::npos &&
+	   FindStructural(line.substr(0, eq), '#') == std::string::npos){
+		size_t v = eq + 1;
+		while(v < line.size() && std::isspace((unsigned char)line[v])) v++;
+		if(v < line.size() && line[v] == '#'){
+			size_t h = v + 1;
+			while(h < line.size() && std::isxdigit((unsigned char)line[h])) h++;
+			const size_t digits = h - v - 1;
+			const bool ends = (h == line.size() ||
+				std::isspace((unsigned char)line[h]) || line[h] == '#');
+			if((digits == 3 || digits == 6) && ends){
+				const size_t rest = FindStructural(line.substr(h), '#');
+				return rest == std::string::npos ? std::string::npos : h + rest;
+			}
+		}
+	}
 	return FindStructural(line, '#');
 }
 
@@ -303,44 +333,28 @@ static bool ParseMovePoint(const std::string& raw, float& x, float& y, int& side
 }
 
 // Recursively parse modifiers from an argument string.
-static Colour ParseNamedColour(const std::string& name){
-	std::string lower = name;
-	std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-	if(lower == "red")    return {0xFF, 0x00, 0x00, 0xFF};
-	if(lower == "green")  return {0x00, 0xFF, 0x00, 0xFF};
-	if(lower == "blue")   return {0x00, 0x00, 0xFF, 0xFF};
-	if(lower == "white")  return {0xFF, 0xFF, 0xFF, 0xFF};
-	if(lower == "black")  return {0x00, 0x00, 0x00, 0xFF};
-	if(lower == "yellow") return {0xFF, 0xFF, 0x00, 0xFF};
-	if(lower == "orange") return {0xFF, 0xA5, 0x00, 0xFF};
-	if(lower == "purple") return {0x80, 0x00, 0x80, 0xFF};
-	if(lower == "pink")   return {0xFF, 0x69, 0xB4, 0xFF};
-	if(lower == "cyan")   return {0x00, 0xFF, 0xFF, 0xFF};
-	if(lower == "lime")   return {0x32, 0xCD, 0x32, 0xFF};
-	if(lower == "grey" || lower == "gray") return {0x80, 0x80, 0x80, 0xFF};
-	// Try hex: #RRGGBB
-	if(name.size() == 7 && name[0] == '#'){
-		try{
-			unsigned long hex = std::stoul(name.substr(1), nullptr, 16);
-			return Colour::FromHex((uint32_t)hex);
-		} catch(...){}
-	}
-	return {0xFF, 0xFF, 0xFF, 0xFF}; // default white
-}
-
 // Returns the final "content" (filename or text) and fills mods.
 static std::string ParseModifiers(const std::string& input, RenderModifiers& mods){
 	std::string s = Trim(input);
 
-	// color(COLOUR, content)
-	if(s.rfind("color(", 0) == 0){
-		auto close = FindMatchingParen(s, 5);
-		if(close != std::string::npos){
-			std::string inner = s.substr(6, close - 6);
-			auto args = SplitArgs(inner);
-			if(args.size() >= 2){
-				mods.textColour = ParseNamedColour(Trim(args[0]));
-				return ParseModifiers(args[1], mods);
+	// colour(COLOUR, content). (2.0.1) `colour` is the documented spelling;
+	// `color` is still accepted so every existing scene reads the same.
+	{
+		size_t open = std::string::npos;
+		if(s.rfind("colour(", 0) == 0)     open = 6;
+		else if(s.rfind("color(", 0) == 0) open = 5;
+		if(open != std::string::npos){
+			auto close = FindMatchingParen(s, open);
+			if(close != std::string::npos){
+				std::string inner = s.substr(open + 1, close - open - 1);
+				auto args = SplitArgs(inner);
+				if(args.size() >= 2){
+					// An unrecognised colour has always meant white here.
+					Colour c = Colours::WHITE;
+					ParseColour(args[0], c);
+					mods.textColour = c;
+					return ParseModifiers(args[1], mods);
+				}
 			}
 		}
 	}
@@ -1349,6 +1363,7 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 	while(std::getline(file, rawLine)){
 		allLines.push_back(rawLine);
 	}
+	scene.sourceLines = allLines;
 
 	// (1.8.4) [Cue] is collected in a pre-pass. A command's `\Name`
 	// reference is only recognised when the name is actually defined, so
@@ -1406,7 +1421,8 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 		std::string line = allLines[i];
 		int lineNumber = (int)i + 1;
 
-		auto commentPos = FindCommentStart(line);
+		auto commentPos = (currentSection == Section::Options)
+			? FindOptionCommentStart(line) : FindCommentStart(line);
 		std::string comment;
 		if(commentPos != std::string::npos){
 			comment = Trim(line.substr(commentPos + 1));
@@ -1428,28 +1444,45 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 				if(eq != std::string::npos){
 					auto key = Trim(line.substr(0, eq));
 					auto val = Trim(line.substr(eq + 1));
-					if(key == "bc"){
-						if(val == "black")      scene.backgroundColor = Colours::BLACK;
-						else if(val == "blue")   scene.backgroundColor = {0x00, 0x00, 0xFF, 0xFF};
-						else if(val == "red")    scene.backgroundColor = {0xFF, 0x00, 0x00, 0xFF};
-						else if(val == "green")  scene.backgroundColor = {0x00, 0xFF, 0x00, 0xFF};
-						else if(val == "white")  scene.backgroundColor = Colours::WHITE;
-					} else if(key == "FontSize"){
+					// (2.0.1) A quoted value means its contents, so `bc = "#102030"`
+					// and font paths with spaces both work. Unquoted values are
+					// read exactly as before.
+					if(val.size() >= 2 &&
+					   ((val.front() == '"' && val.back() == '"') ||
+					    (val.front() == '\'' && val.back() == '\''))){
+						val = val.substr(1, val.size() - 2);
+					}
+					// (2.0.1) Option names come from the shared table in
+					// OptionKeys: the same name works here and in schema.toml,
+					// case does not matter, and the old spellings (`bc`, `cap`,
+					// `font`, ...) still work. A scene honours the options below;
+					// the rest (TextOutline, Subtitle*) are project-wide.
+					const OptionKey opt = LookupOptionKey(key);
+					if(opt == OptionKey::BackgroundColour){
+						// Unrecognised colours leave the background as it was.
+						Colour c;
+						if(ParseColour(val, c)) scene.backgroundColor = c;
+					} else if(opt == OptionKey::TextColour){
+						// (2.0.1) Unrecognised colours leave it unset, so the
+						// project's TextColour (or white) still applies.
+						Colour c;
+						if(ParseColour(val, c)) scene.textColour = c;
+					} else if(opt == OptionKey::FontSize){
 						try{ scene.fontSize = std::stoi(val); } catch(...){}
-					} else if(key == "font"){
+					} else if(opt == OptionKey::Font){
 						scene.fontPath = val;
-					} else if(key == "fontItalic"){
+					} else if(opt == OptionKey::FontItalic){
 						scene.fontPathItalic = val;
-					} else if(key == "fontBold"){
+					} else if(opt == OptionKey::FontBold){
 						scene.fontPathBold = val;
-					} else if(key == "fontBoldItalic"){
+					} else if(opt == OptionKey::FontBoldItalic){
 						scene.fontPathBoldItalic = val;
-					} else if(key == "cap"){
-						scene.capitalize = (val == "true" || val == "1");
-					} else if(key == "audioFade"){
+					} else if(opt == OptionKey::Capitalize){
+						scene.capitalize = ParseOptionBool(val);
+					} else if(opt == OptionKey::AudioFade){
 						// (2.0.0) Opt-in audio fading for `play` fade times.
-						scene.audioFade = (val == "true" || val == "1");
-					} else{
+						scene.audioFade = ParseOptionBool(val);
+					} else if(opt == OptionKey::Unknown){
 						// (1.4) Particle tunables: <TYPE>.SPEED, <TYPE>.DENS,
 						// <TYPE>.X.DIST = NAME(p1, p2). Case-insensitive type.
 						auto dot = key.find('.');

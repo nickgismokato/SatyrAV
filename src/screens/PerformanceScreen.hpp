@@ -1,6 +1,7 @@
 #pragma once
 #include "screens/Screen.hpp"
 #include "core/CueEngine.hpp"
+#include "core/MarkLog.hpp"
 #include "core/Types.hpp"
 #include "render/MasterWindow.hpp"
 #include "render/SlaveWindow.hpp"
@@ -89,6 +90,16 @@ private:
 	// audio active. Reset to 0 when the audio is stopped (manually or by
 	// running out naturally — see IsAudioPlaying check at dispatch).
 	int currentHotkeyNum = 0;
+
+	// (2.0.1) Mark-line log (`O`). The last executed cue is captured when
+	// it runs; `O` appends it to fix-it/ErrorInFiles-<date>.LOG and shows
+	// a short confirmation on the master.
+	void MarkLastExecutedLine();
+	MarkedLine lastExecuted;
+	bool haveLastExecuted = false;
+	std::string markStatus;
+	bool markStatusOk = false;
+	float markStatusUntil = 0.0f;
 };
 
 } // namespace SatyrAV

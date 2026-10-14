@@ -21,10 +21,14 @@ MyRevy2026/
 │       └── prof2.jpg
 ├── movies/
 │   └── intro.mkv
-└── sound/
-    ├── theme.mp3
-    └── applause.wav
+├── sound/
+│   ├── theme.mp3
+│   └── applause.wav
+└── fix-it/              # (2.0.1) Lines marked with O during a show
+    └── ErrorInFiles-2026-11-24.LOG
 ```
+
+*(2.0.1)* The `fix-it/` folder is created when the project is opened. It holds one `ErrorInFiles-YYYY-MM-DD.LOG` per day on which the `O` key was used; see [controls.md](controls.md#marking-a-line-to-fix-later-201).
 
 Media files referenced in scene commands are resolved relative to the project root, with automatic fallback search in `pictures/`, `movies/`, and `sound/` subdirectories.
 
@@ -42,7 +46,8 @@ FontSize             = 60        # Slave text size, in points
 TextOutline          = 4         # Black outline thickness in points, 0 = off
 Capitalize           = false     # Uppercase every line of slave text
 AudioFade            = false     # Let `play` fade times fade the sound too, not just the picture
-BackgroundColour     = "black"   # black | blue | red | green | white
+BackgroundColour     = "black"   # A colour name, or a "#RRGGBB" string
+TextColour           = "white"   # (2.0.1) Default slave text colour: a colour name, or "#RRGGBB"
 Font                 = ""        # Regular face: full path, or a bare FONTS/ filename
 FontItalic           = ""        # (1.6.1) Italic face, used by textit and it(...)
 FontBold             = ""        # (1.6.1) Bold face, used by textbf and bold(...)
@@ -105,20 +110,23 @@ Scene names in the `schema` arrays correspond to `.ngk` filenames in the `scenes
 
 Settings are resolved in priority order: scene → project → global config.
 
+*(2.0.1)* An option has the same name in a scene's `[Options]` and in `schema.toml`, and case does not matter. Every colour option takes the same colours — see [Colours](commands.md#colours).
+
 | Setting | Scene (`[Options]` in .ngk) | Project (`schema.toml [Options]`) | Global (config) |
 |---|---|---|---|
 | Font size | `FontSize = 30` | `FontSize = 60` *(1.8.4; generated value — a schema with no `FontSize` key at all still falls back to 25)* | Config font size |
-| Background | `bc = blue` | `BackgroundColour = black` | Black |
-| Capitalize | `cap = true` | `Capitalize = false` | false |
-| Audio fade *(2.0.0)* | `audioFade = true` | `AudioFade = false` | false |
+| Background | `BackgroundColour = blue` | `BackgroundColour = "black"` | Black *(2.0.1: a scene without the key now follows the project; before, it was always black)* |
+| Text colour *(2.0.1)* | `TextColour = #FFD700` | `TextColour = "white"` | White |
+| Capitalize | `Capitalize = true` | `Capitalize = false` | false |
+| Audio fade *(2.0.0)* | `AudioFade = true` | `AudioFade = false` | false |
 | Text outline | — | `TextOutline = 4` | 4 |
-| Font | `font = path.ttf` | `Font = path.ttf` | System default |
+| Font | `Font = path.ttf` | `Font = path.ttf` | System default |
 | Particle speed *(1.4)* | `RAIN.SPEED = 1.5` | `[Particle.RAIN] Speed = 1.5` | `1.0` |
 | Particle density *(1.4)* | `RAIN.DENS = 2.0` | `[Particle.RAIN] Density = 2.0` | `1.0` |
 | Particle X-dist *(1.4)* | `RAIN.X.DIST = NORMAL(0.5, 0.1)` | `[Particle.RAIN] XDist = "NORMAL" …` | `UNIFORM` |
-| Italic font *(1.6.1)* | `fontItalic = path.ttf` | `FontItalic = path.ttf` | `[font] italic = ...` in `config.toml` (or bundled DejaVu) |
-| Bold font *(1.6.1)* | `fontBold = path.ttf` | `FontBold = path.ttf` | `[font] bold = ...` in `config.toml` (or bundled DejaVu) |
-| Bold-italic font *(1.6.1)* | `fontBoldItalic = path.ttf` | `FontBoldItalic = path.ttf` | `[font] bold_italic = ...` in `config.toml` (or bundled DejaVu) |
+| Italic font *(1.6.1)* | `FontItalic = path.ttf` | `FontItalic = path.ttf` | `[font] italic = ...` in `config.toml` (or bundled DejaVu) |
+| Bold font *(1.6.1)* | `FontBold = path.ttf` | `FontBold = path.ttf` | `[font] bold = ...` in `config.toml` (or bundled DejaVu) |
+| Bold-italic font *(1.6.1)* | `FontBoldItalic = path.ttf` | `FontBoldItalic = path.ttf` | `[font] bold_italic = ...` in `config.toml` (or bundled DejaVu) |
 
 If a scene sets `FontSize = 30`, that overrides the project's `FontSize` for that scene only; all other scenes keep the project value. Particle tunings cascade per-field — setting only `SPEED` in a scene still inherits `DENS` and `X.DIST` from the project level. The same applies to font slots: a scene can override only the bold face and still pick up project-level italic / bold-italic / regular.
 
@@ -172,7 +180,7 @@ A new project ships with two akter and four tutorial scenes, one per layer of th
 
 | Akt | Scene | Covers |
 |---|---|---|
-| 1 | `TextShowcase` | `text`, `textbf` / `textit`, `color()` and `+` concatenation, `textCont`, `pos()`, `textD` translation lines, `countdown` |
+| 1 | `TextShowcase` | `text`, `textbf` / `textit`, `colour()` and `+` concatenation, `textCont`, `pos()`, `textD` translation lines, `countdown` |
 | 1 | `PictureShowcase` | `show`, `size()` / `pos()`, image stacking, `trans()`, `rotate()` / `spin()`, `move()`, `random()`, the `&` compound operator |
 | 2 | `ParticleShowcase` | every `particle()` type, intensity, `trail()` / `trailGlow()`, `bounce()`, `stopParticleCont`, per-scene `<TYPE>.SPEED` / `.DENS` / `.X.DIST` tuning |
 | 2 | `MacroShowcase` | `[Macro]` definitions and `macro NAME`, `run{}`, `group NAME{}` with `clear NAME`, `loop(){}`, `clearText` / `clearAll` |

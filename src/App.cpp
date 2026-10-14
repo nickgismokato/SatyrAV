@@ -21,7 +21,10 @@ bool App::Init(){
 	// (2.0.0) SDL3 returns true on success — the old `< 0` test could never
 	// fire, in either direction. SDL_INIT_TIMER is gone; timers are always
 	// available.
-	if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)){
+	// (2.0.1) Video only here. Audio is started separately below, once the
+	// log is open, so a machine with no usable audio system still runs
+	// (silently) instead of refusing to start.
+	if(!SDL_Init(SDL_INIT_VIDEO)){
 		Logger::Instance().Errorf("SDL_Init failed: %s", SDL_GetError());
 		return false;
 	}
@@ -34,6 +37,12 @@ bool App::Init(){
 	// can't be written to.
 	Logger::Instance().Init(Platform::GetDefaultLogsDir());
 	Logger::Instance().Infof("SatyrAV v%s starting", SATYR_AV_VERSION);
+
+	if(!SDL_InitSubSystem(SDL_INIT_AUDIO)){
+		Logger::Instance().Warnf(
+			"Audio could not be started (%s) — continuing without sound",
+			SDL_GetError());
+	}
 
 	if(!renderer.InitMaster(config.masterWidth, config.masterHeight)){
 		return false;

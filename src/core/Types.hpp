@@ -30,6 +30,21 @@ namespace Colours{
 	constexpr Colour HEADER_BG    = {0x19, 0x27, 0x38, 0xFF};
 }
 
+// (2.0.1) The one colour reader, used by every colour option and by the
+// `colour(...)` modifier. Before 2.0.1 there were three, which disagreed:
+// the background accepted five names and no hex, subtitles three names,
+// and `color(...)` thirteen — and `grey` meant two different greys.
+//
+// Accepts, in any case: red, green, blue, white, black, yellow, orange,
+// purple, pink, cyan, lime, grey / gray (#808080); `#RRGGBB`; and the
+// short `#RGB` (each digit doubled, so #F80 is #FF8800). Surrounding
+// whitespace is ignored. Returns false — leaving `out` untouched — for
+// anything else, so each caller keeps its own "unknown colour" rule.
+//
+// One deliberate exception lives in SchemaParser: `SubtitleColour =
+// "grey"` keeps its pre-2.0.1 #AAAAAA so existing shows look the same.
+bool ParseColour(const std::string& text, Colour& out);
+
 // ── Revy identifiers ────────────────────────────────────────
 enum class RevyType{
 	MatRevy,
@@ -413,9 +428,16 @@ struct CueNote{
 struct Scene{
 	std::string name;
 	std::string fileName;
-	Colour backgroundColor = Colours::BLACK;
+	// (2.0.1) Alpha 0 = not set: the project's BackgroundColour applies
+	// (black unless the project says otherwise). Before 2.0.1 a scene
+	// without one was always black, whatever the project said.
+	Colour backgroundColor = {0, 0, 0, 0};
 	std::vector<std::string> preloadPaths;
 	std::vector<Command> commands;
+	// (2.0.1) The file's lines as they were when parsed, so the `O`
+	// mark-line log can quote a cue's code even if the file has since
+	// been edited. Indexed by Command::lineNumber - 1.
+	std::vector<std::string> sourceLines;
 
 	// Per-scene options (0 / empty = use project/global fallback)
 	int fontSize = 0;
@@ -425,7 +447,9 @@ struct Scene{
 	std::string fontPathItalic;
 	std::string fontPathBold;
 	std::string fontPathBoldItalic;
-	Colour fontColour = {0, 0, 0, 0}; // alpha 0 = not set
+	// (2.0.1) Default colour for this scene's slave text, from [Options]
+	// TextColour. Alpha 0 = not set: use the project's TextColour, then white.
+	Colour textColour = {0, 0, 0, 0};
 	bool capitalize = false;
 	// (2.0.0) Opt-in: make `play FILE FADE_IN, FADE_OUT` fade the clip's
 	// audio alongside its picture. Off by default so existing scenes sound
@@ -475,7 +499,9 @@ struct RevySchema{
 	std::string fontPathItalic;
 	std::string fontPathBold;
 	std::string fontPathBoldItalic;
-	Colour fontColour = {0, 0, 0, 0};
+	// (2.0.1) Project default slave text colour, [Options] TextColour.
+	// Alpha 0 = not set (white).
+	Colour textColour = {0, 0, 0, 0};
 	Colour backgroundColor = Colours::BLACK;
 	int textOutline = 4;     // outline thickness in points, 0 = disabled
 	bool capitalize = false;

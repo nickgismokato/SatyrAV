@@ -30,6 +30,8 @@ ProjectData Project::Create(
 	fs::create_directories(projectPath + "/movies");
 	fs::create_directories(projectPath + "/sound");
 	fs::create_directories(projectPath + "/pictures");
+	// (2.0.1) For the `O` mark-line log; opening a project also makes it.
+	fs::create_directories(projectPath + "/fix-it");
 
 	// Copy the logo as an example image
 	std::string logoSrc = FindAsset("satyr-logo-body.png");
@@ -155,7 +157,8 @@ FontSize             = 60        # Slave text size, in points
 TextOutline          = 4         # Black outline thickness in points, 0 = off
 Capitalize           = false     # Uppercase every line of slave text
 AudioFade            = false     # Let `play` fade times fade the sound too, not just the picture
-BackgroundColour     = "black"   # black | blue | red | green | white
+BackgroundColour     = "black"   # A colour name, or a "#RRGGBB" string
+TextColour           = "white"   # Default slave text colour: a colour name, or "#RRGGBB"
 Font                 = ""        # Regular face: full path, or a bare FONTS/ filename
 FontItalic           = ""        # Italic face, used by textit and it(...)
 FontBold             = ""        # Bold face, used by textbf and bold(...)
@@ -248,9 +251,10 @@ void Project::GenerateExampleScenes(const std::string& scenesDir){
 # Full command reference: docs/commands.md
 
 [Options]
-bc = black                 # black | blue | red | green | white
+# BackgroundColour = blue  # Overrides the project BackgroundColour
+# TextColour = yellow      # Default text colour for this scene
 # FontSize = 30            # Overrides the project FontSize for this scene
-# cap = true               # Uppercase every line of text
+# Capitalize = true        # Uppercase every line of text
 
 [Commands]
 comment "--- Plain text ---"
@@ -262,7 +266,7 @@ comment "--- Styling ---"
 textbf "This line is bold"
 textit "and this one is italic"
 clear
-text color(RED, "Red") + " sitting next to " + color(LIME, "green")
+text colour(RED, "Red") + " sitting next to " + colour(LIME, "green")
 text "Plain " + bold("BOLD") + " plus " + it("italic") + " on one line"
 clear
 
@@ -298,7 +302,7 @@ clear
 # Supported: .png .jpg .bmp .webp .gif (animated GIFs cycle on their own).
 
 [Options]
-bc = black
+# BackgroundColour = black
 
 [Preload]
 satyr-logo.png
@@ -352,7 +356,7 @@ clear
 #        ORBIT NOISE LIFECURVE
 
 [Options]
-bc = black
+# BackgroundColour = black
 # Per-type tuning for this scene only. Project-wide defaults live in
 # schema.toml under [Particle.<TYPE>]; each field cascades on its own.
 SNOW.SPEED  = 0.8                  # Velocity multiplier
@@ -407,14 +411,14 @@ clear
 # group N{ }   tags what the body produces so `clear N` drops just it.
 
 [Options]
-bc = black
+# BackgroundColour = black
 
 [Preload]
 satyr-logo.png
 
 [Macro]
 Title{
-	text color(ORANGE, "SatyrAV")
+	text colour(ORANGE, "SatyrAV")
 	textCont " - macro and group showcase"
 }
 

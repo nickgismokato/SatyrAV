@@ -25,6 +25,7 @@ enum class InputAction{
 	Tab,
 	StepBack,
 	ReloadScenes,
+	MarkLine,       // (2.0.1) O: log the last executed cue to fix-it/
 	TextInput,
 	Backspace,
 	// (1.6.3) F1..F12 collapsed into one action with an integer payload

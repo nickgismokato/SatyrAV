@@ -50,10 +50,10 @@ At the last command in a scene, pressing ENTER executes the command. A status ba
 
 | Key | Action |
 |-----|--------|
-| K | Toggle video pause. (1.6.0+) Pause freezes the last decoded frame on the slave instead of going black; press `K` again to resume from that frame. |
-| M | Toggle audio/music pause |
+| K | Toggle video pause — the picture and the video's own sound. (1.6.0+) Pause freezes the last decoded frame on the slave instead of going black; press `K` again to resume from that frame. |
+| M | Toggle pause of the standalone sounds — F-key hotkeys and `play` audio files |
 
-> **Known issue in 2.0.0:** `K` also pauses any F-key sounds that are playing, and `M` also pauses a video's sound. The two were meant to be independent. See *Known bugs* in [TODO.md](TODO.md).
+*(2.0.1)* The two are independent: `K` leaves F-key sounds playing, and `M` leaves a video's sound playing. In 2.0.0 each also paused the other's sound.
 
 ### Audio hotkeys (1.6.3+)
 
@@ -77,6 +77,25 @@ F12 = "applause.mp3"
 | U | Reload every `.ngk` scene file in the current project in place — no need to exit and reload the project |
 
 Useful when iterating on scene content from an external editor: save the `.ngk`, switch back to SatyrAV, press `U`.
+
+### Marking a line to fix later (2.0.1+)
+
+| Key | Action |
+|-----|--------|
+| O | Mark the **last executed cue** in the project's fix-it log. The master shows `Marked Example.ngk line 42 in fix-it` for a few seconds. |
+
+Meant for use during a live show: when something on the slave looks wrong, press `O` straight after the cue and carry on. After the show, open the log to find every line that needs attention.
+
+- The log is `fix-it/ErrorInFiles-YYYY-MM-DD.LOG` inside the project folder, one line per mark:
+    ```txt
+    21:43:07  Example.ngk  line 42:  text "Helo, World!"
+    ```
+  The code is the line exactly as written in the scene file, comment included, as it was when the scene was loaded (or last reloaded with `U`).
+- One file per day. Marks from several runs on the same day go into the same file.
+- The `fix-it` folder is created when a project is opened; the day's file is only created by the first mark of the day, so a show with nothing to fix leaves no file.
+- A `run{ … }` block fires as one cue, so its mark points at the `run` line.
+- Pressing `O` before any cue has run shows `Nothing to mark yet` and writes nothing.
+- With the Debug popup open, `O` opens the Overview popup instead (see below).
 
 ## Popups
 

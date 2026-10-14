@@ -2,7 +2,7 @@
 
 Future work, newest first. Shipped features live in [CHANGELOG.md](CHANGELOG.md).
 
-> **Current release: 2.0.0.** The SDL3 backend migration has shipped. Next is **2.0.1**, a bug-fix release for the items marked *(2.0.1)* under [Known bugs](#known-bugs), then **2.1.0**.
+> **Current release: 2.0.1.** A bug-fix release for 2.0.0, with a per-scene default text colour and the `O` mark-line log. Next is **2.1.0**.
 
 The lists, with the exception of the bug list, is in no particular order. Some have the (**Critical**) on them which means they are important and should be looked at first in the update version, before the others, if it makes sense.
 
@@ -35,7 +35,6 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 		```
 	- The file should be named the project name and the date it has been created and then a number (or something similar) if you have started the show more than once during the day.
 	- The exact details of what it should show has not been decided. A design run through may be needed. But essentially everytime we change a scene or show something, like an image, movie or text.
-- (**Critical**) Add a control to press a button such that the log, logs what active line of kode has an error. This will be used to highlight lines we need to fix later.
 - *(Maybe — more information needed before this counts as a bug.)* F-key toggling when several sounds are layered.
 	- **Confirmed working in 2.0.0 testing:** different F-keys bound to different files can each be started and stopped independently, on top of each other and on top of video sound.
 	- **Known and accepted:** a sound is identified by its file, so the same file bound to two F-keys is one sound; the second key restarts it rather than layering a copy.
@@ -63,6 +62,19 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 
 ---
 
+## 2.0.1 — shipped
+
+Bug-fix release for 2.0.0, plus two additions from the AV team. See [CHANGELOG.md](CHANGELOG.md) for the detail.
+
+- **`TextColour`** — a default text colour per scene or per project, in any colour name, `#RRGGBB` or `#RGB`.
+- **Mark-line log** — `O` during a show writes the last executed cue's file, line and code to `fix-it/ErrorInFiles-<date>.LOG` in the project folder; one file per day, appended across restarts, created on the day's first mark.
+- **One name per option, one set of colours.** Each option has one documented name, the same in a scene and in `schema.toml`, in any case; the docs say `colour`. Older spellings (`bc`, `cap`, `color(...)`, …) still work, undocumented. Every colour option takes the same colours, except that a subtitle's `grey` stays `#AAAAAA`.
+- **Background colour cascades** scene → project → black, like the font. A scene that sets none now follows the project.
+- **Fixed:** videos freezing on their first frame with no audio device; `stop FILE` doing nothing; `K` pausing F-key sounds and `M` pausing a video's sound.
+- Windowed dev mode re-tested on the SDL3 build: works as it should.
+
+---
+
 ## 2.0.0 — shipped
 
 The SDL2 → SDL3 backend migration, plus the work that depended on it. See [CHANGELOG.md](CHANGELOG.md) for the detail.
@@ -74,7 +86,7 @@ The SDL2 → SDL3 backend migration, plus the work that depended on it. See [CHA
 - **Diagnostics.** Failures are written to the log instead of a console that does not exist on Windows, and the debug overlay shows which decode path is in use and how many sounds are playing.
 - **Fixed:** the capture mirror losing resolution when the targeted-display rect is shrunk.
 
-Not finished in 2.0.0, and carried under [Known bugs](#known-bugs): the capture mirror's stutter, `stop FILE`, `K`-pause silencing F-key sounds, video size on the fall-back paths, and the last frames of a clip being dropped. Windowed dev mode was not re-tested on the SDL3 build.
+Not finished in 2.0.0, and carried under [Known bugs](#known-bugs): the capture mirror's stutter, `stop FILE`, `K`-pause silencing F-key sounds, video size on the fall-back paths, and the last frames of a clip being dropped. Windowed dev mode was not re-tested on the SDL3 build. *(2.0.1 fixed `stop FILE` and the `K`-pause problem, and windowed dev mode has since been tested and works.)*
 
 ### Decided against
 
@@ -84,10 +96,6 @@ Evaluated during the scoping review and dropped from 2.0.0:
 - **`SDL3 Process API`** — no part of SatyrAV spawns child processes (FFmpeg is linked as libraries). Add later if a concrete need appears.
 - **`SDL3 System Tray API`** — SatyrAV is a foreground operator tool; no roadmap feature needs a tray icon. It is a small, isolated feature that can be added in any release if wanted — it does not need to be coupled to the migration.
 - **`SDL3 Time API` as a feature** — `<chrono>` (C++17) already provides calendar time. The in-project clock and per-scene stopwatch *command* are user features, moved to 2.1.0.
-
-## 2.0.1
-### Bugs
-- Video playback problems on `Windows 10`. It plays the first frame and hold the 32 frames in buffer but it cannot play any longer. It does use the GTX1060 GPU and do zero-copy DirectX Hardware playback but still doesn't want to play. Neither in fullscreen nor in dev mode.
 
 ---
 
@@ -159,7 +167,7 @@ Bug-fix release plus one small feature: `play` videos gained optional fade-in / 
 
 ## Known bugs
 
-Most critical first. Items marked *(2.0.1)* are the planned content of the next bug-fix release.
+Most critical first.
 
 - (**Critical**) **The capture mirror stutters during video and particles.** Which screens are affected has depended on which physical monitor each window is on.
 	- **History.** Before 2.0.0 the report was the other way round: the slave stuttered and the capture mirror looked smooth. Zero-copy video made the slave much smoother, so decoding was a real part of the slave's problem and that part is fixed. What remains shows on the capture mirror.
@@ -169,13 +177,8 @@ Most critical first. Items marked *(2.0.1)* are the planned content of the next 
 	- **Before fixing, instrument.** A frame-time breakdown in the debug overlay and the log: total frame time, read-back time, and each present's blocking time separately. "Sometimes stutters" is exactly the shape of bug where fixing the wrong suspect looks like success for ten minutes.
 	- **Likely remedies once measured:** hand the frame between the two D3D11 devices as a shared texture instead of reading it back (2.0.0's thread-safe, shared-device work makes this realistic), and vsync on the slave only — tearing matters on the audience output, while the master is an operator screen and a capture card samples at its own rate.
 	- The particle half of the original report has not been looked at separately. If particles still stutter on the slave with no video playing, that is its own bug with its own cause.
-- *(2.0.1)* **`stop FILE` does nothing.** A regression in 2.0.0. Sounds are now identified by their full path so that several can play at once, but the `stop FILE` command passes the bare file name written in the scene, which never matches. Plain `stop` (everything) still works. Fix: resolve the name against the project the same way `play` does before calling `MediaPlayer::StopAudio` — one line in `PerformanceScreen::OnSlaveCommand`.
-- *(2.0.1)* **`K` (video pause) also pauses every F-key sound, and `M` (audio pause) also pauses video sound.** *(found in 2.0.0 testing)*
-	- *Cause:* since 2.0.0 every sound is an `SDL_AudioStream` bound to one shared logical device. `MediaPlayer::ToggleVideoPause` and `ToggleAudioPause` call `SDL_PauseAudioStreamDevice(stream)`, which — despite taking a stream — pauses the whole **device** that stream is bound to.
-	- *Likely fix:* pause a single source by unbinding its stream (`SDL_UnbindAudioStream`, which keeps the queued audio) and re-binding it on resume. Small, but the video clock reads the stream's queue, so resume needs checking for A/V sync before it ships.
-- *(2.0.1)* **On the fall-back video paths the picture is decoded at the size of the targeted-display rect.** Left over from the 2.0.0 capture-mirror resolution fix. `PerformanceScreen` still passes the rect's size to `PlayVideo` and `PreloadVideosForScenes`, so on the read-back and software paths a shrunk rect gives a low-resolution video that the capture mirror then stretches back up. The zero-copy path is not affected (it always keeps the source size), so on Windows with hardware decode this only shows for 10-bit clips or with `zero_copy = false`; on Linux it always applies. Fix: pass the canvas size at those two call sites. The cost is more CPU on those paths when the rect is shrunk.
-- *(2.0.1)* **The last frames of every clip are dropped.** The decoder is never flushed at end of file, so whatever it is still holding is lost. With hardware decode that is a few frames; with software decode it is up to one frame per decoder thread, which on a many-core machine can be most of a second. Predates 2.0.0. Fix: send the decoder an end-of-stream packet and drain it before the decode thread parks.
-- **Windowed dev mode has not been re-tested on the SDL3 build.** The 2.0.0 roadmap asked for its old bugs to be re-checked after the migration; the two slave/capture problems above were looked at instead. Open the slave in `Windowed (dev)` mode and check resizing, the letterbox, and the Display Rect editor.
+- **On the fall-back video paths the picture is decoded at the size of the targeted-display rect.** Left over from the 2.0.0 capture-mirror resolution fix. `PerformanceScreen` still passes the rect's size to `PlayVideo` and `PreloadVideosForScenes`, so on the read-back and software paths a shrunk rect gives a low-resolution video that the capture mirror then stretches back up. The zero-copy path is not affected (it always keeps the source size), so on Windows with hardware decode this only shows for 10-bit clips or with `zero_copy = false`; on Linux it always applies. Fix: pass the canvas size at those two call sites. The cost is more CPU on those paths when the rect is shrunk.
+- **The last frames of every clip are dropped.** The decoder is never flushed at end of file, so whatever it is still holding is lost. With hardware decode that is a few frames; with software decode it is up to one frame per decoder thread, which on a many-core machine can be most of a second. Predates 2.0.0. Fix: send the decoder an end-of-stream packet and drain it before the decode thread parks.
 - Run doesn't work as intended in macro environment.
 - Maybe only one image can be shown at a time. This need to be tested.
 - Not a bug, but we have to check what bit our movies is compatible with. 8/10 and 16 bit should all be suported.

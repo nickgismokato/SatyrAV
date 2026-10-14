@@ -17,6 +17,10 @@ namespace Keys{
 	constexpr SDL_Keycode TAB            = SDLK_TAB;
 	constexpr SDL_Keycode DEBUG          = SDLK_D;
 	constexpr SDL_Keycode RELOAD_SCENES  = SDLK_U;
+	// (2.0.1) Mark the last executed cue in the project's fix-it log.
+	// D then O (debug popup open) is still the Overview popup; App
+	// handles that chord before the key reaches a screen.
+	constexpr SDL_Keycode MARK_LINE      = SDLK_O;
 }
 
 } // namespace SatyrAV

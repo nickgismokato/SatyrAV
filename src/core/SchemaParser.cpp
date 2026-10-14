@@ -1,4 +1,7 @@
 #include "core/SchemaParser.hpp"
+#include "core/OptionKeys.hpp"
+#include <map>
+#include <cctype>
 #include <toml++/toml.hpp>
 #include <algorithm>
 
@@ -83,47 +86,81 @@ RevySchema SchemaParser::ParseFile(const std::string& schemaPath){
 	try{
 		auto tbl = toml::parse_file(schemaPath);
 
-		schema.fontSize = tbl["Options"]["FontSize"].value_or(25);
-		schema.textOutline = tbl["Options"]["TextOutline"].value_or(4);
-		schema.fontPath = tbl["Options"]["Font"].value_or(std::string(""));
+		// (2.0.1) [Options] keys are looked up through the shared table in
+		// OptionKeys: case does not matter, and the scene spellings (`bc`,
+		// `cap`, `font`, ...) work here too. If a file gives both an alias and
+		// the documented name, the documented name wins, whatever the order.
+		std::map<OptionKey, const toml::node*> opt;
+		std::map<OptionKey, bool> optDocumented;
+		if(const toml::table* options = tbl["Options"].as_table()){
+			for(auto&& [k, v] : *options){
+				const std::string name(k.str());
+				const OptionKey id = LookupOptionKey(name);
+				if(id == OptionKey::Unknown) continue;
+				const bool documented = IsDocumentedOptionName(name);
+				if(!opt.count(id) || (documented && !optDocumented[id])){
+					opt[id] = &v;
+					optDocumented[id] = documented;
+				}
+			}
+		}
+		auto option = [&](OptionKey id){
+			auto it = opt.find(id);
+			return it == opt.end() ? toml::node_view<const toml::node>{}
+			                       : toml::node_view<const toml::node>{it->second};
+		};
+
+		schema.fontSize = option(OptionKey::FontSize).value_or(25);
+		schema.textOutline = option(OptionKey::TextOutline).value_or(4);
+		schema.fontPath = option(OptionKey::Font).value_or(std::string(""));
 		// (1.6.1) Optional per-style font faces. Empty falls back to the
 		// global Config path; missing-at-draw-time falls back to regular.
-		schema.fontPathItalic     = tbl["Options"]["FontItalic"].value_or(std::string(""));
-		schema.fontPathBold       = tbl["Options"]["FontBold"].value_or(std::string(""));
-		schema.fontPathBoldItalic = tbl["Options"]["FontBoldItalic"].value_or(std::string(""));
-		schema.capitalize = tbl["Options"]["Capitalize"].value_or(false);
+		schema.fontPathItalic     = option(OptionKey::FontItalic).value_or(std::string(""));
+		schema.fontPathBold       = option(OptionKey::FontBold).value_or(std::string(""));
+		schema.fontPathBoldItalic = option(OptionKey::FontBoldItalic).value_or(std::string(""));
+		schema.capitalize = option(OptionKey::Capitalize).value_or(false);
 		// (2.0.0) Project-level default for opt-in audio fading.
-		schema.audioFade  = tbl["Options"]["AudioFade"].value_or(false);
+		schema.audioFade  = option(OptionKey::AudioFade).value_or(false);
 
-		auto bc = tbl["Options"]["BackgroundColour"].value_or(std::string(""));
-		if(bc == "black")      schema.backgroundColor = Colours::BLACK;
-		else if(bc == "blue")  schema.backgroundColor = {0x00, 0x00, 0xFF, 0xFF};
-		else if(bc == "red")   schema.backgroundColor = {0xFF, 0x00, 0x00, 0xFF};
-		else if(bc == "green") schema.backgroundColor = {0x00, 0xFF, 0x00, 0xFF};
-		else if(bc == "white") schema.backgroundColor = Colours::WHITE;
+		// (2.0.1) Any colour the shared reader knows, including hex. Before
+		// 2.0.1 only black, blue, red, green and white were accepted here.
+		{
+			auto bc = option(OptionKey::BackgroundColour).value_or(std::string(""));
+			Colour c;
+			if(!bc.empty() && ParseColour(bc, c)) schema.backgroundColor = c;
+		}
+		// (2.0.1) Default slave text colour. Unrecognised leaves it unset.
+		{
+			auto tc = option(OptionKey::TextColour).value_or(std::string(""));
+			Colour c;
+			if(!tc.empty() && ParseColour(tc, c)) schema.textColour = c;
+		}
 
 		// (1.6.1) Subtitle defaults for `textD`. Each key is optional; missing
 		// keys leave the schema's built-in default in place.
-		schema.subtitleItalic = tbl["Options"]["SubtitleItalic"].value_or(true);
-		auto sc = tbl["Options"]["SubtitleColour"].value_or(std::string(""));
-		if(!sc.empty()){
-			if(sc.size() >= 7 && sc[0] == '#'){
-				try{
-					unsigned long hex = std::stoul(sc.substr(1), nullptr, 16);
-					schema.subtitleColour = Colour::FromHex((uint32_t)hex);
-				} catch(...){}
-			} else if(sc == "black")       schema.subtitleColour = Colours::BLACK;
-			else if(sc == "white")         schema.subtitleColour = Colours::WHITE;
-			else if(sc == "grey" || sc == "gray")
-			                                schema.subtitleColour = {0xAA, 0xAA, 0xAA, 0xFF};
+		schema.subtitleItalic = option(OptionKey::SubtitleItalic).value_or(true);
+		{
+			auto sc = option(OptionKey::SubtitleColour).value_or(std::string(""));
+			std::string scLower = sc;
+			std::transform(scLower.begin(), scLower.end(), scLower.begin(),
+				[](unsigned char ch){ return (char)std::tolower(ch); });
+			// The one exception to the shared colour reader: a subtitle's
+			// `grey` has always been the lighter #AAAAAA, and changing it would
+			// visibly darken subtitles in shows already built.
+			if(scLower == "grey" || scLower == "gray"){
+				schema.subtitleColour = {0xAA, 0xAA, 0xAA, 0xFF};
+			} else if(!sc.empty()){
+				Colour c;
+				if(ParseColour(sc, c)) schema.subtitleColour = c;
+			}
 		}
 		// Stored as percent in TOML (0–100); kept as a 0–1 internal value
 		// so the renderer's `transparency` field doesn't need scaling.
-		auto stPct = tbl["Options"]["SubtitleTransparency"].value_or(0.0);
+		auto stPct = option(OptionKey::SubtitleTransparency).value_or(0.0);
 		schema.subtitleTransparency = 1.0f - (float)(stPct / 100.0);
 		if(schema.subtitleTransparency < 0.0f) schema.subtitleTransparency = 0.0f;
 		if(schema.subtitleTransparency > 1.0f) schema.subtitleTransparency = 1.0f;
-		schema.subtitlePosY = (float)tbl["Options"]["SubtitlePosY"].value_or(90.0);
+		schema.subtitlePosY = (float)option(OptionKey::SubtitlePosY).value_or(90.0);
 
 		schema.revyName = tbl["RevyData"]["Revy"].value_or(std::string("Unnamed Revy"));
 		// (1.6.2) Creator is optional — older projects don't have it.

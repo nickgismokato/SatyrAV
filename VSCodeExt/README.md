@@ -6,15 +6,15 @@ Highlights:
 
 - Section headers — `[Options]`, `[Preload]`, `[Macro]`, `[Cue]`, `[Commands]`, and the `schema.toml` tables `[Hotkeys]`, `[RevyData]`, `[Structure]`, `[Display]`, `[Particle.<TYPE>]`.
 - Command keywords — `text`, `textCont`, `textbf`, `textit`, `textbfCont`, `textitCont`, `textD`, `typewrite`, `clear`, `clearText`, `clearImages`, `clearAll`, `clearCountdown`, `play`, `stop`, `stopParticleCont`, `show`, `comment`, `countdown`.
-- Modifier wrappers — `color(...)`, `trans(...)`, `rotate(...)`, `move(...)`, `pathMove(...)`, `spin(...)`, `pos(...)`, `size(...)`, `scale(...)`, `layer(...)`, `particle(...)`, `random(...)`, `randomImages(...)`, `randomSize(...)`, `bold(...)`, `it(...)`, `trail(...)`, `trailGlow(...)`, `bounce(...)`.
+- Modifier wrappers — `colour(...)`, `trans(...)`, `rotate(...)`, `move(...)`, `pathMove(...)`, `spin(...)`, `pos(...)`, `size(...)`, `scale(...)`, `layer(...)`, `particle(...)`, `random(...)`, `randomImages(...)`, `randomSize(...)`, `bold(...)`, `it(...)`, `trail(...)`, `trailGlow(...)`, `bounce(...)`.
 - Block keywords — `group NAME{...}`, `loop(count, every){...}`, `run{...}` *(0.4.0)*, and `macro NAME` calls *(0.4.0)*.
-- `[Options]` keys *(0.4.0)* — `bc`, `FontSize`, `font`, `fontItalic`, `fontBold`, `fontBoldItalic`, `cap`, `audioFade`.
+- `[Options]` keys *(0.4.0; any case from 0.4.1)* — `BackgroundColour`, `TextColour` *(0.4.1)*, `FontSize`, `TextOutline`, `Font`, `FontItalic`, `FontBold`, `FontBoldItalic`, `Capitalize`, `AudioFade`, and the `Subtitle*` keys. The older spellings that SatyrAV still accepts are highlighted too.
 - Particle / distribution constants — `RAIN`, `SNOW`, `CONFETTI`, `RISE`, `SCATTER`, `BROWNIAN`, `OSCILLATION`, `ORBIT`, `NOISE`, `LIFECURVE`, `GHOST`, `STRETCH`, `GLOW`, `UNIFORM`, `NORMAL`, `LOGNORMAL`, `BINOMIAL`, `BERNOULLI`, `GAMMA`.
 - String literals — `"..."`, `'...'`, and `´...´` *(1.7)* — numbers, line comments (`# ...`).
 
 Not highlighted: the per-particle tunables in `[Options]` (`RAIN.SPEED = …`) and `\Name` cue references.
 
-Syntax highlighting only — extension version **0.4.0**, current as of SatyrAV **2.0.0**. Auto-completion, diagnostics, and snippets are intentionally deferred to a later cycle.
+Syntax highlighting only — extension version **0.4.1**, current as of SatyrAV **2.0.1**. Auto-completion, diagnostics, and snippets are intentionally deferred to a later cycle.
 
 > The `satyrav-ngk-0.1.0.vsix` file in this folder is an **old build** and does not contain the current grammar. Use option 1 below, or build a fresh `.vsix` with option 3.
 
@@ -25,13 +25,13 @@ VSCode auto-loads any folder dropped into its `extensions` directory. No npm, no
 **Windows (cmd or PowerShell):**
 
 ```cmd
-xcopy /E /I /Y VSCodeExt %USERPROFILE%\.vscode\extensions\satyrav-ngk-0.4.0
+xcopy /E /I /Y VSCodeExt %USERPROFILE%\.vscode\extensions\satyrav-ngk-0.4.1
 ```
 
 **Linux / WSL / macOS:**
 
 ```bash
-cp -r VSCodeExt ~/.vscode/extensions/satyrav-ngk-0.4.0
+cp -r VSCodeExt ~/.vscode/extensions/satyrav-ngk-0.4.1
 ```
 
 Restart VSCode. Open any `.ngk` file — the grammar will be active.
@@ -55,8 +55,8 @@ Useful while editing the grammar — `Ctrl+R` reloads the host window so you see
 ```bash
 cd VSCodeExt
 npm install -g @vscode/vsce
-vsce package          # produces satyrav-ngk-0.4.0.vsix in this folder
-code --install-extension ./satyrav-ngk-0.4.0.vsix
+vsce package          # produces satyrav-ngk-0.4.1.vsix in this folder
+code --install-extension ./satyrav-ngk-0.4.1.vsix
 ```
 
 **Stick with Node 18** by pinning `vsce` to the last Node-18-compatible release:
@@ -65,10 +65,10 @@ code --install-extension ./satyrav-ngk-0.4.0.vsix
 cd VSCodeExt
 sudo npm install -g @vscode/vsce@2.32.0
 vsce package
-code --install-extension ./satyrav-ngk-0.4.0.vsix
+code --install-extension ./satyrav-ngk-0.4.1.vsix
 ```
 
-> If the `code --install-extension` step prints `ENOENT: no such file or directory`, it means `vsce package` didn't actually produce the `.vsix` — check the previous command's output. From WSL, prefix the path with `./` (or use the absolute Windows path: `code --install-extension "C:\Users\you\…\satyrav-ngk-0.4.0.vsix"`).
+> If the `code --install-extension` step prints `ENOENT: no such file or directory`, it means `vsce package` didn't actually produce the `.vsix` — check the previous command's output. From WSL, prefix the path with `./` (or use the absolute Windows path: `code --install-extension "C:\Users\you\…\satyrav-ngk-0.4.1.vsix"`).
 
 For most people, **option 1 is the path of least resistance** — it's a single copy with no toolchain. Use option 3 only if you want a redistributable `.vsix` to share.
 
