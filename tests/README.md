@@ -62,6 +62,9 @@ cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/saty
 | `test_cue_notes.cpp` | *(1.8.4)* the `[Cue]` section, `\Name` references and their warnings |
 | `test_option_names.cpp` | *(2.0.1)* one name per option in scenes and `schema.toml`, the shared colour reader, hex in `[Options]`, `TextColour` and the background cascade |
 | `test_mark_log.cpp` | *(2.0.1)* the `O` mark-line log — file and folder names, appending, one file per day, what a mark points at |
+| `test_backstage.cpp` | *(2.0.2)* the `[Backstage]` block, times and lists, the lineup across akter, the ticker line format, the Url, and the `schema.toml` defaults |
+| `test_backstage_send.cpp` | *(2.0.2)* sending, against a small HTTP server inside the test: the exact request, failures, newest-lineup-wins (POSIX only; the Windows sender is checked against a local server by hand) |
+| `test_text_plan.cpp` | *(2.0.2)* fixed text centre — which cues form a block, where it ends, and the `FixedTextCentre` option |
 
 ## What is deliberately not tested
 

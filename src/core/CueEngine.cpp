@@ -260,6 +260,12 @@ bool CueEngine::GetEffectiveAudioFade() const{
 	return projectData.schema.audioFade;
 }
 
+bool CueEngine::GetEffectiveFixedTextCentre() const{
+	auto* scene = GetCurrentScene();
+	if(scene && scene->fixedTextCentre >= 0) return scene->fixedTextCentre == 1;
+	return projectData.schema.fixedTextCentre;
+}
+
 std::string CueEngine::GetFunctionKeyAudio(int num) const{
 	auto& m = projectData.schema.functionKeyAudio;
 	auto it = m.find(num);

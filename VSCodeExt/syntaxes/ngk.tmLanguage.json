@@ -22,7 +22,7 @@
 			"name": "comment.line.number-sign.ngk"
 		},
 		"section-headers": {
-			"match": "^\\s*\\[(Options|Preload|Commands|Macro|Cue|Hotkeys|RevyData|Structure|Display|Particle\\.[A-Z]+)\\]\\s*$",
+			"match": "^\\s*\\[(Options|Preload|Commands|Macro|Cue|Hotkeys|RevyData|Structure|Display|(?i:backstage)|Particle\\.[A-Z]+)\\]\\s*$",
 			"captures": {
 				"1": { "name": "entity.name.section.ngk" }
 			},
@@ -59,7 +59,7 @@
 			}
 		},
 		"option-keys": {
-			"match": "(?i)^\\s*(fontsize|fontbolditalic|fontbold|fontitalic|font|textoutline|capitalize|cap|audiofade|backgroundcolou?r|bc|textcolou?r|subtitleitalic|subtitlecolou?r|subtitletransparency|subtitleposy)(?=\\s*=)",
+			"match": "(?i)^\\s*(fontsize|fontbolditalic|fontbold|fontitalic|font|textoutline|capitalize|cap|audiofade|backgroundcolou?r|bc|textcolou?r|subtitleitalic|subtitlecolou?r|subtitletransparency|subtitleposy|fixedtextcent(?:re|er)|name|expectedtime|actors|ninjas|url|enabled)(?=\\s*=)",
 			"captures": {
 				"1": { "name": "variable.parameter.option.ngk" }
 			}

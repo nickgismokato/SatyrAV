@@ -46,6 +46,7 @@ FontSize             = 60        # Slave text size, in points
 TextOutline          = 4         # Black outline thickness in points, 0 = off
 Capitalize           = false     # Uppercase every line of slave text
 AudioFade            = false     # Let `play` fade times fade the sound too, not just the picture
+FixedTextCentre      = true      # (2.0.2) Centre text on all its lines up to the next clear, so lines don't jump
 BackgroundColour     = "black"   # A colour name, or a "#RRGGBB" string
 TextColour           = "white"   # (2.0.1) Default slave text colour: a colour name, or "#RRGGBB"
 Font                 = ""        # Regular face: full path, or a bare FONTS/ filename
@@ -89,6 +90,13 @@ Rotation = 0.0
 F1  = "knock.mp3"
 F12 = "applause.mp3"
 
+# (2.0.2) Backstage screen: each scene change sends the current scene and
+# the next two (those with a [Backstage] block) to the backstage ticker.
+# Enabled = false switches it off and keeps the Url. See commands.md.
+[Backstage]
+Enabled = true
+Url     = "https://backstage.texnik.dk/set-bck"
+
 # (1.4) Project-level particle tunables — one table per type.
 # Scene [Options] can override individual fields. The generator ships this
 # block commented out, listing every key at its default, because "no table
@@ -119,6 +127,7 @@ Settings are resolved in priority order: scene → project → global config.
 | Text colour *(2.0.1)* | `TextColour = #FFD700` | `TextColour = "white"` | White |
 | Capitalize | `Capitalize = true` | `Capitalize = false` | false |
 | Audio fade *(2.0.0)* | `AudioFade = true` | `AudioFade = false` | false |
+| Fixed text centre *(2.0.2)* | `FixedTextCentre = false` (either way) | `FixedTextCentre = true` *(generated value; a schema without the key is off)* | false |
 | Text outline | — | `TextOutline = 4` | 4 |
 | Font | `Font = path.ttf` | `Font = path.ttf` | System default |
 | Particle speed *(1.4)* | `RAIN.SPEED = 1.5` | `[Particle.RAIN] Speed = 1.5` | `1.0` |
@@ -128,7 +137,7 @@ Settings are resolved in priority order: scene → project → global config.
 | Bold font *(1.6.1)* | `FontBold = path.ttf` | `FontBold = path.ttf` | `[font] bold = ...` in `config.toml` (or bundled DejaVu) |
 | Bold-italic font *(1.6.1)* | `FontBoldItalic = path.ttf` | `FontBoldItalic = path.ttf` | `[font] bold_italic = ...` in `config.toml` (or bundled DejaVu) |
 
-If a scene sets `FontSize = 30`, that overrides the project's `FontSize` for that scene only; all other scenes keep the project value. Particle tunings cascade per-field — setting only `SPEED` in a scene still inherits `DENS` and `X.DIST` from the project level. The same applies to font slots: a scene can override only the bold face and still pick up project-level italic / bold-italic / regular.
+If a scene sets `FontSize = 30`, that overrides the project's `FontSize` for that scene only; all other scenes keep the project value. Particle tunings cascade per-field — setting only `SPEED` in a scene still inherits `DENS` and `X.DIST` from the project level. The same applies to font slots: a scene can override only the bold face and still pick up project-level italic / bold-italic / regular. *(2.0.2)* Fonts are resolved afresh for every scene, so a scene's own `Font` never carries over into the scenes after it — before 2.0.2 it did, until another scene named a font.
 
 ## Global settings — `config.toml`
 

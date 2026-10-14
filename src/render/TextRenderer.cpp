@@ -71,7 +71,10 @@ void TextRenderer::OpenSlaveFonts(){
 	for(int i = 0; i < 4; i++){
 		if(slaveFontPaths[i].empty()) continue;
 		slaveFonts[i] = TTF_OpenFont(slaveFontPaths[i].c_str(), slaveFontSize);
-		if(!slaveFonts[i] && i != 0){
+		if(!slaveFonts[i]){
+			// (2.0.2) The regular slot is logged too: a scene font that
+			// cannot be opened (a typo in `Font = ...`) used to fall back to
+			// the master face without a word.
 			Logger::Instance().Warnf("slave font slot %d ('%s') failed at size %d: %s",
 				i, slaveFontPaths[i].c_str(), slaveFontSize, SDL_GetError());
 		}
@@ -243,17 +246,19 @@ void TextRenderer::SetSlaveFontPaths(const std::string& regular,
 	const std::string& italic,
 	const std::string& bold,
 	const std::string& boldItalic){
-	// (1.6.1 fix) Empty path on any slot = "keep existing". The cascade
-	// in PerformanceScreen passes empty for any face the active project
-	// doesn't explicitly override; without this guard those empty values
-	// would wipe the Config-level paths that App.cpp::Init loaded, and
-	// every styled run would silently fall back to regular. With the
-	// guard, the global default sticks unless the project's [Options]
-	// names a replacement.
-	if(!regular.empty())    slaveFontPaths[0] = regular;
-	if(!italic.empty())     slaveFontPaths[1] = italic;
-	if(!bold.empty())       slaveFontPaths[2] = bold;
-	if(!boldItalic.empty()) slaveFontPaths[3] = boldItalic;
+	// Empty path on a slot = "use the Config-level face" that App.cpp::Init
+	// loaded for the master (`fontPaths`). The cascade in PerformanceScreen
+	// passes empty for any face neither the scene nor the project sets.
+	//
+	// (2.0.2) Until 2.0.2 empty meant "keep whatever is loaded now". That
+	// kept the Config default when the first scene set nothing (the 1.6.1
+	// reason for the guard), but it also kept a scene's own font: after a
+	// scene with `Font = X.ttf`, every later scene without a font of its
+	// own drew in X, across akter, until a scene named another font.
+	const std::string* requested[4] = {&regular, &italic, &bold, &boldItalic};
+	for(int i = 0; i < 4; i++){
+		slaveFontPaths[i] = requested[i]->empty() ? fontPaths[i] : *requested[i];
+	}
 	OpenSlaveFonts();
 }
 

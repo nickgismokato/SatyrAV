@@ -2,7 +2,7 @@
 
 Future work, newest first. Shipped features live in [CHANGELOG.md](CHANGELOG.md).
 
-> **Current release: 2.0.1.** A bug-fix release for 2.0.0, with a per-scene default text colour and the `O` mark-line log. Next is **2.1.0**.
+> **Current release: 2.0.2.** The font-leak fix, the backstage screen and a fixed centre for text. Next is **2.1.0**.
 
 The lists, with the exception of the bug list, is in no particular order. Some have the (**Critical**) on them which means they are important and should be looked at first in the update version, before the others, if it makes sense.
 
@@ -50,27 +50,6 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 		2. With a video with sound playing, press an F-key, let its sound finish, press the same key again: the press would be taken as "stop" and nothing would play until a second press.
 	- **To settle it:** try those two sequences exactly. If neither happens, delete this item. If either does, the fix is small — ask the player whether *that* sound is playing instead of tracking one key number.
 - OSC Receiver, i.e. listen for OSC messages from lightning desk to control cues. Mainly interested in QLab and maybe GrandMA. 
-- (**Critical**) Expose HTTP/WebSocket endpoint to send out message of which Scene and akt we are currently on.
-	- See https://www.npmjs.com/package/@fysikrevy/backstage-ticker for more informaiton
-	- The address to post to is `backstage.texnik.dk/set-bck`
-	- The `POST` should contain three lines, each for the current scene, the next scene and the scene after the next. This is an example text:
-		```txt
-		Name of current scene;3:00;actors;Actor 1;Actor 2;Actor 3 
-		Name of next scene;4:30;actors;Actor 6;Actor 7;ninjas;Ninja 1 
-		Name of the scene after the next scene;0:45;actors;Actor 1;Actor 3;Actor 4;Actor 5;Actor 8;Actor 9;ninjas;Ninja 4
-		```
-		Notice that each option is separated with semicolon. The first is the name of a scene, then the expected runtime. Then there is 2 main options to give and subelements for each of them. The first is the `actors` which gives the actors that will be on the scene. The next options is `ninjas` which are the ninjas of the scene. A ninja is a person, dressed all in black that helps with setting up a scene and delivers things when the scene is running. Behind all these elements are the actual names of the actors and ninjas.
-	- This has to be optional since we don't set up the backstage screen/computer to show this. So this could be an option in the `.ngk` files. Something like:
-		```txt
-		[backstage]
-		Name = Scene 1
-		ExpectedTime = 2m40s
-		Actors = ["Actor 1", "Actor 2"]
-		Ninjas = ["Ninja 1]
-		```
-		Then every time we change scene on the AV-Program, we just send a `POST` with the current scene, next scene and the scene after that. If this is not setup, then no post should be send.
-	- Everytime we do a `POST` we update the backstage program. So only one post per scene.
-
 - Create full physics model for particle systems, accelerated with hardware
 - A full scanner of a project to see if any scenes inside its `.ngk` files have wrong options/notations/commands. A full scanner to check for existence of assets should also be implemented.
 - *(moved from 1.8.0)* Make a fastforward-goback scroller for videos.
@@ -86,6 +65,16 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 - (**Critical — moved from 1.6**) Transparent-layer handling for `.png` files. Today the alpha channel in a PNG is composited onto the slave background as normal. Add a per-project `[Options]` toggle (default **off**) that switches the slave to a transparent composite path — the underlying pixels show through PNG alpha instead of being filled by the scene background.
 	- *Why deferred from 1.6:* SDL2 has no per-pixel-alpha window flag; `SDL_WINDOW_TRANSPARENT` is SDL3-only. A SDL2 implementation would require hand-rolling a D3D11 + DirectComposition swapchain to replace SDL2's slave renderer (and a separate ARGB-visual path on Linux/X11). After the 2.0.0 SDL3 migration this becomes a one-flag change on window creation, so it rides naturally with 2.1.
 	- Still needs investigation of how this interacts with the targeted-display black-fill and with the capture-mirror window (capture cards drop alpha; may need a chroma-key or NDI-with-alpha output path).
+
+---
+
+## 2.0.2 — shipped
+
+A bug fix and two revy requests. See [CHANGELOG.md](CHANGELOG.md) for the detail.
+
+- **Fixed:** a scene's font no longer carries into the scenes after it.
+- **Backstage screen** *(moved forward from 2.1.0)* — each scene change sends the current scene and the next two (from each scene's `[Backstage]` block) to the backstage ticker, in the background, logged, with a status line in the Debug popup. `[Backstage] Url` / `Enabled` in `schema.toml`; on in new projects.
+- **Fixed text centre** — `FixedTextCentre = true` lays out centred text for all its lines up to the next clear, so lines don't jump as they appear. On in new projects.
 
 ---
 
@@ -210,4 +199,3 @@ Most critical first.
 - Maybe only one image can be shown at a time. This need to be tested.
 - Not a bug, but we have to check what bit our movies is compatible with. 8/10 and 16 bit should all be suported.
 	- *State in 2.0.0:* 8-bit H.264 is the tested case and uses the zero-copy path. A 10-bit source is deliberately kept on the read-back path, where it is converted down to 8-bit for display, so it should play but without its extra depth. That has **not** been tested with a real 10-bit file, and 16-bit has not been looked at.
-- Font goes down to the next scene after a scene with a chosen font is done. This wasn't an issue in `2.0.0`. 

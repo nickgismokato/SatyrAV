@@ -112,6 +112,7 @@ The current akt and scene, the last command with its resolved file path and whet
 | `Frames: N / M` | How many decoded frames are buffered ahead, out of the buffer's capacity. |
 | `Decode:` *(2.0.0)* | How the playing video is being decoded. `Hardware (zero-copy)` in green is the fast path on Windows. `Hardware (read-back)` in white is hardware decode through the slower route. `Software` in orange means the CPU is decoding, which is normal on Linux and a fall-back on Windows. `no video` when nothing is playing. |
 | `Sounds: N` *(2.0.0)* | How many standalone sounds (F-keys and `play` audio) are playing right now. |
+| `Backstage` *(2.0.2)* | The last update sent to the backstage screen: green `sent <scene> Ns ago: HTTP 200, … ms` when it arrived, red `FAILED …` with the reason when it did not, grey `off` when the project has no `[Backstage] Url` or has `Enabled = false`. See [`[Backstage]`](commands.md#backstage-202). |
 
 ### Sub-popups from Debug (D)
 

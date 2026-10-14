@@ -2,6 +2,36 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 2.0.2 — shipped
+
+A fix for fonts leaking from one scene into the next, plus two features asked for by the revy: the backstage screen and a fixed centre for text. Existing projects load and look exactly as before; both features are switched on for new projects only (and the backstage screen needs a `[Backstage]` block in each scene before it sends anything).
+
+### Added
+- **Backstage screen.** When the show moves into a new scene, SatyrAV sends the current scene and the next two to the revy's backstage ticker ([@fysikrevy/backstage-ticker](https://www.npmjs.com/package/@fysikrevy/backstage-ticker)), so the people backstage see who is on next.
+    - **Per scene**, a new `[Backstage]` section in the `.ngk`: `Name`, `ExpectedTime` (`2m40s`, `2:40` or seconds), `Actors` and `Ninjas` (`["A", "B"]`, also over several lines, TOML style). Scenes without one — AV interludes — are left out of the lineup, and starting one sends nothing.
+    - **Per project**, `[Backstage]` in `schema.toml`: `Url` and `Enabled`. New projects get `Enabled = true` and `Url = "https://backstage.texnik.dk/set-bck"`. An empty or missing Url, or `Enabled = false`, sends nothing; projects created before 2.0.2 stay off until a Url is added.
+    - **When:** at the ENTER that moves to the next scene, and when a cue runs in a scene the show was not in yet (the first scene of the night, or one jumped to with the arrow keys). Later cues in the same scene send nothing — one POST per scene.
+    - **What:** `POST` with the `sl-cmd: waiting` header the ticker expects, a plain-text UTF-8 body, one `name;m:ss;actors;…;ninjas;…` line per scene. `;` and line breaks are removed from names; `<`, `>` and `&` are sent but warned about, since the ticker shows text as HTML.
+    - **Never holds up the show.** The request runs on a background thread with a 4-second limit and is not retried; if a newer lineup is ready before an older one went out, only the newest is sent.
+    - **Logging:** every request is written to the SatyrAV log — what was sent, one line per scene, then the HTTP status and time or the reason it failed (`host name not found`, `could not connect`, `timed out`, `https certificate problem`). The Debug popup (`D`) gained a *Backstage* line: green when the last update arrived, red with the reason when it did not, grey when off. Problems in a `[Backstage]` block are listed in the Overview popup (`D → O`).
+    - Uses Windows' own HTTP stack (WinHTTP), so https, the system proxy and certificates work with nothing new to install. The Linux build can send plain `http://` only.
+- **Fixed text centre.** New option `FixedTextCentre`. Until now the centred text stack was centred on the lines already shown, so every new line pushed the whole block up by half a line. With it on, the block is laid out for every line it will hold before the next `clear`, `clearText` or `clearAll`, so each line appears where it stays.
+    - Counts `text`, `textbf`, `textit`, `typewrite` and the main line of `textD`, including `\n` breaks and word-wrapped lines — the planned lines are measured with the same wrapping as the real ones. Positioned and moving text, subtitles and `textCont` are not part of the stack, as before.
+    - Cues in `run{}`, `loop(){}`, macros and `&` compounds count in firing order. `clear NAME` does not end a block. If more lines appear than were planned (after jumping around in the cue list), the block grows the old way.
+    - In `schema.toml` and in a scene's `[Options]`, same name; a scene can switch it either way. **Off when the key is missing**, so existing projects look the same; **new projects are generated with it on**.
+
+### Fixed
+- **A scene's font stayed on for every later scene** — across akter — until another scene named a font of its own. A scene without `Font` (or `FontItalic` / `FontBold` / `FontBoldItalic`) now gets the project's face, then the global one. The cause was older than 2.0.1: since 1.6.1, an empty font path meant "keep the face that is loaded". 2.0.1 most likely made it visible by accepting option names in any case, so a scene that wrote `Font =` instead of `font =` — silently ignored before — started to apply.
+    - A scene font that cannot be opened (a typo in the file name) is now written to the log; it used to fall back to the operator screen's font without a word.
+
+### Changed
+- New projects' `schema.toml` gains `FixedTextCentre = true` and the `[Backstage]` table; `TextShowcase.ngk` carries a commented-out example `[Backstage]` block.
+- VSCode extension **0.4.2**: highlights `[Backstage]` and its keys, and `FixedTextCentre`.
+
+### Tests
+- Three new files in the core suite, 235 test cases in all. `test_backstage.cpp` covers the `[Backstage]` block, times, lists, the lineup across akter, the ticker's line format, the Url and the `schema.toml` defaults. `test_backstage_send.cpp` runs a small HTTP server inside the test and checks the exact request, failures, three scenes arriving as three lines, and newest-lineup-wins (POSIX builds only). `test_text_plan.cpp` covers which cues form a block, where a block ends, and the option's cascade.
+- Checked outside the suite: the WinHTTP sender on Windows against a local stand-in ticker (request, header, UTF-8 body, server error, nothing listening, https certificate failure, unknown host); and the font fix against the real `TextRenderer` — the check reproduces the leak with the 2.0.1 code and passes with the fix.
+
 ## Version 2.0.1 — shipped
 
 A bug-fix release for 2.0.0, plus two small additions asked for by the AV team: a default text colour per scene, and a key that notes a line to fix while the show is running. Existing projects and scene files load unchanged — every option name and colour that worked in 2.0.0 still means the same thing. The one change in behaviour is the background colour cascade, under *Changed*.

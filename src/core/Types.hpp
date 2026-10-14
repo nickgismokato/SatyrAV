@@ -298,6 +298,10 @@ struct RenderModifiers{
 	float spinDegPerSec   = 0.0f;
 
 	bool HasPosition() const{ return posX >= 0.0f && posY >= 0.0f; }
+	// (2.0.2) Text with neither a fixed position nor a move/pathMove takes a
+	// slot in the slave's centred stack. One definition for the slave's
+	// layout and the fixed-centre planner (core/TextPlan).
+	bool InCentredStack() const{ return !HasPosition() && !hasMove; }
 };
 
 // A styled segment on a text line. Multiple runs come from the `+`
@@ -425,6 +429,18 @@ struct CueNote{
 	int lineNumber = 0;
 };
 
+// (2.0.2) A scene's `[Backstage]` block: what the backstage screen shows
+// about it. Sent to the backstage ticker when the show moves between
+// scenes; see core/Backstage.hpp. A scene without the block is left out of
+// the backstage lineup.
+struct BackstageInfo{
+	bool present = false;          // the scene has a [Backstage] section
+	std::string name;              // Name; defaults to the scene's name
+	int expectedSeconds = -1;      // ExpectedTime; -1 = not given
+	std::vector<std::string> actors;
+	std::vector<std::string> ninjas;
+};
+
 struct Scene{
 	std::string name;
 	std::string fileName;
@@ -455,6 +471,10 @@ struct Scene{
 	// audio alongside its picture. Off by default so existing scenes sound
 	// exactly as they always have. Scene `[Options] audioFade = true`.
 	bool audioFade = false;
+	// (2.0.2) `[Options] FixedTextCentre`: -1 = not set (use the project's),
+	// 0 = off, 1 = on. Unlike Capitalize a scene can switch it either way,
+	// since new projects turn it on project-wide.
+	int fixedTextCentre = -1;
 
 	// (1.4) Per-type particle tunables. Missing entries fall back to
 	// project-level tunings, then to built-in defaults.
@@ -464,6 +484,9 @@ struct Scene{
 	// vector rather than a map so the "defined but never referenced"
 	// warning reports in a deterministic order.
 	std::vector<CueNote> cueNotes;
+
+	// (2.0.2) The `[Backstage]` block, if the scene has one.
+	BackstageInfo backstage;
 
 	// (1.6.3) Parser warnings raised while reading this scene's `.ngk`.
 	// Populated for unknown keywords and other recoverable issues so the
@@ -507,6 +530,11 @@ struct RevySchema{
 	bool capitalize = false;
 	// (2.0.0) Project-level default for audio fading; see Scene::audioFade.
 	bool audioFade = false;
+	// (2.0.2) Centre the slave's text stack on every line it will hold
+	// before the next clear, instead of on the lines shown so far. Off when
+	// the key is missing, so existing projects look as before; new projects
+	// are generated with it on. See core/TextPlan.hpp.
+	bool fixedTextCentre = false;
 
 	// (1.6.1) Project-level defaults for `textD` subtitle rendering.
 	// These can be tuned live via the project's `schema.toml` `[Options]`
@@ -530,6 +558,12 @@ struct RevySchema{
 	// folder at dispatch time). Empty / missing entry = the F-key does
 	// nothing in this project. Read from the schema's `[Hotkeys]` table.
 	std::unordered_map<int, std::string> functionKeyAudio;
+
+	// (2.0.2) `[Backstage] Url` — where the backstage lineup is POSTed when
+	// the show changes scene — and `Enabled`, which switches it off without
+	// losing the Url. Posting needs both; a missing Enabled counts as on.
+	std::string backstageUrl;
+	bool backstageEnabled = true;
 };
 
 struct ProjectData{

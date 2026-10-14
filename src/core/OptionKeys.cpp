@@ -30,6 +30,9 @@ const OptionName kNames[] = {
 	{OptionKey::SubtitleColour,       "SubtitleColour",       {"subtitlecolor", nullptr}},
 	{OptionKey::SubtitleTransparency, "SubtitleTransparency", {nullptr}},
 	{OptionKey::SubtitlePosY,         "SubtitlePosY",         {nullptr}},
+	// (2.0.2) New in 2.0.2, so no old spelling; `center` is accepted the way
+	// `color` is.
+	{OptionKey::FixedTextCentre,      "FixedTextCentre",      {"fixedtextcenter", nullptr}},
 };
 
 std::string Lower(const std::string& s){

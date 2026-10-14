@@ -377,10 +377,21 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 	int defaultLineCount = 0;
 	for(size_t i = 0; i < textEntries.size(); i++){
 		auto& entry = textEntries[i];
-		bool animated = entry.mods.hasMove;
-		if(!entry.mods.HasPosition() && !animated && !entry.subtitleAnchor){
+		if(entry.mods.InCentredStack() && !entry.subtitleAnchor){
 			defaultLineCount += (int)entryLines[i].size();
 		}
+	}
+	// (2.0.2) Fixed text centre: size the block for every line planned up
+	// to the next clear, wrapped exactly like the real lines, so the lines
+	// already shown sit where they will stay. The real count still wins if
+	// it is larger (text the plan could not foresee, e.g. after jumping
+	// around in the cue list), which falls back to today's growing block.
+	if(fixedTextCentre && defaultLineCount > 0 && !plannedCentred.empty()){
+		int planned = 0;
+		for(const auto& line : plannedCentred){
+			planned += (int)WrapEntryLines(line, wrapWidth, text).size();
+		}
+		defaultLineCount = std::max(defaultLineCount, planned);
 	}
 	int totalH = defaultLineCount * slaveLineH;
 	int defaultY = slaveH / 2 - totalH / 2;
@@ -639,25 +650,16 @@ void SlaveWindow::PushText(const std::string& line, const RenderModifiers& mods,
 	PushTextRuns({run}, mods, groupName);
 }
 
-void SlaveWindow::PushTextRuns(const std::vector<TextRun>& runs,
-	const RenderModifiers& mods, const std::string& groupName){
-	float now = SDL_GetTicks() / 1000.0f;
-
-	// Split the collective run text on literal `\n` markers, producing one
-	// SlaveTextEntry per output line. A `\n` can fall inside a run; when
-	// that happens the run is split and its style is carried to both halves.
-	// The common path (no `\n` in any run) just emits one entry with every
-	// run intact.
+// Split the collective run text on literal `\n` markers, producing one
+// run-list per output line. A `\n` can fall inside a run; when that happens
+// the run is split and its style is carried to both halves. Empty lines are
+// dropped. The common path (no `\n` in any run) gives one line with every
+// run intact. *(2.0.2: lifted out of PushTextRuns so the fixed-centre plan
+// splits lines exactly as pushing does.)*
+static std::vector<std::vector<TextRun>> SplitAtLineBreaks(const std::vector<TextRun>& runs){
+	std::vector<std::vector<TextRun>> lines;
 	auto emit = [&](std::vector<TextRun> lineRuns){
-		if(lineRuns.empty()) return;
-		for(auto& r : lineRuns) ApplyCapitalize(r.text, capitalizeText);
-		SlaveTextEntry entry;
-		entry.runs = std::move(lineRuns);
-		entry.mods = mods;
-		entry.spawnTimeSec = now;
-		entry.groupName = groupName;
-		entry.defaultColour = defaultTextColour;
-		textEntries.push_back(std::move(entry));
+		if(!lineRuns.empty()) lines.push_back(std::move(lineRuns));
 	};
 
 	std::vector<TextRun> current;
@@ -679,6 +681,47 @@ void SlaveWindow::PushTextRuns(const std::vector<TextRun>& runs,
 		}
 	}
 	if(!current.empty()) emit(std::move(current));
+	return lines;
+}
+
+void SlaveWindow::PushTextRuns(const std::vector<TextRun>& runs,
+	const RenderModifiers& mods, const std::string& groupName){
+	float now = SDL_GetTicks() / 1000.0f;
+
+	// One SlaveTextEntry per output line.
+	for(auto& lineRuns : SplitAtLineBreaks(runs)){
+		for(auto& r : lineRuns) ApplyCapitalize(r.text, capitalizeText);
+		SlaveTextEntry entry;
+		entry.runs = std::move(lineRuns);
+		entry.mods = mods;
+		entry.spawnTimeSec = now;
+		entry.groupName = groupName;
+		entry.defaultColour = defaultTextColour;
+		textEntries.push_back(std::move(entry));
+	}
+}
+
+void SlaveWindow::SetFixedTextCentre(bool on){
+	fixedTextCentre = on;
+	if(!on) plannedCentred.clear();
+}
+
+bool SlaveWindow::HasCentredText() const{
+	for(const auto& e : textEntries){
+		if(e.mods.InCentredStack() && !e.subtitleAnchor) return true;
+	}
+	return false;
+}
+
+void SlaveWindow::PlanCentredBlock(const std::vector<std::vector<TextRun>>& cues){
+	plannedCentred.clear();
+	if(!fixedTextCentre) return;
+	for(const auto& runs : cues){
+		for(auto& line : SplitAtLineBreaks(runs)){
+			for(auto& r : line) ApplyCapitalize(r.text, capitalizeText);
+			plannedCentred.push_back(std::move(line));
+		}
+	}
 }
 
 void SlaveWindow::PushTypewriteRuns(const std::vector<TextRun>& runs,
@@ -772,10 +815,14 @@ void SlaveWindow::ClearText(){
 		std::remove_if(textEntries.begin(), textEntries.end(),
 			[](const SlaveTextEntry& e){ return e.groupName.empty(); }),
 		textEntries.end());
+	// (2.0.2) The planned block ends with the stack it was planned for.
+	// Grouped text that survives keeps the plan, as it is part of it.
+	if(!HasCentredText()) plannedCentred.clear();
 }
 
 void SlaveWindow::ClearTextAll(){
 	textEntries.clear();
+	plannedCentred.clear();
 }
 
 void SlaveWindow::SetBackgroundColour(Colour c){
@@ -910,6 +957,7 @@ void SlaveWindow::ClearGroup(const std::string& groupName){
 		std::remove_if(textEntries.begin(), textEntries.end(),
 			[&](const SlaveTextEntry& e){ return matches(e.groupName); }),
 		textEntries.end());
+	if(!HasCentredText()) plannedCentred.clear(); // (2.0.2) see ClearText
 	imageEntries.erase(
 		std::remove_if(imageEntries.begin(), imageEntries.end(),
 			[&](const SlaveImageEntry& e){ return matches(e.groupName); }),
@@ -926,6 +974,7 @@ void SlaveWindow::ClearGroup(const std::string& groupName){
 
 void SlaveWindow::ClearAll(){
 	textEntries.clear();
+	plannedCentred.clear();
 	imageEntries.clear();
 	// (1.4) Same smooth-stop protection. `clearAll` is the closest thing
 	// to a hard reset, but the user explicitly asked for endings to

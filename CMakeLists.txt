@@ -100,6 +100,8 @@ target_link_libraries(satyr-av PRIVATE
 # D3D11 for hardware-accelerated video decode (D3D11VA)
 if(WIN32)
 	target_link_libraries(satyr-av PRIVATE d3d11)
+	# (2.0.2) WinHTTP for the backstage screen's POST (core/HttpPost.cpp).
+	target_link_libraries(satyr-av PRIVATE winhttp)
 endif()
 
 # ── Unit tests (1.8.1) ───────────────────────────────────────

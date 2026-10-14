@@ -39,6 +39,8 @@ public:
 
 	// Data access by index (for navigator drawing)
 	const Akt* GetAkt(int index) const;
+	// (2.0.2) Every akt with its scenes, in show order (backstage lineup).
+	const std::vector<Akt>& GetAkts() const{ return projectData.schema.akts; }
 	const Scene* GetScene(int aktIdx, int sceneIdx) const;
 	const Command* GetCommand(int aktIdx, int sceneIdx, int cmdIdx) const;
 	int GetSceneCountForAkt(int aktIdx) const;
@@ -67,6 +69,8 @@ public:
 	// (2.0.0) Whether `play FILE FADE_IN, FADE_OUT` should fade the audio
 	// as well as the picture. Off unless the project or scene opts in.
 	bool GetEffectiveAudioFade() const;
+	// (2.0.2) Scene FixedTextCentre if set (either way), else the project's.
+	bool GetEffectiveFixedTextCentre() const;
 
 	// (1.6.1) Cascade for the four font-style face paths. The regular
 	// path falls back to the Config-level path if scene/project leave it

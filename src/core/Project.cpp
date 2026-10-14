@@ -157,6 +157,7 @@ FontSize             = 60        # Slave text size, in points
 TextOutline          = 4         # Black outline thickness in points, 0 = off
 Capitalize           = false     # Uppercase every line of slave text
 AudioFade            = false     # Let `play` fade times fade the sound too, not just the picture
+FixedTextCentre      = true      # Centre text on all its lines up to the next clear, so lines don't jump
 BackgroundColour     = "black"   # A colour name, or a "#RRGGBB" string
 TextColour           = "white"   # Default slave text colour: a colour name, or "#RRGGBB"
 Font                 = ""        # Regular face: full path, or a bare FONTS/ filename
@@ -211,6 +212,14 @@ F10 = ""
 F11 = ""
 F12 = ""
 
+# Backstage screen. Every scene change POSTs the current scene and the
+# next two to the backstage ticker, taken from each scene's [Backstage]
+# block; scenes without one are left out, so nothing is sent until a scene
+# has a block. Enabled = false switches it off and keeps the Url.
+[Backstage]
+Enabled = true
+Url     = "https://backstage.texnik.dk/set-bck"
+
 # Project-level particle tuning, one table per type. The block below
 # lists every key with its default value - uncomment the table and the
 # keys you want to change. The same keys exist for SNOW, CONFETTI, RISE,
@@ -255,6 +264,15 @@ void Project::GenerateExampleScenes(const std::string& scenesDir){
 # TextColour = yellow      # Default text colour for this scene
 # FontSize = 30            # Overrides the project FontSize for this scene
 # Capitalize = true        # Uppercase every line of text
+
+# What the backstage screen shows for this scene, when the project's
+# schema.toml has a [Backstage] Url. Scenes without this block are left
+# off the backstage screen.
+# [Backstage]
+# Name         = Text showcase
+# ExpectedTime = 2m40s
+# Actors       = ["Actor 1", "Actor 2"]
+# Ninjas       = ["Ninja 1"]
 
 [Commands]
 comment "--- Plain text ---"

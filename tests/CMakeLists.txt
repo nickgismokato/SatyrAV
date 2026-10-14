@@ -63,6 +63,14 @@ target_link_libraries(satyr-tests PRIVATE
 	doctest::doctest
 )
 
+# (2.0.2) BackstageSender runs a worker thread, and HttpPost uses WinHTTP
+# on Windows.
+find_package(Threads REQUIRED)
+target_link_libraries(satyr-tests PRIVATE Threads::Threads)
+if(WIN32)
+	target_link_libraries(satyr-tests PRIVATE winhttp)
+endif()
+
 # (1.8.2) MinGW: link the C++ runtime into the test binary statically.
 #
 # doctest keeps the INFO()/CAPTURE() context stack in a `thread_local

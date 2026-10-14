@@ -13,7 +13,7 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	int colW = 340;
 	int totalW = colW * 2 + 40;
 	// Count max lines in either column to compute height
-	int leftLines = 12; // version + scene(3) + command(4) + display(3)
+	int leftLines = 14; // version + scene(3) + command(4) + display(3) + backstage(2)
 	int rightLines = 12; // fonts(4) + cache(3) + video(4) + blank(1)
 	int maxLines = (leftLines > rightLines) ? leftLines : rightLines;
 	int totalH = maxLines * lineH + 60 + lineH + 8; // + footer hint row
@@ -56,7 +56,22 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	text.DrawText(renderer, "Slave display", lx, y, hdr); y += lineH;
 	std::string res = "  " + std::to_string(info.slaveWidth) + "x" + std::to_string(info.slaveHeight)
 		+ "  [Display " + std::to_string(info.slaveDisplayIndex) + "]";
-	text.DrawText(renderer, res, lx, y, txt);
+	text.DrawText(renderer, res, lx, y, txt); y += lineH;
+	y += 4;
+
+	// (2.0.2) The backstage screen's last POST. Red when it failed, so a
+	// dead ticker is noticed during the show rather than after it.
+	text.DrawText(renderer, "Backstage", lx, y, hdr); y += lineH;
+	std::string bs = info.backstageText;
+	if(bs.size() > 38) bs = bs.substr(0, 35) + "...";
+	Colour bsCol = txt;
+	switch(info.backstageLook){
+		case DebugInfo::BackstageLook::Off:     bsCol = dim; break;
+		case DebugInfo::BackstageLook::Neutral: bsCol = txt; break;
+		case DebugInfo::BackstageLook::Ok:      bsCol = ok;  break;
+		case DebugInfo::BackstageLook::Failed:  bsCol = err; break;
+	}
+	text.DrawText(renderer, "  " + bs, lx, y, bsCol);
 
 	// ── Right column ─────────────────────────────────────
 	int rx = boxX + colW + 24;

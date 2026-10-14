@@ -1,6 +1,6 @@
 # Scene file format (.ngk)
 
-Scene files use a simple INI-like format with four sections. Lines starting with `#` are comments (end-of-line comments are also supported). A `#` is treated as literal data rather than a comment marker in three places: inside a quoted string *(1.6.6)*, inside a modifier's parentheses *(1.8.2)* — which is what makes `colour(#RRGGBB, …)` work — and as a hex colour straight after the `=` of an `[Options]` line *(2.0.1)*, as in `TextColour = #FF8800`. See [commands.md](commands.md#line-endings-and-comments).
+Scene files use a simple INI-like format made of sections (`[Options]`, `[Preload]`, `[Macro]`, `[Cue]`, `[Backstage]`, `[Commands]`). Lines starting with `#` are comments (end-of-line comments are also supported). A `#` is treated as literal data rather than a comment marker in three places: inside a quoted string *(1.6.6)*, inside a modifier's parentheses *(1.8.2)* — which is what makes `colour(#RRGGBB, …)` work — and as a hex colour straight after the `=` of an `[Options]` line *(2.0.1)*, as in `TextColour = #FF8800`. See [commands.md](commands.md#line-endings-and-comments).
 
 > **Canonical reference:** This document is a tutorial introduction to the format. For the complete and authoritative list of every command, modifier, and block — with syntax and a runnable example per entry — see [commands.md](commands.md).
 
@@ -21,6 +21,7 @@ FontBold   = DejaVuSans-Bold.ttf            # (1.6.1) Bold face for textbf / bol
 FontBoldItalic = DejaVuSans-BoldOblique.ttf # (1.6.1) Combined face — used when a run is both bold + italic
 Capitalize = true        # Capitalize all text output
 AudioFade = true         # (2.0.0) Let `play` fade times fade the sound too, not just the picture
+FixedTextCentre = true   # (2.0.2) Centre text on all its lines up to the next clear, so lines don't jump
 
 # (1.4) Per-particle-type tunables — scene overrides project defaults.
 RAIN.SPEED   = 1.5                  # velocity multiplier
@@ -33,6 +34,22 @@ SNOW.VX.DIST = NORMAL(0.5, 0.3)     # wider horizontal sway
 ```
 
 See [commands.md](commands.md) for the full list of `<TYPE>.<KEY>` tunables and supported distributions (`UNIFORM`, `NORMAL`, `LOGNORMAL`, `BINOMIAL`, `BERNOULLI`, `GAMMA`).
+
+*(2.0.2)* A scene's `Font` settings apply to that scene only; the next scene goes back to the project's font unless it names its own. For `FixedTextCentre`, see [Fixed text centre](commands.md#fixed-text-centre-202).
+
+### [Backstage] *(2.0.2)*
+
+What the backstage screen shows about this scene, when the project's `schema.toml` has `[Backstage]` with a `Url` (new projects do). At every scene change the current scene and the next two scenes *that have this block* are sent to the backstage ticker. Scenes without it are left off the backstage screen.
+
+```ini
+[Backstage]
+Name         = Scene 1            # default: the scene's file name
+ExpectedTime = 2m40s              # or 2:40, or 160 (seconds)
+Actors       = ["Actor 1", "Actor 2"]
+Ninjas       = ["Ninja 1"]
+```
+
+Full details — when it sends, what it sends, and how to see whether it arrived — in [commands.md](commands.md#backstage-202).
 
 ### [Preload]
 

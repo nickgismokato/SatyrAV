@@ -133,6 +133,15 @@ public:
 	// (2.0.1) Colour for text pushed from now on that has no colour(...).
 	void SetDefaultTextColour(Colour c);
 
+	// (2.0.2) Fixed text centre (see core/TextPlan.hpp). When on, and a
+	// plan is set, the centred stack is sized for every planned line rather
+	// than for the lines shown so far. PerformanceScreen sets the plan when
+	// a centred line is pushed onto an empty stack; a clear that empties the
+	// stack drops it.
+	void SetFixedTextCentre(bool on);
+	bool HasCentredText() const;
+	void PlanCentredBlock(const std::vector<std::vector<TextRun>>& cues);
+
 	// Image with modifiers. Both ungrouped and grouped shows append, so a
 	// scene can stack multiple `show` calls on screen. `clear` /
 	// `clearImages` still drop every ungrouped image at once.
@@ -189,6 +198,10 @@ private:
 	Colour bgColour = Colours::BLACK;
 	bool capitalizeText = false;
 	Colour defaultTextColour = Colours::WHITE;
+	bool fixedTextCentre = false;
+	// One run-list per planned output line (already split at `\n` and
+	// capitalised, so it wraps exactly like the pushed line will).
+	std::vector<std::vector<TextRun>> plannedCentred;
 
 	// Active images (previously a single texture; now a list so grouped
 	// shows can stack and ungrouped shows replace their own kind only).

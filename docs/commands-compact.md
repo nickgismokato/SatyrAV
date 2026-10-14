@@ -9,6 +9,7 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `[Macro]`
 - `[Cue]` *(1.8.4)* — `Name note text…` per line; a command claims one with a trailing `\Name`. Shown in the master window's Cue Notes column, never on the slave
 - `[Hotkeys]` *(1.6.3, project schema only)*
+- `[Backstage]` *(2.0.2)* — in a scene: what the backstage screen shows; in `schema.toml`: where to send it
 - `[Commands]`
 
 ## `[Options]` keys
@@ -22,6 +23,7 @@ Same names in a scene and in `schema.toml`; case does not matter *(2.0.1)*.
 - `FontItalic = <path>`, `FontBold = <path>`, `FontBoldItalic = <path>` *(1.6.1)*
 - `Capitalize = true | false`
 - `AudioFade = true | false` *(2.0.0)* — `play` fade times also fade the video's sound
+- `FixedTextCentre = true | false` *(2.0.2)* — centre text on all its lines up to the next clear; a scene can switch it either way
 - `<TYPE>.SPEED = <float>`
 - `<TYPE>.DENS = <float>` (alias `<TYPE>.DENSITY`)
 - `<TYPE>.X.DIST = NAME(p1, p2)`
@@ -40,6 +42,19 @@ Same names in a scene and in `schema.toml`; case does not matter *(2.0.1)*.
 ## `[Hotkeys]` keys *(1.6.3, schema.toml only)*
 
 - `F1 = "<file>"` … `F12 = "<file>"` — bind any subset of F-keys to audio files in `sound/`
+
+## `[Backstage]` keys *(2.0.2)*
+
+In a scene (any case):
+
+- `Name = <text>` — default: the scene's name
+- `ExpectedTime = 2m40s | 2:40 | <seconds>`
+- `Actors = ["A", "B"]`, `Ninjas = ["N"]`
+
+In `schema.toml`:
+
+- `Url = "https://backstage.texnik.dk/set-bck"` — empty or missing: nothing is sent
+- `Enabled = true | false` — missing counts as `true`
 
 ## `schema.toml` particle keys — `[Particle.<TYPE>]`
 

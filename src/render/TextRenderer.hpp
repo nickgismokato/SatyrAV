@@ -65,8 +65,9 @@ public:
 
 	// (1.6.1) Re-load the slave-side italic/bold/bold-italic faces. Called
 	// by PerformanceScreen when a project's effective font cascade resolves
-	// to different paths than the Config-level defaults. Empty path leaves
-	// that face unloaded (i.e. that style falls back to regular).
+	// to different paths than the Config-level defaults. Empty path selects
+	// the Config-level face for that slot *(2.0.2: it used to keep whatever
+	// was loaded, so one scene's font leaked into the scenes after it)*.
 	void SetSlaveFontPaths(const std::string& regular,
 		const std::string& italic,
 		const std::string& bold,

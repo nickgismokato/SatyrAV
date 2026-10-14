@@ -47,6 +47,11 @@ struct DebugInfo{
 	// Scene info
 	std::string currentSceneName;
 	std::string currentAktName;
+
+	// (2.0.2) Backstage screen: the last POST's outcome in a few words.
+	enum class BackstageLook{ Off, Neutral, Ok, Failed };
+	BackstageLook backstageLook = BackstageLook::Off;
+	std::string backstageText = "off";
 };
 
 class DebugPopup : public Popup{

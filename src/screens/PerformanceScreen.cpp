@@ -2,6 +2,7 @@
 #include "App.hpp"
 #include "core/Config.hpp"
 #include "core/Logger.hpp"
+#include "core/TextPlan.hpp"
 #include <filesystem>
 
 namespace SatyrAV{
@@ -43,6 +44,9 @@ void PerformanceScreen::OnEnter(){
 	// (2.0.1) Nothing has run in this session yet.
 	haveLastExecuted = false;
 	markStatus.clear();
+	// (2.0.2) ...so the first scene that runs is news to backstage too.
+	backstageAkt = -1;
+	backstageScene = -1;
 }
 
 void PerformanceScreen::OnExit(){
@@ -55,6 +59,10 @@ void PerformanceScreen::OnExit(){
 	media.Shutdown();
 	cache.Clear();
 	app->GetRenderer().CloseSlave();
+	// (2.0.2) Stop posting once the project is closed. Not Shutdown(): that
+	// would wait for a request in flight, and leaving a project must not
+	// hang on the network. The worker is reused by the next project.
+	backstage.Configure("");
 }
 
 void PerformanceScreen::SetProject(const ProjectData& project){
@@ -66,6 +74,15 @@ void PerformanceScreen::SetProject(const ProjectData& project){
 	if(!MarkLog::EnsureFolder(projectBasePath)){
 		Logger::Instance().Warnf("Could not create the fix-it folder in %s",
 			projectBasePath.c_str());
+	}
+
+	// (2.0.2) Backstage screen: on when schema.toml has a [Backstage] Url
+	// and Enabled is not false.
+	if(!project.schema.backstageEnabled && !project.schema.backstageUrl.empty()){
+		Logger::Instance().Infof("Backstage: switched off in schema.toml (Enabled = false)");
+		backstage.Configure("");
+	} else{
+		backstage.Configure(project.schema.backstageUrl);
 	}
 
 	// If the project has never had a targeted rect saved, default to
@@ -255,8 +272,9 @@ void PerformanceScreen::ApplySceneOptionsCascade(){
 	// (1.6.1) Re-resolve every face path; bare filenames in scene/project
 	// options resolve against the shared FONTS directory so authors can
 	// reference fonts by short name (`FontBold = "Inter-Bold.ttf"`).
-	// Empty regular keeps the existing loaded face — see
-	// TextRenderer::SetSlaveFontPaths comment.
+	// Empty means the Config-level face, so a scene without a font of its
+	// own never inherits the previous scene's (2.0.2) — see
+	// TextRenderer::SetSlaveFontPaths.
 	tr.SetSlaveFontPaths(
 		cfg.ResolveFontPath(engine.GetEffectiveFontPath(false, false)),
 		cfg.ResolveFontPath(engine.GetEffectiveFontPath(false, true)),
@@ -266,6 +284,8 @@ void PerformanceScreen::ApplySceneOptionsCascade(){
 	slaveUI.SetCapitalize(engine.GetEffectiveCapitalize());
 	// (2.0.1) Scene -> project -> white default for uncoloured text.
 	slaveUI.SetDefaultTextColour(engine.GetEffectiveTextColour());
+	// (2.0.2) Scene FixedTextCentre if set, else the project's.
+	slaveUI.SetFixedTextCentre(engine.GetEffectiveFixedTextCentre());
 	// (2.0.0) Re-evaluated alongside the other cascaded options, so a scene
 	// that opts into audio fading takes effect as soon as it is entered.
 	media.SetAudioFade(engine.GetEffectiveAudioFade());
@@ -451,6 +471,10 @@ void PerformanceScreen::ExecuteCommand(){
 	// Normal: execute current command
 	engine.SelectAkt(primedAkt);
 	engine.SelectScene(primedScene);
+	// (2.0.2) A cue in a scene the show was not in yet — the first scene of
+	// the night, or one the operator jumped to with the arrow keys — moves
+	// the show there. Later cues in the same scene send nothing.
+	NotifyBackstage(primedAkt, primedScene);
 	engine.SetCommandIndex(primedCmd);
 	engine.ExecuteCurrentCommand();
 
@@ -471,6 +495,25 @@ void PerformanceScreen::ExecuteCommand(){
 	} else{
 		awaitingSceneAdvance = true;
 	}
+}
+
+void PerformanceScreen::NotifyBackstage(int aktIdx, int sceneIdx){
+	if(!backstage.Enabled()) return;
+	if(aktIdx == backstageAkt && sceneIdx == backstageScene) return;
+	backstageAkt = aktIdx;
+	backstageScene = sceneIdx;
+
+	auto lineup = Backstage::BuildLineup(engine.GetAkts(), aktIdx, sceneIdx);
+	const Scene* scene = engine.GetScene(aktIdx, sceneIdx);
+	const std::string sceneName = scene ? scene->name : std::string("?");
+	if(lineup.empty()){
+		// Skipped scenes are left out of the lineup, so the backstage
+		// screen keeps showing the last real one.
+		Logger::Instance().Infof("Backstage: scene '%s' has no [Backstage] block "
+			"— nothing sent", sceneName.c_str());
+		return;
+	}
+	backstage.Post(Backstage::FormatBody(lineup), lineup.front()->name);
 }
 
 void PerformanceScreen::MarkLastExecutedLine(){
@@ -550,6 +593,9 @@ void PerformanceScreen::AdvanceToNextScene(){
 
 	// Apply options cascade for new scene
 	ApplySceneOptionsCascade();
+
+	// (2.0.2) The show has moved into the next scene: update backstage.
+	NotifyBackstage(primedAkt, primedScene);
 
 	// Clear slave for new scene
 	slaveUI.ClearText();
@@ -645,6 +691,17 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 	};
 	lastCommandStr = CommandStr(cmd);
 	lastCommandPath.clear();
+
+	// (2.0.2) Fixed text centre: a centred line pushed onto an empty stack
+	// starts a block, so plan every centred line up to the next clear.
+	// `cmd` is the scene's own Command (CueEngine passes references), which
+	// is how the planner finds where in the scene the block starts.
+	if(TextPlan::AddsCentredLine(cmd) && engine.GetEffectiveFixedTextCentre()
+		&& !slaveUI.HasCentredText()){
+		if(const Scene* sc = engine.GetCurrentScene()){
+			slaveUI.PlanCentredBlock(TextPlan::PlannedRuns(TextPlan::PlanBlock(*sc, &cmd)));
+		}
+	}
 
 	switch(cmd.type){
 		case CommandType::Text:
@@ -935,6 +992,33 @@ void PerformanceScreen::UpdateDebugInfo(){
 		: (media.IsVideoZeroCopy() ? DecodeMode::HardwareZeroCopy
 		   : (media.IsUsingHwDecode() ? DecodeMode::Hardware : DecodeMode::Software));
 	dbg.activeSounds = media.GetActiveSoundCount();
+
+	// (2.0.2) Backstage screen.
+	using Look = DebugInfo::BackstageLook;
+	const auto bs = backstage.GetStatus();
+	switch(bs.state){
+		case BackstageSender::State::Off:
+			dbg.backstageLook = Look::Off;
+			dbg.backstageText = "off (no Url in schema.toml)";
+			break;
+		case BackstageSender::State::Waiting:
+			dbg.backstageLook = Look::Neutral;
+			dbg.backstageText = "on, nothing sent yet";
+			break;
+		case BackstageSender::State::Sending:
+			dbg.backstageLook = Look::Neutral;
+			dbg.backstageText = "sending " + bs.label + "...";
+			break;
+		case BackstageSender::State::Sent:
+		case BackstageSender::State::Failed:{
+			const int64_t ago = (BackstageSender::NowMs() - bs.finishedMs) / 1000;
+			const bool sent = bs.state == BackstageSender::State::Sent;
+			dbg.backstageLook = sent ? Look::Ok : Look::Failed;
+			dbg.backstageText = (sent ? "sent " : "FAILED ") + bs.label
+				+ " " + std::to_string((long long)ago) + "s ago: " + bs.detail;
+			break;
+		}
+	}
 }
 
 } // namespace SatyrAV

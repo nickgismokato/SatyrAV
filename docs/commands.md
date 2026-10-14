@@ -12,7 +12,7 @@ Full reference for every command, modifier, and section available in a SatyrAV `
 
 Commands are grouped by role: scene-file sections, executable commands, modifiers, and structural blocks (`loop`, `run`, `group`, `macro`).
 
-> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, *(1.6.3)*, *(1.6.6)*, *(1.7)*, *(1.8.x)*, *(2.0.0)* and *(2.0.1)* indicate the version they were introduced. Everything unmarked was already in 1.0.
+> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, *(1.6.3)*, *(1.6.6)*, *(1.7)*, *(1.8.x)*, *(2.0.0)*, *(2.0.1)* and *(2.0.2)* indicate the version they were introduced. Everything unmarked was already in 1.0.
 
 ---
 
@@ -30,8 +30,10 @@ Per-scene settings that override project-level defaults.
     - `FontSize` — slave font size in points. Overrides the project `FontSize`.
     - `Font` — path (relative to project root, or a bare filename resolved against the shared `FONTS/` directory *(1.6.1)*) to a `.ttf` font file.
     - `FontItalic`, `FontBold`, `FontBoldItalic` *(1.6.1)* — paths to the italic / bold / bold-italic typeface variants. Used by `textbf`, `textit`, and inline `bold(...)` / `it(...)`. Empty or missing → falls back to project / global config, then to regular.
+    - *Fonts are per scene* *(2.0.2)*: a scene without `Font` (or one of the style faces) uses the project's, then the global one — never the previous scene's. Before 2.0.2 a scene's font stayed on for every later scene that did not name its own.
     - `Capitalize` — `true` or `false` to capitalize every text line.
     - `AudioFade` *(2.0.0)* — `true` or `false`. When true, the fade times on a `play FILE FADE_IN, FADE_OUT` command ramp the clip's **audio** as well as its picture. Default **false**, so scenes written before 2.0.0 keep fading the picture only and cutting the sound at full volume. Like `Capitalize`, a scene can switch this on but cannot switch off a project that enabled it.
+    - `FixedTextCentre` *(2.0.2)* — `true` or `false`. Normally the centred text stack is centred on the lines shown so far, so every new line pushes the block up by half a line. With `true`, the block is centred on **every line it will hold before it is cleared**, so each line appears where it stays. See [Fixed text centre](#fixed-text-centre-202). A scene can switch it either way, overriding the project. Off in projects that do not set it; new projects are generated with it on.
     - `<TYPE>.SPEED`, `<TYPE>.DENS` (or `.DENSITY`), `<TYPE>.X.DIST = NAME(p1, p2)` *(1.4)*, `<TYPE>.VX.DIST`, `<TYPE>.VY.DIST` *(1.5)* — per-particle-type tunables. See [Particle tunables in `[Options]`](#particle-tunables-in-options-14) for details.
 - **Hex values:** *(2.0.1)* `TextColour = #FF8800` works unquoted. A `#` straight after the `=` followed by 3 or 6 hex digits is the colour; any later `#` starts a comment as usual.
 - **Example:**
@@ -125,6 +127,44 @@ Project-level audio hotkeys bound to `F1`–`F12`. Pressing the key during a per
 - **Notes:** Hotkeys are project-only. F-keys are ignored while a text field is focused (search field, creator field, etc.) so typing in those inputs doesn't fire a cue.
 - **Help popup:** the `H` popup lists `F1-F12` once you're inside a project.
 
+### `[Backstage]` *(2.0.2)*
+
+What the backstage screen shows about this scene. When the show moves into a new scene, SatyrAV sends the current scene and the next two to the revy's backstage ticker ([@fysikrevy/backstage-ticker](https://www.npmjs.com/package/@fysikrevy/backstage-ticker)), so the people backstage see who is on next.
+
+- **Syntax** (in a `.ngk`; the header in any case):
+    ```txt
+    [Backstage]
+    Name         = Scene 1
+    ExpectedTime = 2m40s
+    Actors       = ["Actor 1", "Actor 2"]
+    Ninjas       = ["Ninja 1"]
+    ```
+- **Keys** (any case, all optional):
+    - `Name` — shown as the scene's title. Default: the scene's file name without `.ngk`. Quote it if it contains `#`.
+    - `ExpectedTime` — `2m40s`, `2m`, `40s`, `2:40`, `1:02:03`, or plain seconds (`160`). Sent as `m:ss`.
+    - `Actors`, `Ninjas` — a list: `["A", "B"]`, `['A', 'B']`, `[A, B]`, or `A, B`. A list may run over several lines, TOML style, as long as the first line ends with `[`.
+- **Turning it on** — in `schema.toml`:
+    ```toml
+    [Backstage]
+    Enabled = true
+    Url     = "https://backstage.texnik.dk/set-bck"
+    ```
+  New projects are generated with exactly this. Nothing is sent when the `Url` is empty or missing, or when `Enabled = false` (which keeps the `Url` for later). A missing `Enabled` counts as on. With no scheme the Url is `https://`; with no path it is `/set-bck`.
+- **When it is sent:** when you press ENTER at *Press ENTER for next scene*, and when a cue runs in a scene the show was not in yet — the first scene of the night, or one you jumped to with the arrow keys. Later cues in the same scene send nothing, so it is one POST per scene.
+- **What is sent:** the current scene and the next two scenes **that have a `[Backstage]` block**, in show order across akter, one line each:
+    ```txt
+    Scene 1;2:40;actors;Actor 1;Actor 2;ninjas;Ninja 1
+    Scene 3;4:30;actors;Actor 6;Actor 7
+    Scene 4;0:45;actors;Actor 1;ninjas;Ninja 4
+    ```
+  A scene without a block (an AV interlude) is skipped, and starting one sends nothing, so the backstage screen keeps the last real lineup. Empty `Actors` / `Ninjas` lists are left out. Near the end of the show fewer than three lines are sent.
+- **Request:** `POST` with the header `sl-cmd: waiting` and a plain-text UTF-8 body, as the ticker expects.
+- **Never blocks the show:** the request is made in the background with a 4-second limit and is not retried — the next scene change sends a fresh lineup anyway. If a newer lineup is ready before an older one went out, only the newest is sent.
+- **Text the ticker cannot take:** `;` and line breaks would split a field and are removed. `<`, `>` and `&` are sent as they are, but the ticker shows text as HTML, so they raise a warning.
+- **Warnings** in the Overview Debug popup (`D → O`): unknown keys, a time it cannot read, a line without `=`, and the characters above.
+- **Watching it:** the Debug popup (`D`) has a *Backstage* line — green with the HTTP status when the last POST arrived, red with the reason when it failed, grey when off. Every request is in the SatyrAV log: what was sent, line by line, then the result.
+- **Platforms:** https works in the Windows build (through Windows' own HTTP stack, including its proxy and certificate settings). The Linux build sends plain `http://` only.
+
 ### `[Commands]`
 
 The sequence of cues. Each line is one cue; the operator presses ENTER to advance.
@@ -144,6 +184,24 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
     text "Welcome!"
     text "Line 1\nLine 2"
     text colour(RED, "Hello, ") + colour(BLUE, "World!")
+    ```
+
+### Fixed text centre *(2.0.2)*
+
+How the centred text stack is placed when `FixedTextCentre = true` (in `schema.toml`'s `[Options]`, or a scene's).
+
+- **Without it** (the behaviour since 1.0): the stack is centred on the lines currently on screen. A second line moves the first up by half a line, a third moves both up again, and so on.
+- **With it:** when a centred line appears on an empty screen, SatyrAV looks ahead in the scene and counts every centred line still to come before the next `clear`, `clearText` or `clearAll` (or the end of the scene), and centres the block on all of them. The first line appears at the top of the finished block, and no line moves as the rest appear.
+- **What counts:** `text`, `textbf`, `textit`, `typewrite`, and the main line of `textD`, including the lines of a `\n` break and lines that word-wrap (the planned lines are measured exactly like the real ones). Text placed with `pos(...)`, `move(...)` or `pathMove(...)`, `textD`'s subtitle line, and `textCont` (which adds to the last line) are not part of the stack, as before.
+- **What ends a block:** `clear` without a name, `clearText`, `clearAll`, and the end of the scene. `clear NAME` only removes one group, so the block carries on. Cues inside `run{ … }`, `loop(…){ … }`, a `macro`, or a compound `&` count in the order they fire — so in `clear & text "A"` the clear ends the old block and `"A"` starts the new one.
+- **If more lines appear than were planned** — after jumping around in the cue list, say — the block grows the old way rather than overflowing.
+- **Example:** with this scene, `"One"` appears where it sits when all three lines are up:
+    ```txt
+    [Commands]
+    text "One"
+    text "Two"
+    text "Three"
+    clear
     ```
 
 ### `textCont` *(1.4)*

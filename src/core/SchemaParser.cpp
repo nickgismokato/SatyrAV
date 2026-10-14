@@ -121,6 +121,8 @@ RevySchema SchemaParser::ParseFile(const std::string& schemaPath){
 		schema.capitalize = option(OptionKey::Capitalize).value_or(false);
 		// (2.0.0) Project-level default for opt-in audio fading.
 		schema.audioFade  = option(OptionKey::AudioFade).value_or(false);
+		// (2.0.2) Fixed text centre; off when missing (see RevySchema).
+		schema.fixedTextCentre = option(OptionKey::FixedTextCentre).value_or(false);
 
 		// (2.0.1) Any colour the shared reader knows, including hex. Before
 		// 2.0.1 only black, blue, red, green and white were accepted here.
@@ -206,6 +208,28 @@ RevySchema SchemaParser::ParseFile(const std::string& schemaPath){
 				std::string key = "F" + std::to_string(n);
 				auto v = (*hotkeys)[key].value_or(std::string(""));
 				if(!v.empty()) schema.functionKeyAudio[n] = v;
+			}
+		}
+
+		// (2.0.2) [Backstage] Url — the backstage ticker to POST the lineup
+		// to — and Enabled. Table and keys in any case; an empty or missing
+		// Url, or Enabled = false, means nothing is sent.
+		for(auto&& [tk, tv] : tbl){
+			std::string tableName(tk.str());
+			std::transform(tableName.begin(), tableName.end(), tableName.begin(),
+				[](unsigned char ch){ return (char)std::tolower(ch); });
+			const toml::table* bs = tv.as_table();
+			if(tableName != "backstage" || !bs) continue;
+			for(auto&& [k, v] : *bs){
+				std::string keyName(k.str());
+				std::transform(keyName.begin(), keyName.end(), keyName.begin(),
+					[](unsigned char ch){ return (char)std::tolower(ch); });
+				if(keyName == "url"){
+					if(auto s = v.value<std::string>()) schema.backstageUrl = *s;
+				} else if(keyName == "enabled"){
+					if(auto b = v.value<bool>()) schema.backstageEnabled = *b;
+					else if(auto s = v.value<std::string>()) schema.backstageEnabled = ParseOptionBool(*s);
+				}
 			}
 		}
 

@@ -1,5 +1,6 @@
 #include "core/SceneParser.hpp"
 #include "core/OptionKeys.hpp"
+#include "core/Backstage.hpp"
 #include "core/LatexSymbols.hpp"
 #include "core/Platform.hpp"
 #include <fstream>
@@ -1350,7 +1351,7 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 	scene.fileName = scenePath.substr(pos + 1);
 	scene.name = scenePath.substr(pos + 1, dot - pos - 1);
 
-	enum class Section{ None, Options, Preload, Macro, Cue, Commands };
+	enum class Section{ None, Options, Preload, Macro, Cue, Commands, Backstage };
 	Section currentSection = Section::None;
 
 	// Macros collected from the [Macro] section. Referenced by name from
@@ -1437,8 +1438,58 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 		if(line == "[Macro]"){ currentSection = Section::Macro; continue; }
 		if(line == "[Cue]"){ currentSection = Section::Cue; continue; }
 		if(line == "[Commands]"){ currentSection = Section::Commands; continue; }
+		// (2.0.2) Any case, since the roadmap and the ticker's own docs both
+		// write it lower-case.
+		{
+			std::string lower = line;
+			std::transform(lower.begin(), lower.end(), lower.begin(),
+				[](unsigned char ch){ return (char)std::tolower(ch); });
+			if(lower == "[backstage]"){
+				currentSection = Section::Backstage;
+				scene.backstage.present = true;
+				continue;
+			}
+		}
 
 		switch(currentSection){
+			case Section::Backstage:{
+				// (2.0.2) `Key = value`, see core/Backstage.hpp. A list may
+				// span lines the way TOML writes it:
+				//     Actors = [
+				//         "Actor 1",
+				//         "Actor 2"
+				//     ]
+				auto eq = line.find('=');
+				if(eq == std::string::npos){
+					Scene::Warning w;
+					w.lineNumber = lineNumber;
+					w.message = "[Backstage] expects 'Key = value', got '" + line + "'";
+					scene.warnings.push_back(std::move(w));
+					break;
+				}
+				std::string key = Trim(line.substr(0, eq));
+				std::string val = Trim(line.substr(eq + 1));
+				if(!val.empty() && val.front() == '[' && val.find(']') == std::string::npos){
+					while(i + 1 < allLines.size()){
+						std::string more = allLines[++i];
+						auto cp = FindCommentStart(more);
+						if(cp != std::string::npos) more = more.substr(0, cp);
+						more = Trim(more);
+						if(more.empty()) continue;
+						val += " " + more;
+						if(more.find(']') != std::string::npos) break;
+					}
+				}
+				std::string warning;
+				Backstage::ApplyKey(scene.backstage, key, val, warning);
+				if(!warning.empty()){
+					Scene::Warning w;
+					w.lineNumber = lineNumber;
+					w.message = warning;
+					scene.warnings.push_back(std::move(w));
+				}
+				break;
+			}
 			case Section::Options:{
 				auto eq = line.find('=');
 				if(eq != std::string::npos){
@@ -1482,6 +1533,9 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 					} else if(opt == OptionKey::AudioFade){
 						// (2.0.0) Opt-in audio fading for `play` fade times.
 						scene.audioFade = ParseOptionBool(val);
+					} else if(opt == OptionKey::FixedTextCentre){
+						// (2.0.2) Either way, overriding the project.
+						scene.fixedTextCentre = ParseOptionBool(val) ? 1 : 0;
 					} else if(opt == OptionKey::Unknown){
 						// (1.4) Particle tunables: <TYPE>.SPEED, <TYPE>.DENS,
 						// <TYPE>.X.DIST = NAME(p1, p2). Case-insensitive type.
@@ -1690,6 +1744,11 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 				scene.warnings.push_back(std::move(w));
 			}
 		}
+	}
+
+	// (2.0.2) A [Backstage] block without a Name shows the scene's own name.
+	if(scene.backstage.present && scene.backstage.name.empty()){
+		scene.backstage.name = scene.name;
 	}
 
 	return scene;

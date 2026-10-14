@@ -2,6 +2,7 @@
 #include "screens/Screen.hpp"
 #include "core/CueEngine.hpp"
 #include "core/MarkLog.hpp"
+#include "core/BackstageSender.hpp"
 #include "core/Types.hpp"
 #include "render/MasterWindow.hpp"
 #include "render/SlaveWindow.hpp"
@@ -100,6 +101,15 @@ private:
 	std::string markStatus;
 	bool markStatusOk = false;
 	float markStatusUntil = 0.0f;
+
+	// (2.0.2) Backstage screen. NotifyBackstage is called wherever the show
+	// moves into a scene (the ENTER scene advance, and the first cue run in
+	// a scene the show was not in); it sends at most once per scene change,
+	// tracked by the akt/scene last notified.
+	void NotifyBackstage(int aktIdx, int sceneIdx);
+	BackstageSender backstage;
+	int backstageAkt   = -1;
+	int backstageScene = -1;
 };
 
 } // namespace SatyrAV

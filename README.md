@@ -3,7 +3,7 @@
 An AV cue controller for SaTyR revyer. Dual-display output with keyboard-first
 navigation through acts, scenes, and commands.
 
-**Current version:** 2.0.1 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
+**Current version:** 2.0.2 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
 
 Full documentation lives in [docs/](docs/README.md).
 
@@ -19,6 +19,10 @@ Full documentation lives in [docs/](docs/README.md).
 - Mark-line log *(2.0.1)*: press `O` during a show to note the last cue's file,
   line and code in the project's `fix-it/ErrorInFiles-<date>.LOG`, so problems
   spotted live can be fixed afterwards.
+- Backstage screen *(2.0.2)*: at every scene change, the current scene and the
+  next two — name, expected time, actors and ninjas, from each scene's
+  `[Backstage]` block — are sent to the revy's backstage ticker, in the
+  background so the show never waits on the network.
 - `comment "..."` cues show in the master navigator as non-executable rows and
   are skipped during navigation.
 - **Cue Notes column** *(1.8.4)*: a fourth, read-only column right of the
@@ -71,6 +75,10 @@ Full documentation lives in [docs/](docs/README.md).
   styled segments on a single line, each with its own `colour` and `trans`.
   Line-level modifiers (`pos`, `move`, `rotate`, `spin`, `size`) apply to the
   whole line.
+- Fixed text centre *(2.0.2)*: with `FixedTextCentre = true` the centred text
+  block is laid out for every line it will hold before the next clear, so each
+  line appears where it stays instead of the block creeping up line by line.
+  On in new projects.
 - `textCont "..."` appends to the most recently pushed text entry across cues,
   so a line can be revealed piece by piece.
 - `countdown(SECONDS)` shows a live `MM:SS` timer at the top of the slave that

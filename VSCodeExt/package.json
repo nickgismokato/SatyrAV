@@ -2,7 +2,7 @@
 	"name": "satyrav-ngk",
 	"displayName": "SatyrAV NGK",
 	"description": "Syntax highlighting for SatyrAV scene files (.ngk).",
-	"version": "0.4.1",
+	"version": "0.4.2",
 	"publisher": "satyrav",
 	"engines": {
 		"vscode": "^1.70.0"
