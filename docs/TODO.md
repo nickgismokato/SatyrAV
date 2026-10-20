@@ -11,14 +11,78 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 ---
 
 ## Planned for 2.3.0
-- include `SDL_camera.h` for direct camera input used sometimes.
-- Add full Vulcan and openGL support
-- 
+- include `SDL_camera.h` for direct camera input which is used sometimes.
+- Add full Vulcan. No OpenGL support since it is essentially deprecated at this point for modern hardware.
+- (**Critical**) Add `TexReader.cpp` functionality to read $\TeX$ files and parse it into `.ngk` files.
+	- All `.ngk` files should be handled by having the `[backstage]` created by the parser.
+    - A sketch should be empty for any commands. This will have to be added manually later.
+    - A song should read and its lines should be added as `text "<the line>"` with `clear` in between a few lines. This is the default `.tex` file:
+        ```tex
+        \documentclass[a4paper,11pt]{article}
+
+        \usepackage{revy}
+        \usepackage[utf8]{inputenc}
+        \usepackage[T1]{fontenc}
+        \usepackage[danish]{babel}
+        
+        \revyname{TestRevyen}
+        \revyyear{2026}
+        \version{0.1}
+        \eta{$4$ minutter}
+        \status{Ikke færdig}
+        
+        \title{Titel}
+        \author{Forfatter}
+        \melody{Kunstner: ``Originaltitel''}
+
+        \begin{document}
+        \maketitle
+
+        \begin{roles}
+        \role{S}[Skuespiller] Rolleforklaring
+        \end{roles}
+
+        \begin{song}
+          \sings{S} Denne sang rimer knapt
+        
+          \sings{S}[omkv] Ringe akt
+        
+        \end{song}
+        \end{document}
+        ```
+    - The `.tex` file has a `\begin{roles}...\end{roles}`. This is where we find our actors.
+    - The `\begin{song}...\end{song}` defines if it is a song. If it is a sketch it has `\begin{sketch}...\end{sketch}`.
+    - The `\title{}` should be the title of the sketch/scene and should also be the name of the file. So in this case, the ngk file should look like this:
+        ```txt
+        [Options]
+        bc = black
+        
+        [Backstage]
+        Name         = Titel
+        ExpectedTime = 4m0s
+        Actors       = ["Skuespiller"]
+        Ninjas       = [""]
+
+        [Commands]
+        text "Denne sang rimer knapt"
+        
+        clear
+        text "Ringe akt"
+        
+		#End of song
+        clear
+        ```
+    - A proper parser has to be created since some write minutes, minutter, min, sekunder, seconds, etc. So we have to make sure to be able to understand what is actually written. Some also just write `$n$ minutter` which indicate that they have no idea. Sometimes they also include the `$` and sometimes they do not. Also if any of these information is missing, we just have to give default values.
+        - If title is missing we just write: "No title found"
+        - If eta is missing we just write: "69m:00"
+        - If Actors is missing, we write no actor names and the same with nijas.
+        - If for some reason our parser cannot read it, or don't understand it, these above values is also the default values for this case.
 
 ---
 
 ## Planned for 2.2.0
 - Add powerpoint animetions transitions for picture to picture. Essentially making it possible to run a slideshow like in powerpoint.
+- (*Maybe defer to later*) Add messenger/other communication app default template to mimic communication.
 - Add an application-window capture source (Windows only) so we can stream another running program onto the slave display. Video only — no audio capture.
 	- **Backend.** Windows Graphics Capture (WGC) via `GraphicsCaptureItem::CreateFromHWND` &rarr; `Direct3D11CaptureFramePool` &rarr; `FrameArrived`, sharing the existing D3D11 device with SDL/FFmpeg so the captured BGRA texture stays on the GPU. Requires Win11 (no yellow capture border).
 	- **Cue integration.** New `capture "<window-title>"` keyword in `SceneParser`, new `CommandType::Capture`, dispatched through `CueEngine` &rarr; `SlaveWindow`. Tear-down via a `stopCapture` command (or fold into existing clear semantics — decide during design).
@@ -27,17 +91,22 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 	- **Picker UI.** New popup that enumerates top-level windows (`EnumWindows`, filtered to visible + non-empty title, excludes SatyrAV's own HWNDs) so the operator can pick at scene-edit time. The chosen title substring is written back into the `.ngk`.
 	- **Phased landing:** (1) backend `WindowCaptureSource` class, verified against a debug texture; (2) `SlaveWindow` draw layer with rect support; (3) `SceneParser` / `CueEngine` wiring; (4) picker popup.
 	- **Why deferred from 1.7:** WGC needs WinRT ABI headers (`<windows.graphics.capture.h>` full method tables, `<windows.graphics.directx.direct3d11.interop.h>`, working `__uuidof` on templated `ITypedEventHandler`, etc.). The Debian mingw-w64 13 sysroot used for the current cross-compile only ships partial forward-decls — every workaround we tried hit a new gap (no `<wrl/event.h>`, no `<wrl/implements.h>`, `__declspec(uuid)` silently ignored, missing `IDirect3D11CaptureFramePool` method tables, missing `WindowsCreateStringReference` decl). Lands cleanly once the toolchain catches up — naturally that's the SDL3 / D3D11 reshuffle in 2.0.0 + MSYS2 (or equivalent full Windows SDK) by 2.2.0.
-
+- *(deferred from 2.1.0)* Create full physics model for particle systems, accelerated with hardware
+    - While adding the physics models we should also look at how we could optimize it. Currently it lacks if to many "particels" is displayed. Especially on older hardware. `SIMD` comes to mind and also maybe using Broad-Phase Collision Detection.
+- *(deferred from 2.1.0)* OSC Receiver, i.e. listen for OSC messages from lightning desk to control cues. Mainly interested in QLab and maybe GrandMA. 
 ---
 
 ## Planned for 2.1.0
-
+- Make sure the capture window is an unscaled 1-1 copy of the slave window. This should already be the case but after the rework of the backend in **2.0.0**, a check is needed.
 - (**Critical**) Add an output file like a `.srt` or `.ass` file that creates a time log when a show is running. This can help with time alignment in post production.
 	- This is a style example:
 		```txt
-		01/12-2026 | 19:30:126 | Started MatRevy2026
-		01/12-2026 | 19:32:634 | Akt 1 | Scene TeXIntro | play TeXIntro.mp4
-		01/12-2026 | 19:57:238 | Akt 1 | Scene RandomSketch | show funnyImage.png
+		24/12-2026 | 19:30:126 | Started MatRevy2026
+        24/12-2026 | 19:30:453 | Akt 1 | Scene BandIntro | started scene
+        24/12-2026 | 19:32:599 | Akt 1 | Scene TeXIntro | started scene
+		24/12-2026 | 19:32:634 | Akt 1 | Scene TeXIntro | play TeXIntro.mp4
+        24/12-2026 | 19:38:022 | Akt 1 | Scene RandomSketch | started scene
+		24/12-2026 | 19:57:238 | Akt 1 | Scene RandomSketch | show funnyImage.png
 		...
 		```
 	- The file should be named the project name and the date it has been created and then a number (or something similar) if you have started the show more than once during the day.
@@ -49,9 +118,12 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 		1. Press F1, then F2, then F1 again while F1's sound is still going: F1 would restart from the beginning instead of stopping.
 		2. With a video with sound playing, press an F-key, let its sound finish, press the same key again: the press would be taken as "stop" and nothing would play until a second press.
 	- **To settle it:** try those two sequences exactly. If neither happens, delete this item. If either does, the fix is small — ask the player whether *that* sound is playing instead of tracking one key number.
-- OSC Receiver, i.e. listen for OSC messages from lightning desk to control cues. Mainly interested in QLab and maybe GrandMA. 
-- Create full physics model for particle systems, accelerated with hardware
+- (**Critical**) Add function to disable `TextOutline` for specific scenes. The command should be `DisableTextOutline = true`. The default value should be false.
+- (**Critical**) Add function to change `TextOutline` for specific scenes.
 - A full scanner of a project to see if any scenes inside its `.ngk` files have wrong options/notations/commands. A full scanner to check for existence of assets should also be implemented.
+    - A shortcut to open specific window should be implemented. Just like how the debug window work. 
+    - The scan should be ran only when this window is open to minimize the amount of processing power needed during a show.
+    - It should report the physical line in the specific files that are wrong. 
 - *(moved from 1.8.0)* Make a fastforward-goback scroller for videos.
 	- Probably should just go forward or backward with 5 seconds interval using key `,`/`.`.
 	- A restart from the beginning function is also needed.
