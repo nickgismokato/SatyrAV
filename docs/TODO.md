@@ -98,6 +98,36 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 
 ## Planned for 2.1.0
 - Make sure the capture window is an unscaled 1-1 copy of the slave window. This should already be the case but after the rework of the backend in **2.0.0**, a check is needed.
+- (**Critical**) Add `CLEAR` button such that you can clear all on the screen. This will be the `backspace` key that will do this.
+    - This will have to clear everything. So it works like a `clear` command we always have access to.
+- Multiple font loading in the same scene.
+    - This wasn't apart of my thought process, but a wish has been made to be able to use multiple fonts in the same scene.
+    - For this feature I think, we have to load multiple fonts in the preload part and then use a command to define when and where we use a font. So for example:
+        ```txt
+        [Preload]
+        font1.ttf
+        font2.ttf
+        [Commands]
+        use font1.ttf
+        text "Hello, "
+        use font2.ttf
+        textCont "World!"
+        ```
+        Essentially this would create a single line using two fonts. The `use` command should be done automatically when you go to the next line and shouldn't require user input.
+    - Futhermore this `use` command should show as a comment that we currently is using whatever font we have chosen.
+    - `use default` should use the default font.
+- Multiple font size options.
+    - This should be done as a command and again not be something we apply by pressing enter, but just do automatically when we get to the next line after the command.
+    - A comment should be shown to indicate that the font size has been changed.
+    - The command should be something like `fontSize 90 #Change font size from heron out to 90`.
+        - Note that testing on this is critical since we still want the next slide to respect the defined font size. So it should only live in the defined `.ngk` file.
+        - If we write `fontSize default` it should default to the defined font size in the `.ngk` file. If there is none, it should use the `schema.toml` definition and if nothing is there, use the global one.
+- (**Critical**) Add repeating animation option.
+    - If we want to add a Tumbleweed that rolls from the left of the screen to the right, that would be easy. But if we want it to repeat a certain amount of times or if we want to make it constantly repeat until cancelled, then this is harder. This should be added for easier writing of a scene and make it less programming heavy with the `.ngk` file. 
+    - Maybe it could be an idea to add a `[Animation]` section in the `.ngk` files and then just choose when to play what animation down in the `[Commands]` section. This way, our file stays more clean and organized.
+        - If this gets implemented in this version, then under the `[Animation]`, we should be able to define the function and then use `show animation1`. 
+    - The repeating animation should also be able to handle random start position. Like a tumbleweed at the top and later a tumbleweed at the bottom.
+    - The repeating animation should have have options for how long it should repeat (*in seconds*), how many times.
 - (**Critical**) Add an output file like a `.srt` or `.ass` file that creates a time log when a show is running. This can help with time alignment in post production.
 	- This is a style example:
 		```txt
@@ -271,3 +301,5 @@ Most critical first.
 - Maybe only one image can be shown at a time. This need to be tested.
 - Not a bug, but we have to check what bit our movies is compatible with. 8/10 and 16 bit should all be suported.
 	- *State in 2.0.0:* 8-bit H.264 is the tested case and uses the zero-copy path. A 10-bit source is deliberately kept on the read-back path, where it is converted down to 8-bit for display, so it should play but without its extra depth. That has **not** been tested with a real 10-bit file, and 16-bit has not been looked at.
+- When placing a font in the `projects/<projectName>/font` folder, it doesn't load these fonts.
+    - This is less of a bug and more of a redoing of the feature since the `FONTS` folder should only be the one folder. So this is more of a feature request.

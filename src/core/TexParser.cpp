@@ -282,7 +282,7 @@ private:
 				Advance();
 				std::string name = ReadControlName();
 				std::unordered_set<std::string> notNeeded = {
-					"documentclass", "usepackage", "revyname", "revyyear", "version", "status", "author", "melody", "maketitle", "responsible", "writtenbyname", "melodyname", "responsibletext", "rolename"
+					"documentclass", "usepackage", "revyname", "revyyear", "version", "status", "author", "melody", "maketitle", "responsible", "writtenbyname", "melodyname", "responsibletext", "rolename", "propname", "says", "does", "scene"
 				};
 				if(name.empty()){
 					AppendText(nodes, "\\"); // lone backslash at end of file
