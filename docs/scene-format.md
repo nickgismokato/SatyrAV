@@ -22,6 +22,9 @@ FontBoldItalic = DejaVuSans-BoldOblique.ttf # (1.6.1) Combined face — used whe
 Capitalize = true        # Capitalize all text output
 AudioFade = true         # (2.0.0) Let `play` fade times fade the sound too, not just the picture
 FixedTextCentre = true   # (2.0.2) Centre text on all its lines up to the next clear, so lines don't jump
+TextOutline = 6          # (2.1.0) Outline thickness for this scene, 0 = off
+DisableTextOutline = true # (2.1.0) No outline in this scene, whatever TextOutline says
+TransparentBackground = true # (2.1.0) See-through slave where nothing is drawn
 
 # (1.4) Per-particle-type tunables — scene overrides project defaults.
 RAIN.SPEED   = 1.5                  # velocity multiplier
@@ -60,6 +63,24 @@ List of file paths (relative to project root) to preload into the media cache. O
 pictures/logo.png
 sound/intro.mp3
 movies/background.mkv
+```
+
+*(2.1.0)* Fonts used with `use` may be listed here too, but they do not need to be: every font and size a scene's text uses is opened when the scene is entered.
+
+### [Animation] *(2.1.0)*
+
+Named animations that repeat, started with `show NAME` in `[Commands]`. See [commands.md](commands.md#animation-210) for every key and how they stop.
+
+```ini
+[Animation]
+Tumbleweed{
+    show     = spin(240, tumbleweed.png)   # any show expression
+    path     = W, E          # left to right
+    duration = 3000          # ms per pass
+    repeat   = forever       # or a number
+    every    = 4000          # ms between pass starts
+    randomY  = 650, 950      # random height per pass, in slave pixels
+}
 ```
 
 ### [Hotkeys] *(1.6.3, project schema only)*

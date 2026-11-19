@@ -10,6 +10,7 @@ Quick list of every command, block, modifier, and option in SatyrAV. For full ex
 - `[Cue]` *(1.8.4)* — `Name note text…` per line; a command claims one with a trailing `\Name`. Shown in the master window's Cue Notes column, never on the slave
 - `[Hotkeys]` *(1.6.3, project schema only)*
 - `[Backstage]` *(2.0.2)* — in a scene: what the backstage screen shows; in `schema.toml`: where to send it
+- `[Animation]` *(2.1.0)* — `Name{ key = value … }` blocks; started with `show NAME`
 - `[Commands]`
 
 ## `[Options]` keys
@@ -24,6 +25,9 @@ Same names in a scene and in `schema.toml`; case does not matter *(2.0.1)*.
 - `Capitalize = true | false`
 - `AudioFade = true | false` *(2.0.0)* — `play` fade times also fade the video's sound
 - `FixedTextCentre = true | false` *(2.0.2)* — centre text on all its lines up to the next clear; a scene can switch it either way
+- `TransparentBackground = true | false` *(2.1.0)* — see-through slave where nothing is drawn; a scene can switch it either way
+- `TextOutline = <int>` *(2.1.0: per scene too)* — outline thickness in points, `0` = off
+- `DisableTextOutline = true | false` *(2.1.0)* — `true` = no outline; a scene can switch it either way
 - `<TYPE>.SPEED = <float>`
 - `<TYPE>.DENS = <float>` (alias `<TYPE>.DENSITY`)
 - `<TYPE>.X.DIST = NAME(p1, p2)`
@@ -33,7 +37,6 @@ Same names in a scene and in `schema.toml`; case does not matter *(2.0.1)*.
 ### Project-level `[Options]` (in `schema.toml` only)
 
 - Every scene key above (except the particle tunables) — the project default for it
-- `TextOutline = <int>` — outline thickness in points, `0` = off
 - `SubtitleItalic = true | false` — default italic for `textD` subtitles *(1.6.1)*
 - `SubtitleColour = <colour>` — default `#AAAAAA`; `grey` here also means `#AAAAAA` *(1.6.1)*
 - `SubtitleTransparency = <0–100>` — percent, default 0 *(1.6.1)*
@@ -55,6 +58,18 @@ In `schema.toml`:
 
 - `Url = "https://backstage.texnik.dk/set-bck"` — empty or missing: nothing is sent
 - `Enabled = true | false` — missing counts as `true`
+
+## `[Animation]` keys *(2.1.0)*
+
+- `show = …` or `text = …` — one of them; anything `show` / `text` takes (`rotate`, `spin`, `trans`, `scale`, `random`, `randomImages`, `colour`, `+`, …); `particle()` is ignored
+- `path = P1, P2, …` — `[X, Y]` or `N`/`S`/`E`/`W`; required
+- `duration = MS` — one pass; required
+- `repeat = N | forever` — default `forever`
+- `for = SECONDS` — no new passes after this
+- `every = MS` — pass start to pass start; default = duration
+- `randomY = MIN, MAX`, `randomX = MIN, MAX` — random height / sideways position per pass, in slave pixels (the path's middle lands there)
+- `layer = N`, `size = [W, H]` — for images
+- Start: `show NAME`. Soft stop (passes on screen finish): `stop NAME`, `clear`, `clearImages`. Hard cut: `clear NAME`, `clearAll`, `BACKSPACE`, next scene
 
 ## `schema.toml` particle keys — `[Particle.<TYPE>]`
 
@@ -85,6 +100,8 @@ In `schema.toml`:
 - `textD "PRIMARY", "SECONDARY"` *(1.6.1)* — secondary optional; comma-split, whitespace-tolerant
 - `countdown(SECONDS)` *(1.7)* — live `MM:SS` timer, digits only
 - `countdown(SECONDS, "LANG")` *(1.7)* — `LANG` = `en` | `da`; adds a label prefix
+- `use FONT` / `use default` *(2.1.0)* — font for the text below it in this scene file; shown as a comment row, never a cue
+- `fontSize N` / `fontSize default` *(2.1.0)* — size (1–1000) for the text below it in this scene file; shown as a comment row
 - `typewrite(MS_PER_CHAR, TEXT)` *(1.8.2)* — text revealed one character at a time; `TEXT` takes the full `text` grammar; `0` = instant; cue advance snaps it to complete
 - LaTeX symbols *(1.8.2)* — `\alpha`…`\omega`, the 11 LaTeX uppercase, `\var*` forms, `\times \pm \leq \geq \neq \approx \sum \prod \int \in \subseteq \cap \cup \forall \exists \wedge \vee \emptyset \rightarrow \infty …`, and `\mathbb{X}` for any capital. Unknown macros pass through unchanged (that is what preserves `\n`)
 - `clear`

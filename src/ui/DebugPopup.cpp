@@ -13,7 +13,7 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	int colW = 340;
 	int totalW = colW * 2 + 40;
 	// Count max lines in either column to compute height
-	int leftLines = 14; // version + scene(3) + command(4) + display(3) + backstage(2)
+	int leftLines = 15; // version + scene(3) + command(4) + display(4) + backstage(2)
 	int rightLines = 12; // fonts(4) + cache(3) + video(4) + blank(1)
 	int maxLines = (leftLines > rightLines) ? leftLines : rightLines;
 	int totalH = maxLines * lineH + 60 + lineH + 8; // + footer hint row
@@ -57,6 +57,20 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	std::string res = "  " + std::to_string(info.slaveWidth) + "x" + std::to_string(info.slaveHeight)
 		+ "  [Display " + std::to_string(info.slaveDisplayIndex) + "]";
 	text.DrawText(renderer, res, lx, y, txt); y += lineH;
+	// (2.1.0) Capture mirror: green when the window shows the slave's
+	// canvas pixel for pixel, orange when SDL has to scale it.
+	if(info.captureContentW <= 0){
+		text.DrawText(renderer, "  Capture: off", lx, y, dim);
+	} else{
+		const bool oneToOne = info.captureContentW == info.captureWindowW
+			&& info.captureContentH == info.captureWindowH;
+		std::string cap = "  Capture: "
+			+ std::to_string(info.captureContentW) + "x" + std::to_string(info.captureContentH)
+			+ (oneToOne ? " 1:1" : " -> " + std::to_string(info.captureWindowW)
+				+ "x" + std::to_string(info.captureWindowH));
+		text.DrawText(renderer, cap, lx, y, oneToOne ? ok : Colours::ORANGE);
+	}
+	y += lineH;
 	y += 4;
 
 	// (2.0.2) The backstage screen's last POST. Red when it failed, so a

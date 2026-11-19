@@ -71,9 +71,10 @@ bool Renderer::InitMaster(int mW, int mH){
 	return true;
 }
 
-bool Renderer::InitSlave(int slaveDisplayIndex, bool windowed){
+bool Renderer::InitSlave(int slaveDisplayIndex, bool windowed, bool transparent){
 	// Close existing slave if any
 	CloseSlave();
+	const SDL_WindowFlags transparentFlag = transparent ? SDL_WINDOW_TRANSPARENT : 0;
 
 	if(windowed){
 		// (1.5) Dev mode: resizable decorated window on the primary display.
@@ -83,7 +84,8 @@ bool Renderer::InitSlave(int slaveDisplayIndex, bool windowed){
 		slaveW = 1280;
 		slaveH = 720;
 		slaveWindow = SDL_CreateWindow(
-			"SatyrAV Output (Windowed)", slaveW, slaveH, SDL_WINDOW_RESIZABLE);
+			"SatyrAV Output (Windowed)", slaveW, slaveH,
+			SDL_WINDOW_RESIZABLE | transparentFlag);
 		slaveRenderer = CreatePreferredRenderer(slaveWindow);
 
 		// Remember the intended production slave dims so
@@ -133,6 +135,11 @@ bool Renderer::InitSlave(int slaveDisplayIndex, bool windowed){
 				SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, true);
 			SDL_SetBooleanProperty(props,
 				SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, true);
+			// (2.1.0) Per-pixel alpha for see-through scenes.
+			if(transparent){
+				SDL_SetBooleanProperty(props,
+					SDL_PROP_WINDOW_CREATE_TRANSPARENT_BOOLEAN, true);
+			}
 			slaveWindow = SDL_CreateWindowWithProperties(props);
 			SDL_DestroyProperties(props);
 
@@ -150,7 +157,7 @@ bool Renderer::InitSlave(int slaveDisplayIndex, bool windowed){
 			slaveW = 800;
 			slaveH = 600;
 			slaveWindow = SDL_CreateWindow(
-				"SatyrAV Output (Fallback)", slaveW, slaveH, 0);
+				"SatyrAV Output (Fallback)", slaveW, slaveH, transparentFlag);
 			slaveRenderer = CreatePreferredRenderer(slaveWindow);
 		}
 	}
@@ -161,10 +168,37 @@ bool Renderer::InitSlave(int slaveDisplayIndex, bool windowed){
 	}
 	SDL_SetRenderVSync(slaveRenderer, 1);
 
+	slaveTransparentWindow = transparent && slaveWindow
+		&& (SDL_GetWindowFlags(slaveWindow) & SDL_WINDOW_TRANSPARENT) != 0;
+	slaveSeeThrough = false;
+	if(transparent){
+		if(slaveTransparentWindow){
+			Logger::Instance().Infof("Slave window is see-through capable "
+				"(the project uses TransparentBackground)");
+		} else{
+			Logger::Instance().Warnf("Slave window could not be made transparent: %s "
+				"— see-through scenes will show black", SDL_GetError());
+		}
+	}
+
 	// Immediately show black
 	ClearSlave(Colours::BLACK);
 	PresentSlave();
 	return true;
+}
+
+void Renderer::SetSlaveSeeThrough(bool on){
+	const bool want = on && slaveTransparentWindow;
+	if(want == slaveSeeThrough) return;
+	slaveSeeThrough = want;
+	// A see-through content target is cleared to alpha 0 and then blended
+	// into, which leaves it holding premultiplied colour; composite it as
+	// such, or soft edges come out darker than they should. An opaque
+	// target looks the same either way, but keep the old mode there.
+	if(slaveTarget){
+		SDL_SetTextureBlendMode(slaveTarget,
+			slaveSeeThrough ? SDL_BLENDMODE_BLEND_PREMULTIPLIED : SDL_BLENDMODE_BLEND);
+	}
 }
 
 void Renderer::CloseSlave(){
@@ -292,8 +326,10 @@ bool Renderer::EnsureSlaveTarget(int w, int h){
 		targetW = targetH = 0;
 		return false;
 	}
-	// Preserve any alpha the content layers paint with.
-	SDL_SetTextureBlendMode(slaveTarget, SDL_BLENDMODE_BLEND);
+	// Preserve any alpha the content layers paint with. (2.1.0) Premultiplied
+	// in see-through scenes; see SetSlaveSeeThrough.
+	SDL_SetTextureBlendMode(slaveTarget,
+		slaveSeeThrough ? SDL_BLENDMODE_BLEND_PREMULTIPLIED : SDL_BLENDMODE_BLEND);
 	// (2.0.0) Replaces the global SDL_HINT_RENDER_SCALE_QUALITY. This
 	// texture is scaled into the physical slave by CompositeTargetedDisplay,
 	// so without linear filtering the projector output turns blocky.
@@ -320,7 +356,9 @@ void Renderer::CompositeTargetedDisplay(const TargetedDisplay& t){
 
 	// Paint the physical slave black first — the area outside the
 	// targeted rect must always be solid black on the projector.
-	SetDrawColour(slaveRenderer, Colours::BLACK);
+	// (2.1.0) ...except in a see-through scene, where it is see-through
+	// like the rest of the empty slave.
+	SetDrawColour(slaveRenderer, slaveSeeThrough ? Colour{0, 0, 0, 0} : Colours::BLACK);
 	SDL_RenderClear(slaveRenderer);
 
 	// (1.5) Live-query dims so windowed-slave resizes compose correctly
@@ -529,6 +567,10 @@ void Renderer::UpdateCaptureFromSlaveTarget(){
 			return;
 		}
 		SDL_SetTextureScaleMode(captureTexture, SDL_SCALEMODE_LINEAR);
+		// (2.1.0) Copied, not blended: a capture card has no alpha. In a
+		// see-through scene the empty parts arrive as premultiplied
+		// (0,0,0,0) and so show black, and soft edges stay correct.
+		SDL_SetTextureBlendMode(captureTexture, SDL_BLENDMODE_NONE);
 		SDL_SetRenderLogicalPresentation(captureRenderer, targetW, targetH,
 			SDL_LOGICAL_PRESENTATION_LETTERBOX);
 		captureLogicalW = targetW;
@@ -587,6 +629,15 @@ void Renderer::PresentCapture(){
 		SDL_RenderTexture(captureRenderer, captureTexture, nullptr, nullptr);
 	}
 	SDL_RenderPresent(captureRenderer);
+}
+
+void Renderer::GetCaptureSizes(int& contentW, int& contentH,
+	int& windowW, int& windowH) const{
+	contentW = contentH = windowW = windowH = 0;
+	if(!captureWindow) return;
+	contentW = captureLogicalW;
+	contentH = captureLogicalH;
+	SDL_GetWindowSizeInPixels(captureWindow, &windowW, &windowH);
 }
 
 int Renderer::GetDisplayCount() const{

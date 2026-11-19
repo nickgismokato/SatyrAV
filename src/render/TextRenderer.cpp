@@ -60,6 +60,7 @@ bool TextRenderer::Init(const std::string& fontPath, int fontSize,
 
 void TextRenderer::Shutdown(){
 	CloseSlaveFonts();
+	CloseExtraFonts();
 	for(int i = 0; i < 4; i++){
 		if(fonts[i]){ TTF_CloseFont(fonts[i]); fonts[i] = nullptr; }
 	}
@@ -68,6 +69,9 @@ void TextRenderer::Shutdown(){
 
 void TextRenderer::OpenSlaveFonts(){
 	CloseSlaveFonts();
+	// (2.1.0) Faces at other sizes are derived from the scene's paths and
+	// size, so they go whenever those change.
+	CloseExtraFonts();
 	for(int i = 0; i < 4; i++){
 		if(slaveFontPaths[i].empty()) continue;
 		slaveFonts[i] = TTF_OpenFont(slaveFontPaths[i].c_str(), slaveFontSize);
@@ -104,6 +108,84 @@ TTF_Font* TextRenderer::PickSlaveFont(bool bold, bool italic) const{
 	return slaveFonts[0] ? slaveFonts[0] : fonts[0];
 }
 
+void TextRenderer::CloseExtraFonts(){
+	for(auto& kv : extraFonts){
+		if(kv.second) TTF_CloseFont(kv.second);
+	}
+	extraFonts.clear();
+}
+
+TTF_Font* TextRenderer::PickSlaveFont(bool bold, bool italic,
+	const std::string& fontPath, int fontSize) const{
+	const int size = fontSize > 0 ? fontSize : slaveFontSize;
+	if(fontPath.empty() && size == slaveFontSize) return PickSlaveFont(bold, italic);
+
+	const int style = StyleIndex(bold, italic);
+	const std::string key = (fontPath.empty() ? std::string("\x01scene") : fontPath)
+		+ "|" + std::to_string(size) + "|" + std::to_string(style);
+	auto it = extraFonts.find(key);
+	if(it != extraFonts.end()){
+		if(it->second) return it->second;
+		// Failed before: the scene's face at this size.
+		return fontPath.empty() ? PickSlaveFont(bold, italic)
+		                        : PickSlaveFont(bold, italic, "", fontSize);
+	}
+
+	TTF_Font* f = nullptr;
+	if(fontPath.empty()){
+		// The scene's face for this style, at another size. Use the same
+		// path PickSlaveFont would pick at the scene size.
+		TTF_Font* base = PickSlaveFont(bold, italic);
+		std::string path = slaveFontPaths[0].empty() ? fontPaths[0] : slaveFontPaths[0];
+		for(int i = 0; i < 4; i++){
+			if(base && base == slaveFonts[i]){ path = slaveFontPaths[i]; break; }
+		}
+		f = TTF_OpenFont(path.c_str(), size);
+		if(!f){
+			Logger::Instance().Warnf("font '%s' failed at size %d: %s",
+				path.c_str(), size, SDL_GetError());
+		}
+	} else{
+		// A `use` font is one file, so bold / italic runs in it get SDL_ttf's
+		// synthetic styles.
+		f = TTF_OpenFont(fontPath.c_str(), size);
+		if(f){
+			int ttfStyle = TTF_STYLE_NORMAL;
+			if(bold)   ttfStyle |= TTF_STYLE_BOLD;
+			if(italic) ttfStyle |= TTF_STYLE_ITALIC;
+			TTF_SetFontStyle(f, ttfStyle);
+		} else{
+			Logger::Instance().Warnf("use: cannot open font '%s': %s — using the scene's font",
+				fontPath.c_str(), SDL_GetError());
+		}
+	}
+	extraFonts[key] = f;
+	if(f) return f;
+	return fontPath.empty() ? PickSlaveFont(bold, italic)
+	                        : PickSlaveFont(bold, italic, "", fontSize);
+}
+
+int TextRenderer::GetSlaveLineHeightFor(bool bold, bool italic,
+	const std::string& fontPath, int fontSize) const{
+	if(fontPath.empty() && (fontSize <= 0 || fontSize == slaveFontSize)){
+		return GetSlaveLineHeight();
+	}
+	TTF_Font* f = PickSlaveFont(bold, italic, fontPath, fontSize);
+	if(!f) return GetSlaveLineHeight();
+	return (int)(TTF_GetFontLineSkip(f) * slaveScale);
+}
+
+int TextRenderer::GetSlaveAscentFor(bool bold, bool italic,
+	const std::string& fontPath, int fontSize) const{
+	TTF_Font* f = PickSlaveFont(bold, italic, fontPath, fontSize);
+	if(!f) return 0;
+	return (int)(TTF_GetFontAscent(f) * slaveScale);
+}
+
+void TextRenderer::PreloadSlaveFont(const std::string& fontPath, int fontSize){
+	(void)PickSlaveFont(false, false, fontPath, fontSize);
+}
+
 void TextRenderer::DrawText(SDL_Renderer* renderer,
 	const std::string& text, int x, int y, Colour colour){
 	TTF_Font* f = fonts[0];
@@ -129,8 +211,8 @@ void TextRenderer::DrawTextCentered(SDL_Renderer* renderer,
 
 void TextRenderer::DrawTextSlave(SDL_Renderer* renderer,
 	const std::string& text, int x, int y, Colour colour,
-	bool bold, bool italic){
-	TTF_Font* f = PickSlaveFont(bold, italic);
+	bool bold, bool italic, const std::string& fontPath, int fontSize){
+	TTF_Font* f = PickSlaveFont(bold, italic, fontPath, fontSize);
 	if(!f || text.empty()) return;
 
 	// Canvas-relative scale: glyph bitmap is rendered at native size then
@@ -185,8 +267,8 @@ void TextRenderer::DrawTextCenteredSlave(SDL_Renderer* renderer,
 
 void TextRenderer::DrawTextSlaveRotated(SDL_Renderer* renderer,
 	const std::string& text, int x, int y, Colour colour, float rotationDeg,
-	bool bold, bool italic){
-	TTF_Font* f = PickSlaveFont(bold, italic);
+	bool bold, bool italic, const std::string& fontPath, int fontSize){
+	TTF_Font* f = PickSlaveFont(bold, italic, fontPath, fontSize);
 	if(!f || text.empty()) return;
 
 	const float s = slaveScale;
@@ -225,9 +307,9 @@ void TextRenderer::DrawTextSlaveRotated(SDL_Renderer* renderer,
 }
 
 void TextRenderer::MeasureSlave(const std::string& text, int& w, int& h,
-	bool bold, bool italic) const{
+	bool bold, bool italic, const std::string& fontPath, int fontSize) const{
 	w = h = 0;
-	TTF_Font* f = PickSlaveFont(bold, italic);
+	TTF_Font* f = PickSlaveFont(bold, italic, fontPath, fontSize);
 	if(!f || text.empty()) return;
 	TTF_GetStringSize(f, text.c_str(), 0, &w, &h);
 	// Return scaled dims so callers laying out runs use the on-screen size.

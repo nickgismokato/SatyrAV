@@ -24,11 +24,16 @@ MyRevy2026/
 ├── sound/
 │   ├── theme.mp3
 │   └── applause.wav
-└── fix-it/              # (2.0.1) Lines marked with O during a show
-    └── ErrorInFiles-2026-11-24.LOG
+├── fix-it/              # (2.0.1) Lines marked with O during a show
+│   └── ErrorInFiles-2026-11-24.LOG
+└── showlog/             # (2.1.0) Show time logs, one pair per run
+    ├── MatRevy2026-2026-12-24-1.log
+    └── MatRevy2026-2026-12-24-1.srt
 ```
 
 *(2.0.1)* The `fix-it/` folder is created when the project is opened. It holds one `ErrorInFiles-YYYY-MM-DD.LOG` per day on which the `O` key was used; see [controls.md](controls.md#marking-a-line-to-fix-later-201).
+
+*(2.1.0)* The `showlog/` folder is created by the first cue of a show. Each run writes a `.log` and an `.srt`; see [controls.md](controls.md#show-time-log-210).
 
 Media files referenced in scene commands are resolved relative to the project root, with automatic fallback search in `pictures/`, `movies/`, and `sound/` subdirectories.
 
@@ -44,6 +49,8 @@ Creator = "Nick"          # (1.6.2) Persisted authorship — shown in Load Proje
 [Options]
 FontSize             = 60        # Slave text size, in points
 TextOutline          = 4         # Black outline thickness in points, 0 = off
+DisableTextOutline   = false     # (2.1.0) true = no outline (a scene can override either way)
+TransparentBackground = false    # (2.1.0) true = see-through slave where nothing is drawn (a scene can override)
 Capitalize           = false     # Uppercase every line of slave text
 AudioFade            = false     # Let `play` fade times fade the sound too, not just the picture
 FixedTextCentre      = true      # (2.0.2) Centre text on all its lines up to the next clear, so lines don't jump
@@ -128,7 +135,9 @@ Settings are resolved in priority order: scene → project → global config.
 | Capitalize | `Capitalize = true` | `Capitalize = false` | false |
 | Audio fade *(2.0.0)* | `AudioFade = true` | `AudioFade = false` | false |
 | Fixed text centre *(2.0.2)* | `FixedTextCentre = false` (either way) | `FixedTextCentre = true` *(generated value; a schema without the key is off)* | false |
-| Text outline | — | `TextOutline = 4` | 4 |
+| Text outline | `TextOutline = 6` *(2.1.0)* | `TextOutline = 4` | 4 |
+| Disable text outline *(2.1.0)* | `DisableTextOutline = true` (either way) | `DisableTextOutline = false` | false |
+| See-through slave *(2.1.0)* | `TransparentBackground = true` (either way) | `TransparentBackground = false` | false |
 | Font | `Font = path.ttf` | `Font = path.ttf` | System default |
 | Particle speed *(1.4)* | `RAIN.SPEED = 1.5` | `[Particle.RAIN] Speed = 1.5` | `1.0` |
 | Particle density *(1.4)* | `RAIN.DENS = 2.0` | `[Particle.RAIN] Density = 2.0` | `1.0` |
@@ -152,6 +161,7 @@ Settings that belong to the machine rather than to a project. The file lives at 
 | `[display] slave_index` | `1` | Which display the slave opens on, counting from 0. |
 | `[display] slave_windowed` | `false` | Open the slave as a window instead of fullscreen (development). |
 | `[display] capture_enabled`, `capture_display` | `false`, `0` | The capture mirror and the display it opens on. |
+| `[display] show_clock` *(2.1.0)* | `false` | Clock and stopwatches on the master. **Clock on Master** in Options. |
 | `[paths] projects`, `fonts` | empty | Where projects and shared fonts live. Empty means the default locations below. |
 | `[paths] last_project` | empty | Remembered by the application. |
 | `[video] preload_budget_mb` | `4096` | Total budget for preloaded video. |

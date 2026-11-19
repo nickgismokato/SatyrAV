@@ -283,6 +283,18 @@ struct RenderModifiers{
 	float      pathDurationSec = 0.0f;
 	PathRepeat pathRepeat      = PathRepeat::Once;
 
+	// (2.1.0) Set on the passes of an [Animation] (never by the scene
+	// grammar). pathCentreX/YPx move the whole move()/pathMove() path so
+	// that its middle (50 %) lies at that canvas pixel — how randomX /
+	// randomY place each pass; only used when the matching flag is set.
+	// lifetimeSec > 0 removes the entry that long after it appeared, so
+	// finished passes don't pile up off-screen.
+	bool  hasPathCentreX = false;
+	bool  hasPathCentreY = false;
+	float pathCentreXPx  = 0.0f;
+	float pathCentreYPx  = 0.0f;
+	float lifetimeSec    = 0.0f;
+
 	// ── Layering ─────────────────────────────────────────────
 	// (1.8.3) Draw-order control for images: higher values draw in front.
 	// The default of 0 with ties broken by push order reproduces the
@@ -321,7 +333,19 @@ struct TextRun{
 	// configured the corresponding font path.
 	bool bold = false;
 	bool italic = false;
+	// (2.1.0) Font and size from the scene's `use` / `fontSize` lines above
+	// this run (see SceneParser's stamping pass). Empty / 0 = the scene's
+	// font and size from the options cascade, which is what every run had
+	// before 2.1.0. `fontPath` is as written in the scene; PerformanceScreen
+	// resolves it to a file when the text is shown.
+	std::string fontPath;
+	int fontSize = 0;
 };
+
+// (2.1.0) `use FONT` / `use default` and `fontSize N` / `fontSize default`.
+// Parsed as Comment rows, so the navigator shows them and never stops on
+// them; their effect is stamped onto the text runs below them at parse time.
+enum class FontDirective{ None, UseFont, FontSize };
 
 struct Command{
 	CommandType type;
@@ -373,6 +397,21 @@ struct Command{
 	// recognised keyword. The Overview Debug popup walks scenes and lifts
 	// this into the warnings list so authors can spot typos.
 	std::string unknownKeyword;
+
+	// (2.1.0) Set on the Comment rows made from `use` / `fontSize`.
+	// directiveFont: the font as written, "" = `use default`.
+	// directiveSize: points, 0 = `fontSize default`.
+	FontDirective directive = FontDirective::None;
+	std::string directiveFont;
+	int directiveSize = 0;
+
+	// (2.1.0) A problem with an otherwise recognised command (e.g.
+	// `fontSize big`). Lifted into Scene::warnings like unknownKeyword.
+	std::string parseWarning;
+
+	// (2.1.0) Set on `show NAME`, `stop NAME` and `clear NAME` when NAME is
+	// an animation from the scene's [Animation] section. Empty otherwise.
+	std::string animationName;
 
 	// (1.6.6) Fade-in / fade-out for `play <video> <fadeInMs>, <fadeOutMs>`.
 	// 0 (the default) on either side disables that side of the fade —
@@ -441,6 +480,21 @@ struct BackstageInfo{
 	std::vector<std::string> ninjas;
 };
 
+// (2.1.0) One block from a scene's [Animation] section. `command` is the
+// `show` / `text` with a pathMove() that one pass runs; the rest says how
+// often and for how long passes are started. See PerformanceScreen.
+struct AnimationDef{
+	std::string name;
+	int lineNumber = 0;
+	Command command;
+	int   repeat   = -1;    // passes to run; -1 = until stopped
+	float forSec   = 0.0f;  // no new passes after this long; 0 = no limit
+	float everySec = 0.0f;  // between pass starts; 0 = the pass duration
+	bool  hasRandomX = false, hasRandomY = false;
+	float randomXMin = 0.0f, randomXMax = 0.0f; // slave canvas pixels
+	float randomYMin = 0.0f, randomYMax = 0.0f;
+};
+
 struct Scene{
 	std::string name;
 	std::string fileName;
@@ -475,6 +529,18 @@ struct Scene{
 	// 0 = off, 1 = on. Unlike Capitalize a scene can switch it either way,
 	// since new projects turn it on project-wide.
 	int fixedTextCentre = -1;
+	// (2.1.0) `[Options] TextOutline`: -1 = not set (use the project's),
+	// otherwise the outline thickness in points for this scene (0 = off).
+	int textOutline = -1;
+	// (2.1.0) `[Options] DisableTextOutline`: -1 = not set, 0 = false,
+	// 1 = true. True switches the outline off for this scene whatever the
+	// thickness; an explicit false lets the scene keep an outline even when
+	// the project disables it.
+	int disableTextOutline = -1;
+	// (2.1.0) `[Options] TransparentBackground`: -1 = not set (use the
+	// project's), 0 = off, 1 = on. On: the background and every clear
+	// pixel of the slave show whatever is underneath the slave window.
+	int transparentBackground = -1;
 
 	// (1.4) Per-type particle tunables. Missing entries fall back to
 	// project-level tunings, then to built-in defaults.
@@ -484,6 +550,13 @@ struct Scene{
 	// vector rather than a map so the "defined but never referenced"
 	// warning reports in a deterministic order.
 	std::vector<CueNote> cueNotes;
+
+	// (2.1.0) The [Animation] section, in file order.
+	std::vector<AnimationDef> animations;
+	const AnimationDef* FindAnimation(const std::string& animName) const{
+		for(const auto& a : animations) if(a.name == animName) return &a;
+		return nullptr;
+	}
 
 	// (2.0.2) The `[Backstage]` block, if the scene has one.
 	BackstageInfo backstage;
@@ -527,6 +600,11 @@ struct RevySchema{
 	Colour textColour = {0, 0, 0, 0};
 	Colour backgroundColor = Colours::BLACK;
 	int textOutline = 4;     // outline thickness in points, 0 = disabled
+	// (2.1.0) `DisableTextOutline = true` switches the outline off project-
+	// wide while keeping the thickness for scenes that turn it back on.
+	bool disableTextOutline = false;
+	// (2.1.0) Project default for TransparentBackground; off when missing.
+	bool transparentBackground = false;
 	bool capitalize = false;
 	// (2.0.0) Project-level default for audio fading; see Scene::audioFade.
 	bool audioFade = false;

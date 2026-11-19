@@ -38,6 +38,12 @@ struct DebugInfo{
 	int slaveWidth = 0;
 	int slaveHeight = 0;
 	int slaveDisplayIndex = 0;
+	// (2.1.0) Capture mirror sizes; all 0 when the capture is off. See
+	// Renderer::GetCaptureSizes.
+	int captureContentW = 0;
+	int captureContentH = 0;
+	int captureWindowW = 0;
+	int captureWindowH = 0;
 
 	// Fonts
 	int globalFontSize  = 0;

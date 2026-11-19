@@ -4,6 +4,9 @@
 #include "core/Logger.hpp"
 #include "core/TextPlan.hpp"
 #include <filesystem>
+#include <random>
+#include <functional>
+#include "core/Platform.hpp"
 
 namespace SatyrAV{
 
@@ -35,6 +38,7 @@ void PerformanceScreen::OnEnter(){
 	slaveUI.ClearAll();
 	slaveUI.StopParticlesAll();
 	media.StopAll();
+	runningAnimations.clear();
 
 	activeColumn = 0;
 	primedAkt = -1;
@@ -47,9 +51,18 @@ void PerformanceScreen::OnEnter(){
 	// (2.0.2) ...so the first scene that runs is news to backstage too.
 	backstageAkt = -1;
 	backstageScene = -1;
+	// (2.1.0) No show yet: the log and the stopwatches wait for the first cue.
+	showStarted = false;
+	logAkt = -1;
+	logScene = -1;
+	logAktLabel.clear();
+	logSceneLabel.clear();
 }
 
 void PerformanceScreen::OnExit(){
+	// (2.1.0) Leaving the project ends the show: close the time log.
+	EndShow();
+	runningAnimations.clear();
 	// (1.6.4) Drop slave content explicitly here too — protects against
 	// future code paths that bring slaveUI back into view without first
 	// going through OnEnter (e.g. a future "preview" or "edit" mode that
@@ -67,6 +80,7 @@ void PerformanceScreen::OnExit(){
 
 void PerformanceScreen::SetProject(const ProjectData& project){
 	projectBasePath = project.projectPath;
+	fontFileCache.clear();
 	targetedDisplay = project.schema.targetedDisplay;
 
 	// (2.0.1) The fix-it folder for the `O` mark-line log. Opening a
@@ -115,10 +129,23 @@ void PerformanceScreen::HandleInput(InputAction action){
 		case InputAction::JumpBottom: JumpToBottom(); break;
 		case InputAction::Execute:    ExecuteCommand(); break;
 		case InputAction::StepBack:   StepBack(); break;
-		case InputAction::ToggleVideo: media.ToggleVideoPause(); break;
-		case InputAction::ToggleMusic: media.ToggleAudioPause(); break;
-		case InputAction::ReloadScenes: ReloadScenes(); break;
-		case InputAction::MarkLine:  MarkLastExecutedLine(); break;
+		case InputAction::ToggleVideo:
+			media.ToggleVideoPause();
+			LogEvent(media.IsVideoPaused() ? "K: pause video" : "K: resume video");
+			break;
+		case InputAction::ToggleMusic:
+			media.ToggleAudioPause();
+			LogEvent(media.IsSoundPaused() ? "M: pause sound" : "M: resume sound");
+			break;
+		case InputAction::ReloadScenes:
+			ReloadScenes();
+			LogEvent("U: scenes reloaded");
+			break;
+		case InputAction::MarkLine:
+			MarkLastExecutedLine();
+			if(markStatusOk) LogEvent("O: " + markStatus);
+			break;
+		case InputAction::ClearScreen: ClearScreen(); break;
 		case InputAction::FunctionKey:{
 			// (1.6.3) F1..F12 audio hotkey. Same key pressed twice while
 			// the same hotkey audio is still playing → stop (toggle).
@@ -126,25 +153,26 @@ void PerformanceScreen::HandleInput(InputAction action){
 			// performer drives both start and stop with one key.
 			// (2.0.0) A different F-key no longer replaces the running
 			// sound: `PlayAudio` now layers sounds, so several keys can
-			// play at once and over a video. Note that this still tracks
-			// only the last key pressed — see the "maybe" item about F-key
-			// toggling under 2.1.0 in docs/TODO.md before changing it.
+			// play at once and over a video.
+			// (2.1.0) Stop-or-play is decided by whether *this key's* sound
+			// is playing, not by the last key pressed and "is anything
+			// audible". Before, F1, F2, F1 restarted F1 instead of stopping
+			// it, and with a video's sound playing a finished F-key sound
+			// needed two presses to play again.
 			int num = app->GetInput().GetLastFunctionKey();
 			std::string fname = engine.GetFunctionKeyAudio(num);
 			if(fname.empty()) break;
 			std::string full = ResolvePath(projectBasePath, fname);
 
-			if(currentHotkeyNum == num && media.IsAudioPlaying()){
+			if(media.IsSoundPlaying(full)){
 				media.StopAudio(full);
 				lastCommandStr = "F" + std::to_string(num) + ": stop " + fname;
-				lastCommandPath = full;
-				currentHotkeyNum = 0;
 			} else{
 				media.PlayAudio(full);
 				lastCommandStr = "F" + std::to_string(num) + ": play " + fname;
-				lastCommandPath = full;
-				currentHotkeyNum = num;
 			}
+			lastCommandPath = full;
+			LogEvent(lastCommandStr);
 			break;
 		}
 		case InputAction::Quit:
@@ -157,6 +185,7 @@ void PerformanceScreen::HandleInput(InputAction action){
 void PerformanceScreen::Update(float dt){
 	deltaTime = dt;
 	media.Update();
+	UpdateAnimations();
 	UpdateDebugInfo();
 }
 
@@ -172,6 +201,9 @@ void PerformanceScreen::Draw(Renderer& r, TextRenderer& text){
 
 	masterUI.DrawNavigator(r, text, engine,
 		primedAkt, primedScene, primedCmd, activeColumn);
+
+	// (2.1.0) Clock and stopwatches, when Options has them on.
+	DrawClock(r, text);
 
 	// Status bar at bottom
 	int statusY = r.GetMasterHeight() - 25;
@@ -268,7 +300,8 @@ void PerformanceScreen::ApplySceneOptionsCascade(){
 	auto& tr = app->GetTextRenderer();
 	auto& cfg = Config::Instance();
 	tr.SetSlaveFontSize(engine.GetEffectiveFontSize());
-	tr.outlineThickness = engine.GetTextOutline();
+	// (2.1.0) Scene TextOutline / DisableTextOutline, else the project's.
+	tr.outlineThickness = engine.GetEffectiveTextOutline();
 	// (1.6.1) Re-resolve every face path; bare filenames in scene/project
 	// options resolve against the shared FONTS directory so authors can
 	// reference fonts by short name (`FontBold = "Inter-Bold.ttf"`).
@@ -276,14 +309,25 @@ void PerformanceScreen::ApplySceneOptionsCascade(){
 	// own never inherits the previous scene's (2.0.2) — see
 	// TextRenderer::SetSlaveFontPaths.
 	tr.SetSlaveFontPaths(
-		cfg.ResolveFontPath(engine.GetEffectiveFontPath(false, false)),
-		cfg.ResolveFontPath(engine.GetEffectiveFontPath(false, true)),
-		cfg.ResolveFontPath(engine.GetEffectiveFontPath(true,  false)),
-		cfg.ResolveFontPath(engine.GetEffectiveFontPath(true,  true)));
+		ResolveFontFile(engine.GetEffectiveFontPath(false, false)),
+		ResolveFontFile(engine.GetEffectiveFontPath(false, true)),
+		ResolveFontFile(engine.GetEffectiveFontPath(true,  false)),
+		ResolveFontFile(engine.GetEffectiveFontPath(true,  true)));
 	slaveUI.SetBackgroundColour(engine.GetEffectiveBackgroundColour());
 	slaveUI.SetCapitalize(engine.GetEffectiveCapitalize());
 	// (2.0.1) Scene -> project -> white default for uncoloured text.
 	slaveUI.SetDefaultTextColour(engine.GetEffectiveTextColour());
+	// (2.1.0) See-through scene: the empty slave shows what is underneath.
+	{
+		const bool want = engine.GetEffectiveTransparentBackground();
+		auto& rr = app->GetRenderer();
+		rr.SetSlaveSeeThrough(want);
+		if(want && !rr.IsSlaveWindowTransparent()){
+			Logger::Instance().Warnf("TransparentBackground is on in this scene, but the "
+				"slave window was not opened see-through — leave and reopen the project "
+				"(needed after adding it with U)");
+		}
+	}
 	// (2.0.2) Scene FixedTextCentre if set, else the project's.
 	slaveUI.SetFixedTextCentre(engine.GetEffectiveFixedTextCentre());
 	// (2.0.0) Re-evaluated alongside the other cascaded options, so a scene
@@ -328,6 +372,10 @@ void PerformanceScreen::PreloadForCurrentScene(){
 	// the pointer dangles and the next draw crashes. Clearing here is safe — if the current
 	// scene needs an image, the play command will set it again on execution.
 	slaveUI.ClearImage();
+
+	// (2.1.0) After the cascade has set the scene's fonts (which drops
+	// any faces opened for the previous scene).
+	PreloadSceneFonts();
 
 	cache.PreloadForSceneTransition(prevPaths, currPaths, nextPaths, projectBasePath, slaveR);
 
@@ -475,6 +523,10 @@ void PerformanceScreen::ExecuteCommand(){
 	// the night, or one the operator jumped to with the arrow keys — moves
 	// the show there. Later cues in the same scene send nothing.
 	NotifyBackstage(primedAkt, primedScene);
+	// (2.1.0) The first cue starts the show (time log and stopwatches); a
+	// cue in a scene not yet logged enters it, like backstage above.
+	StartShowIfNeeded();
+	EnterSceneForLog(primedAkt, primedScene);
 	engine.SetCommandIndex(primedCmd);
 	engine.ExecuteCurrentCommand();
 
@@ -539,6 +591,253 @@ void PerformanceScreen::MarkLastExecutedLine(){
 	}
 }
 
+// ── (2.1.0) [Animation] runner ───────────────────────────────
+
+const char* const PerformanceScreen::kAnimationGroupPrefix = "\x01anim:";
+
+static double NowSec(){ return SDL_GetTicks() / 1000.0; }
+
+void PerformanceScreen::StartAnimation(const AnimationDef& def){
+	// Showing a running animation again restarts its count and clock; any
+	// pass already on screen finishes.
+	for(auto it = runningAnimations.begin(); it != runningAnimations.end(); ++it){
+		if(it->def.name == def.name){ runningAnimations.erase(it); break; }
+	}
+	RunningAnimation run;
+	run.def = def;
+	run.startSec = NowSec();
+	run.nextPassSec = run.startSec;   // first pass straight away
+	runningAnimations.push_back(std::move(run));
+}
+
+void PerformanceScreen::StopAnimation(const std::string& name, bool hard){
+	for(auto it = runningAnimations.begin(); it != runningAnimations.end(); ++it){
+		if(it->def.name == name){ runningAnimations.erase(it); break; }
+	}
+	if(hard) slaveUI.ClearGroup(kAnimationGroupPrefix + name);
+}
+
+void PerformanceScreen::StopAllAnimations(bool hard){
+	runningAnimations.clear();
+	if(hard) slaveUI.ClearGroupsWithPrefix(kAnimationGroupPrefix);
+}
+
+void PerformanceScreen::UpdateAnimations(){
+	if(runningAnimations.empty()) return;
+	const double now = NowSec();
+	// (2.1.0) A seeded generator: plain rand() is never seeded here, and on
+	// Windows its first value after start is always near 0 — the first pass
+	// always landed at the bottom of randomX / randomY.
+	static std::mt19937 rng{std::random_device{}() ^ (unsigned)SDL_GetTicksNS()};
+	auto pick = [&](float lo, float hi){
+		return std::uniform_real_distribution<float>(lo, hi > lo ? hi : lo + 0.001f)(rng);
+	};
+
+	for(auto it = runningAnimations.begin(); it != runningAnimations.end(); ){
+		RunningAnimation& run = *it;
+		const AnimationDef& def = run.def;
+		const double passSec = def.command.mods.pathDurationSec;
+		const double every = def.everySec > 0.0f ? def.everySec : passSec;
+
+		bool done = false;
+		// Several passes can be due after a long frame; start each one.
+		while(now >= run.nextPassSec){
+			if(def.repeat > 0 && run.passes >= def.repeat){ done = true; break; }
+			if(def.forSec > 0.0f && run.nextPassSec - run.startSec >= def.forSec){ done = true; break; }
+
+			Command pass = def.command;
+			pass.groupName = kAnimationGroupPrefix + def.name;
+			pass.mods.lifetimeSec = (float)passSec;
+			// randomX / randomY: the path's middle lands on a random canvas
+			// pixel in the range (see ApplyPathCentre in SlaveWindow).
+			if(def.hasRandomX){
+				pass.mods.hasPathCentreX = true;
+				pass.mods.pathCentreXPx = pick(def.randomXMin, def.randomXMax);
+			}
+			if(def.hasRandomY){
+				pass.mods.hasPathCentreY = true;
+				pass.mods.pathCentreYPx = pick(def.randomYMin, def.randomYMax);
+			}
+			ResolveRunFonts(pass.runs);
+			DispatchSlaveCommand(pass);
+
+			run.passes++;
+			run.nextPassSec += every;
+		}
+		if(done) it = runningAnimations.erase(it);
+		else     ++it;
+	}
+}
+
+// ── (2.1.0) Fonts from `use` and the Font options ────────────
+
+std::string PerformanceScreen::ResolveFontFile(const std::string& name){
+	if(name.empty()) return name;
+	auto hit = fontFileCache.find(name);
+	if(hit != fontFileCache.end()) return hit->second;
+
+	auto exists = [](const std::string& p){
+		std::error_code ec;
+		return std::filesystem::is_regular_file(Platform::Utf8ToPath(p), ec);
+	};
+	const bool hasDrive = name.size() >= 2 && name[1] == ':';
+	const bool absolute = hasDrive || name.front() == '/' || name.front() == '\\';
+	const bool hasSep = name.find('/') != std::string::npos
+		|| name.find('\\') != std::string::npos;
+
+	std::string found;
+	if(absolute){
+		found = name;
+	} else{
+		const std::string base = projectBasePath + "/";
+		std::vector<std::string> tries;
+		if(hasSep){
+			tries = {base + name};
+		} else{
+			tries = {base + "fonts/" + name, base + "font/" + name,
+			         base + "FONTS/" + name, base + name};
+		}
+		for(const auto& t : tries){
+			if(exists(t)){ found = t; break; }
+		}
+		// The shared FONTS folder (Config), or the name as written so the
+		// renderer's warning names what the scene asked for.
+		if(found.empty()) found = Config::Instance().ResolveFontPath(name);
+	}
+	if(!exists(found)){
+		Logger::Instance().Warnf("Font '%s' not found (looked in the project's "
+			"fonts/ and font/ folders, the project folder and FONTS)", name.c_str());
+	}
+	fontFileCache[name] = found;
+	return found;
+}
+
+void PerformanceScreen::ResolveRunFonts(std::vector<TextRun>& runs){
+	for(auto& r : runs){
+		if(!r.fontPath.empty()) r.fontPath = ResolveFontFile(r.fontPath);
+	}
+}
+
+void PerformanceScreen::PreloadSceneFonts(){
+	const Scene* sc = engine.GetScene(primedAkt, primedScene);
+	if(!sc) return;
+	auto& tr = app->GetTextRenderer();
+	std::vector<std::pair<std::string, int>> seen;
+	std::function<void(const Command&)> walk = [&](const Command& c){
+		for(const auto& r : c.runs){
+			if(r.fontPath.empty() && r.fontSize <= 0) continue;
+			std::pair<std::string, int> key{r.fontPath, r.fontSize};
+			bool dup = false;
+			for(const auto& s : seen) if(s == key){ dup = true; break; }
+			if(dup) continue;
+			seen.push_back(key);
+			tr.PreloadSlaveFont(ResolveFontFile(r.fontPath), r.fontSize);
+		}
+		for(const auto& s : c.subCommands) walk(s);
+		for(const auto& s : c.loopBody)    walk(s);
+	};
+	for(const auto& c : sc->commands) walk(c);
+}
+
+// ── (2.1.0) Show time log, clock and stopwatches ─────────────
+
+double PerformanceScreen::SecondsSince(double startTicks) const{
+	return (double)SDL_GetTicksNS() / 1e9 - startTicks;
+}
+
+ShowTime PerformanceScreen::CurrentShowTime() const{
+	ShowTime t;
+	ShowLog::Now(t.local, t.millis);
+	t.showSeconds = showStarted ? SecondsSince(showStartTicks) : 0.0;
+	return t;
+}
+
+void PerformanceScreen::StartShowIfNeeded(){
+	if(showStarted) return;
+	showStarted = true;
+	showStartTicks = (double)SDL_GetTicksNS() / 1e9;
+	sceneStartTicks = showStartTicks;
+
+	const ShowTime t = CurrentShowTime();
+	const std::string& revy = engine.GetRevyName();
+	std::string base;
+	if(showLog.Open(projectBasePath, revy, t.local, &base)){
+		Logger::Instance().Infof("Show log: %s.log / .srt", base.c_str());
+	} else{
+		// The show goes on; only the log is missing.
+		Logger::Instance().Warnf("Could not create the show log in %s",
+			ShowLog::FolderFor(projectBasePath).c_str());
+	}
+	showLog.Write(t, "", "", "Started " + ShowLog::SafeName(revy));
+}
+
+void PerformanceScreen::EnterSceneForLog(int aktIdx, int sceneIdx){
+	if(!showStarted) return;
+	if(aktIdx == logAkt && sceneIdx == logScene) return;
+
+	if(logAkt >= 0){
+		LogEvent("ended scene (" + ShowLog::FormatDuration(SecondsSince(sceneStartTicks)) + ")");
+	}
+
+	logAkt = aktIdx;
+	logScene = sceneIdx;
+	const auto& akts = engine.GetAkts();
+	logAktLabel = (aktIdx >= 0 && aktIdx < (int)akts.size())
+		? "Akt " + std::to_string(akts[aktIdx].number) : std::string("Akt ?");
+	const Scene* sc = engine.GetScene(aktIdx, sceneIdx);
+	logSceneLabel = "Scene " + (sc ? sc->name : std::string("?"));
+	sceneStartTicks = (double)SDL_GetTicksNS() / 1e9;
+	LogEvent("started scene");
+}
+
+void PerformanceScreen::LogEvent(const std::string& event){
+	if(!showStarted) return;
+	showLog.Write(CurrentShowTime(), logAktLabel, logSceneLabel, event);
+}
+
+void PerformanceScreen::EndShow(){
+	if(!showStarted) return;
+	if(logAkt >= 0){
+		LogEvent("ended scene (" + ShowLog::FormatDuration(SecondsSince(sceneStartTicks)) + ")");
+	}
+	const ShowTime t = CurrentShowTime();
+	showLog.Write(t, "", "", "Ended show (" + ShowLog::FormatDuration(t.showSeconds) + ")");
+	showLog.Close(t.showSeconds + ShowLogWriter::kMaxSubtitleSeconds);
+	showStarted = false;
+}
+
+void PerformanceScreen::DrawClock(Renderer& r, TextRenderer& text){
+	if(!Config::Instance().showClock) return;
+
+	std::tm local{};
+	int ms = 0;
+	ShowLog::Now(local, ms);
+	char tod[16];
+	std::snprintf(tod, sizeof(tod), "%02d:%02d:%02d",
+		local.tm_hour, local.tm_min, local.tm_sec);
+
+	// Before the first cue there is no show or scene to time yet.
+	std::string line = std::string(tod) + "   Scene "
+		+ (showStarted ? ShowLog::FormatDuration(SecondsSince(sceneStartTicks)) : std::string("-:--"))
+		+ "   Show "
+		+ (showStarted ? ShowLog::FormatDuration(SecondsSince(showStartTicks)) : std::string("-:--"));
+
+	const int x = r.GetMasterWidth() - text.MeasureWidth(line) - 12;
+	text.DrawText(r.GetMaster(), line, x, 68,
+		showStarted ? Colours::WHITE : Colour{0x90, 0xA0, 0xB0, 0xFF});
+}
+
+void PerformanceScreen::ClearScreen(){
+	// Same as the `clearAll` command: text, images, particles (except ones
+	// already stopping smoothly) and countdowns, grouped or not. The fixed
+	// text centre's planned block goes with the text.
+	StopAllAnimations(true);
+	slaveUI.ClearAll();
+	lastCommandStr = "BACKSPACE: clear screen";
+	Logger::Instance().Infof("Screen cleared (BACKSPACE)");
+	LogEvent(lastCommandStr);
+}
+
 void PerformanceScreen::StepBack(){
 	if(activeColumn != 2) return;
 
@@ -596,6 +895,12 @@ void PerformanceScreen::AdvanceToNextScene(){
 
 	// (2.0.2) The show has moved into the next scene: update backstage.
 	NotifyBackstage(primedAkt, primedScene);
+	// (2.1.0) ...and the show log; the scene stopwatch restarts here, when
+	// the slave is cleared for it.
+	if(showStarted) EnterSceneForLog(primedAkt, primedScene);
+
+	// (2.1.0) A new scene cuts every animation of the last one.
+	StopAllAnimations(true);
 
 	// Clear slave for new scene
 	slaveUI.ClearText();
@@ -616,6 +921,8 @@ void PerformanceScreen::ReloadScenes(){
 	// current-command index; we mirror that by clamping the navigator's
 	// primed indices so the user's view doesn't point at empty rows.
 	engine.ReloadScenes();
+	// (2.1.0) A reload may be because a font was just added to the project.
+	fontFileCache.clear();
 
 	if(primedAkt >= 0){
 		int sceneCount = engine.GetSceneCountForAkt(primedAkt);
@@ -637,7 +944,14 @@ void PerformanceScreen::ReloadScenes(){
 	lastCommandPath.clear();
 }
 
-void PerformanceScreen::OnSlaveCommand(const Command& cmd){
+void PerformanceScreen::OnSlaveCommand(const Command& sceneCmd){
+	// (2.1.0) A copy with `use` font names resolved to files. The scene's
+	// own Command is still what the fixed-centre planner needs, to find
+	// where in the scene the block starts.
+	Command resolvedCmd = sceneCmd;
+	ResolveRunFonts(resolvedCmd.runs);
+	const Command& cmd = resolvedCmd;
+
 	// Build debug string
 	auto CommandStr = [](const Command& c) -> std::string{
 		switch(c.type){
@@ -691,18 +1005,29 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 	};
 	lastCommandStr = CommandStr(cmd);
 	lastCommandPath.clear();
+	// (2.1.0) Every cue that reaches the slave, compound parts one by one.
+	LogEvent(lastCommandStr);
 
 	// (2.0.2) Fixed text centre: a centred line pushed onto an empty stack
 	// starts a block, so plan every centred line up to the next clear.
-	// `cmd` is the scene's own Command (CueEngine passes references), which
-	// is how the planner finds where in the scene the block starts.
+	// `sceneCmd` is the scene's own Command (CueEngine passes references),
+	// which is how the planner finds where in the scene the block starts.
 	if(TextPlan::AddsCentredLine(cmd) && engine.GetEffectiveFixedTextCentre()
 		&& !slaveUI.HasCentredText()){
 		if(const Scene* sc = engine.GetCurrentScene()){
-			slaveUI.PlanCentredBlock(TextPlan::PlannedRuns(TextPlan::PlanBlock(*sc, &cmd)));
+			auto planned = TextPlan::PlannedRuns(TextPlan::PlanBlock(*sc, &sceneCmd));
+			for(auto& line : planned) ResolveRunFonts(line);
+			slaveUI.PlanCentredBlock(planned);
 		}
 	}
 
+	DispatchSlaveCommand(cmd);
+}
+
+// (2.1.0) The slave side of a cue, split out of OnSlaveCommand so the
+// passes of an [Animation] go through exactly the same code without being
+// logged as cues or planned into the fixed text centre.
+void PerformanceScreen::DispatchSlaveCommand(const Command& cmd){
 	switch(cmd.type){
 		case CommandType::Text:
 		case CommandType::TextBf:
@@ -778,7 +1103,14 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 			}
 			break;
 		case CommandType::Clear:
-			if(cmd.argument.empty()){
+			if(!cmd.animationName.empty()){
+				// (2.1.0) `clear NAME` on an animation: hard cut — no new
+				// passes, and the ones on screen vanish now.
+				StopAnimation(cmd.animationName, true);
+			} else if(cmd.argument.empty()){
+				// (2.1.0) Animations stop softly: no new passes, the ones on
+				// screen finish their run (they are grouped, so survive).
+				StopAllAnimations(false);
 				// Traditional `clear` — drop only ungrouped content across
 				// text, images, and particles. Grouped content survives.
 				slaveUI.ClearText();
@@ -794,15 +1126,20 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 			}
 			break;
 		case CommandType::ClearText:
-			slaveUI.ClearTextAll();
+			// (2.1.0) Leaves animations alone, text passes included.
+			slaveUI.ClearTextAll(kAnimationGroupPrefix);
 			break;
 		case CommandType::ClearImages:
 			// Particles are produced by `show` + `particle()`, so they live in
 			// the same logical layer as images — clearImages drops both.
-			slaveUI.ClearImageAll();
+			// (2.1.0) Animations stop softly: passes on screen finish.
+			StopAllAnimations(false);
+			slaveUI.ClearImageAll(kAnimationGroupPrefix);
 			slaveUI.StopParticlesAll();
 			break;
 		case CommandType::ClearAll:
+			// (2.1.0) Hard cut: ClearAll removes the passes too.
+			StopAllAnimations(true);
 			slaveUI.ClearAll();
 			break;
 		case CommandType::Play:{
@@ -831,7 +1168,10 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 			break;
 		}
 		case CommandType::Stop:
-			if(cmd.argument.empty()){
+			if(!cmd.animationName.empty()){
+				// (2.1.0) `stop NAME` on an animation: soft — no new passes.
+				StopAnimation(cmd.animationName, false);
+			} else if(cmd.argument.empty()){
 				media.StopAll();
 				slaveUI.StopParticles();
 			} else{
@@ -846,6 +1186,13 @@ void PerformanceScreen::OnSlaveCommand(const Command& cmd){
 			slaveUI.StopParticlesSmoothly(cmd.argument);
 			break;
 		case CommandType::Show:{
+			// (2.1.0) `show NAME` starts an [Animation] (again, if running).
+			if(!cmd.animationName.empty()){
+				const Scene* sc = engine.GetCurrentScene();
+				const AnimationDef* def = sc ? sc->FindAnimation(cmd.animationName) : nullptr;
+				if(def) StartAnimation(*def);
+				break;
+			}
 			auto* renderer = app->GetRenderer().GetSlave();
 			if(!renderer) break;
 
@@ -975,6 +1322,8 @@ void PerformanceScreen::UpdateDebugInfo(){
 	dbg.slaveWidth = app->GetRenderer().GetSlaveWidth();
 	dbg.slaveHeight = app->GetRenderer().GetSlaveHeight();
 	dbg.slaveDisplayIndex = config.slaveDisplayIndex;
+	app->GetRenderer().GetCaptureSizes(dbg.captureContentW, dbg.captureContentH,
+		dbg.captureWindowW, dbg.captureWindowH);
 
 	dbg.globalFontSize = config.fontSize;
 	dbg.projectFontSize = engine.GetProjectFontSize();

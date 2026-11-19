@@ -45,6 +45,7 @@ void Config::Load(const std::string& path){
 		slaveWindowed     = tbl["display"]["slave_windowed"].value_or(false);
 		captureEnabled      = tbl["display"]["capture_enabled"].value_or(false);
 		captureDisplayIndex = tbl["display"]["capture_display"].value_or(0);
+		showClock           = tbl["display"]["show_clock"].value_or(false);
 		projectsDir    = tbl["paths"]["projects"].value_or(std::string(""));
 		lastProject    = tbl["paths"]["last_project"].value_or(std::string(""));
 		fontsDir       = tbl["paths"]["fonts"].value_or(std::string(""));
@@ -89,7 +90,8 @@ void Config::Save(const std::string& path){
 	out << "slave_index = " << slaveDisplayIndex << "\n";
 	out << "slave_windowed = " << (slaveWindowed ? "true" : "false") << "\n";
 	out << "capture_enabled = " << (captureEnabled ? "true" : "false") << "\n";
-	out << "capture_display = " << captureDisplayIndex << "\n\n";
+	out << "capture_display = " << captureDisplayIndex << "\n";
+	out << "show_clock = " << (showClock ? "true" : "false") << "\n\n";
 	out << "[paths]\n";
 	out << "projects = '" << projectsDir << "'\n";
 	out << "last_project = '" << lastProject << "'\n";

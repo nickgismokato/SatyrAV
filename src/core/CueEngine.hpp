@@ -63,6 +63,16 @@ public:
 	// TextColour, then white.
 	Colour GetEffectiveTextColour() const;
 	int GetTextOutline() const;
+	// (2.1.0) The outline thickness the current scene draws with:
+	// scene DisableTextOutline, then scene TextOutline, then the project's
+	// DisableTextOutline and TextOutline. 0 = no outline.
+	int GetEffectiveTextOutline() const;
+	// (2.1.0) Scene TransparentBackground if set (either way), else the
+	// project's.
+	bool GetEffectiveTransparentBackground() const;
+	// (2.1.0) True when the project or any scene turns TransparentBackground
+	// on — the slave window must then be created see-through.
+	static bool UsesTransparentBackground(const ProjectData& project);
 	int GetProjectFontSize() const;
 	int GetSceneFontSize() const;
 	bool GetEffectiveCapitalize() const;

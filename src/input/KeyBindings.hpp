@@ -21,6 +21,10 @@ namespace Keys{
 	// D then O (debug popup open) is still the Overview popup; App
 	// handles that chord before the key reaches a screen.
 	constexpr SDL_Keycode MARK_LINE      = SDLK_O;
+	// (2.1.0) Wipe the slave, like a `clearAll` that is always available.
+	// Only outside text-input mode: while typing, BACKSPACE deletes a
+	// character (InputHandler checks text mode first).
+	constexpr SDL_Keycode CLEAR_SCREEN   = SDLK_BACKSPACE;
 }
 
 } // namespace SatyrAV

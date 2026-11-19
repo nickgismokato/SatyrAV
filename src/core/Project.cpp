@@ -155,9 +155,11 @@ void Project::GenerateDefaultSchema(const std::string& path, const ProjectData& 
 	out << R"NGK([Options]
 FontSize             = 60        # Slave text size, in points
 TextOutline          = 4         # Black outline thickness in points, 0 = off
+DisableTextOutline   = false     # true = no outline (a scene can override either way)
 Capitalize           = false     # Uppercase every line of slave text
 AudioFade            = false     # Let `play` fade times fade the sound too, not just the picture
 FixedTextCentre      = true      # Centre text on all its lines up to the next clear, so lines don't jump
+TransparentBackground = false    # true = the slave is see-through where nothing is drawn (a scene can override)
 BackgroundColour     = "black"   # A colour name, or a "#RRGGBB" string
 TextColour           = "white"   # Default slave text colour: a colour name, or "#RRGGBB"
 Font                 = ""        # Regular face: full path, or a bare FONTS/ filename

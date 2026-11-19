@@ -42,7 +42,9 @@ namespace{
 				out.push_back(std::string(CmdLabel(c.type)) + ": " + c.argument);
 			}
 		};
-		if(cmd.type == CommandType::Show || cmd.type == CommandType::Play){
+		// (2.1.0) `show NAME` of an [Animation] names no file.
+		if((cmd.type == CommandType::Show || cmd.type == CommandType::Play)
+			&& cmd.animationName.empty()){
 			check(cmd);
 		}
 		for(const auto& sub : cmd.subCommands) CollectMissing(sub, base, out);
@@ -74,6 +76,10 @@ void OverviewPopup::Open(const CueEngine& engine, const std::string& projectBase
 
 			for(const auto& c : scene->commands){
 				CollectMissing(c, projectBasePath, entry.missingPaths);
+			}
+			// (2.1.0) The image each animation shows.
+			for(const auto& anim : scene->animations){
+				CollectMissing(anim.command, projectBasePath, entry.missingPaths);
 			}
 
 			totalWarnings += (int)entry.warnings.size();

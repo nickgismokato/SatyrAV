@@ -890,6 +890,48 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 	std::string argRaw = (spacePos != std::string::npos)
 		? Trim(line.substr(spacePos + 1)) : "";
 
+	// (2.1.0) `use FONT` / `fontSize N`: comment rows that change the font
+	// or size of the text below them. See StampFontDirectives.
+	if(keyword == "use" || keyword == "fontSize"){
+		cmd.type = CommandType::Comment;
+		std::string arg = StripQuotes(Trim(argRaw));
+		std::string lower = arg;
+		std::transform(lower.begin(), lower.end(), lower.begin(),
+			[](unsigned char ch){ return (char)std::tolower(ch); });
+		if(keyword == "use"){
+			cmd.directive = FontDirective::UseFont;
+			if(arg.empty() || lower == "default"){
+				if(arg.empty()) cmd.parseWarning = "'use' needs a font file or 'default'";
+				cmd.directiveFont.clear();
+				cmd.argument = "Using the default font";
+			} else{
+				cmd.directiveFont = arg;
+				cmd.argument = "Using font " + arg;
+			}
+		} else{
+			if(lower == "default"){
+				cmd.directive = FontDirective::FontSize;
+				cmd.directiveSize = 0;
+				cmd.argument = "Using the default font size";
+			} else{
+				int size = 0;
+				size_t used = 0;
+				try{ size = std::stoi(arg, &used); } catch(...){ size = 0; used = 0; }
+				if(used == 0 || used != arg.size() || size < 1 || size > 1000){
+					// Left as a plain comment: the size in force stays.
+					cmd.parseWarning = "fontSize needs a size from 1 to 1000 or 'default', not '"
+						+ arg + "'";
+					cmd.argument = "fontSize " + arg + " (ignored)";
+				} else{
+					cmd.directive = FontDirective::FontSize;
+					cmd.directiveSize = size;
+					cmd.argument = "Font size " + std::to_string(size);
+				}
+			}
+		}
+		return cmd;
+	}
+
 	if(keyword == "text")              cmd.type = CommandType::Text;
 	else if(keyword == "textCont")     cmd.type = CommandType::TextCont;
 	else if(keyword == "textbf")       cmd.type = CommandType::TextBf;
@@ -1336,6 +1378,140 @@ static void ProcessLogicalCommand(
 	out.push_back(std::move(cmd));
 }
 
+// (2.1.0) One [Animation] block. The keys are turned into the scene
+// grammar — `show layer(N, pathMove(PATH, DURATION, size(SIZE, FILE)))`
+// or `text pathMove(PATH, DURATION, TEXT)` — and parsed like any other
+// command, so a pass draws exactly like the hand-written equivalent.
+static void ParseAnimationBlock(Scene& scene, const std::string& name, int headerLine,
+	const std::vector<std::pair<int, std::string>>& body){
+	auto warn = [&](int lineNo, const std::string& msg){
+		Scene::Warning w;
+		w.lineNumber = lineNo;
+		w.message = "Animation '" + name + "': " + msg;
+		scene.warnings.push_back(std::move(w));
+	};
+	auto lower = [](std::string s){
+		std::transform(s.begin(), s.end(), s.begin(),
+			[](unsigned char ch){ return (char)std::tolower(ch); });
+		return s;
+	};
+	// "600, 900" or "[600, 900]" -> two numbers (slave canvas pixels).
+	auto parseRange = [&](const std::string& v, float& a, float& b){
+		std::string t = v;
+		t.erase(std::remove(t.begin(), t.end(), '['), t.end());
+		t.erase(std::remove(t.begin(), t.end(), ']'), t.end());
+		auto comma = t.find(',');
+		if(comma == std::string::npos) return false;
+		try{
+			a = std::stof(Trim(t.substr(0, comma)));
+			b = std::stof(Trim(t.substr(comma + 1)));
+		} catch(...){ return false; }
+		if(a > b) std::swap(a, b);
+		return true;
+	};
+
+	if(scene.FindAnimation(name)){
+		warn(headerLine, "defined twice — the first one is used");
+		return;
+	}
+
+	AnimationDef def;
+	def.name = name;
+	def.lineNumber = headerLine;
+	std::string showVal, textVal, pathVal, durationVal, layerVal, sizeVal;
+	for(const auto& [lineNo, text] : body){
+		auto eq = text.find('=');
+		if(eq == std::string::npos){
+			warn(lineNo, "expected 'key = value', found '" + text + "'");
+			continue;
+		}
+		const std::string key = lower(Trim(text.substr(0, eq)));
+		const std::string val = Trim(text.substr(eq + 1));
+		if(key == "show")          showVal = val;
+		else if(key == "text")     textVal = val;
+		else if(key == "path")     pathVal = val;
+		else if(key == "duration") durationVal = val;
+		else if(key == "layer")    layerVal = val;
+		else if(key == "size")     sizeVal = val;
+		else if(key == "repeat"){
+			const std::string v = lower(val);
+			if(v == "forever" || v == "infinite"){
+				def.repeat = -1;
+			} else{
+				int n = 0;
+				try{ n = std::stoi(v); } catch(...){ n = 0; }
+				if(n >= 1) def.repeat = n;
+				else warn(lineNo, "repeat must be a number from 1, or 'forever'");
+			}
+		} else if(key == "for"){
+			float sec = 0.0f;
+			try{ sec = std::stof(val); } catch(...){ sec = 0.0f; }
+			if(sec > 0.0f) def.forSec = sec;
+			else warn(lineNo, "for must be a number of seconds above 0");
+		} else if(key == "every"){
+			int ms = 0;
+			try{ ms = std::stoi(val); } catch(...){ ms = 0; }
+			if(ms > 0) def.everySec = ms / 1000.0f;
+			else warn(lineNo, "every must be a number of milliseconds above 0");
+		} else if(key == "randomx"){
+			if(parseRange(val, def.randomXMin, def.randomXMax)) def.hasRandomX = true;
+			else warn(lineNo, "randomX must be two pixel positions, e.g. 200, 1700");
+		} else if(key == "randomy"){
+			if(parseRange(val, def.randomYMin, def.randomYMax)) def.hasRandomY = true;
+			else warn(lineNo, "randomY must be two pixel heights, e.g. 600, 900");
+		} else{
+			warn(lineNo, "unknown key '" + Trim(text.substr(0, eq)) + "'");
+		}
+	}
+
+	if(showVal.empty() == textVal.empty()){
+		warn(headerLine, showVal.empty() ? "needs 'show = FILE' or 'text = \"...\"'"
+		                                 : "has both 'show' and 'text' — use one");
+		return;
+	}
+	if(pathVal.empty() || durationVal.empty()){
+		warn(headerLine, "needs both 'path' and 'duration'");
+		return;
+	}
+
+	// `show =` / `text =` take everything `show` / `text` take — rotate(),
+	// spin(), trans(), colour(), scale(), random(), randomImages(), `+`, …
+	// — so the path is wrapped around that expression.
+	std::string line;
+	if(!showVal.empty()){
+		std::string content = showVal;
+		if(!sizeVal.empty()) content = "size(" + sizeVal + ", " + content + ")";
+		std::string inner = "pathMove(" + pathVal + ", " + durationVal + ", " + content + ")";
+		if(!layerVal.empty()) inner = "layer(" + layerVal + ", " + inner + ")";
+		line = "show " + inner;
+	} else{
+		// pathMove() is a line-level modifier on text: wrapping the first
+		// `+` piece moves the whole line and keeps the other pieces (as in
+		// `text pathMove(...) + bold("x")`). Wrapping the whole expression
+		// would lose everything after the first `+`.
+		auto pieces = SplitPlus(textVal);
+		if(pieces.empty()) pieces.push_back(textVal);
+		line = "text pathMove(" + pathVal + ", " + durationVal + ", " + Trim(pieces[0]) + ")";
+		for(size_t k = 1; k < pieces.size(); k++) line += " + " + Trim(pieces[k]);
+	}
+
+	def.command = ParseSingleCommand(line, headerLine);
+	if(def.command.mods.pathPoints.size() < 2 || def.command.mods.pathDurationSec <= 0.0f){
+		warn(headerLine, "path needs at least two points and duration a number of "
+			"milliseconds above 0");
+		return;
+	}
+	// One pass runs the path once; repeating is the animation's job.
+	def.command.mods.pathRepeat = RenderModifiers::PathRepeat::Once;
+	// A particle system per pass would never end and can't follow a path:
+	// show the image itself instead.
+	if(def.command.mods.particleType != ParticleType::None){
+		warn(headerLine, "particle() can't be animated — the image is shown moving instead");
+		def.command.mods.particleType = ParticleType::None;
+	}
+	scene.animations.push_back(std::move(def));
+}
+
 Scene SceneParser::ParseFile(const std::string& scenePath){
 	Scene scene;
 
@@ -1351,7 +1527,7 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 	scene.fileName = scenePath.substr(pos + 1);
 	scene.name = scenePath.substr(pos + 1, dot - pos - 1);
 
-	enum class Section{ None, Options, Preload, Macro, Cue, Commands, Backstage };
+	enum class Section{ None, Options, Preload, Macro, Cue, Commands, Backstage, Animation };
 	Section currentSection = Section::None;
 
 	// Macros collected from the [Macro] section. Referenced by name from
@@ -1449,6 +1625,11 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 				scene.backstage.present = true;
 				continue;
 			}
+			// (2.1.0)
+			if(lower == "[animation]" || lower == "[animations]"){
+				currentSection = Section::Animation;
+				continue;
+			}
 		}
 
 		switch(currentSection){
@@ -1507,7 +1688,8 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 					// OptionKeys: the same name works here and in schema.toml,
 					// case does not matter, and the old spellings (`bc`, `cap`,
 					// `font`, ...) still work. A scene honours the options below;
-					// the rest (TextOutline, Subtitle*) are project-wide.
+					// the rest (Subtitle*) are project-wide. (2.1.0: TextOutline
+					// and DisableTextOutline became per-scene.)
 					const OptionKey opt = LookupOptionKey(key);
 					if(opt == OptionKey::BackgroundColour){
 						// Unrecognised colours leave the background as it was.
@@ -1536,6 +1718,19 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 					} else if(opt == OptionKey::FixedTextCentre){
 						// (2.0.2) Either way, overriding the project.
 						scene.fixedTextCentre = ParseOptionBool(val) ? 1 : 0;
+					} else if(opt == OptionKey::TextOutline){
+						// (2.1.0) Per-scene outline thickness. Negative or
+						// unreadable values leave it unset.
+						try{
+							int t = std::stoi(val);
+							if(t >= 0) scene.textOutline = t;
+						} catch(...){}
+					} else if(opt == OptionKey::DisableTextOutline){
+						// (2.1.0) Either way, overriding the project.
+						scene.disableTextOutline = ParseOptionBool(val) ? 1 : 0;
+					} else if(opt == OptionKey::TransparentBackground){
+						// (2.1.0) Either way, overriding the project.
+						scene.transparentBackground = ParseOptionBool(val) ? 1 : 0;
 					} else if(opt == OptionKey::Unknown){
 						// (1.4) Particle tunables: <TYPE>.SPEED, <TYPE>.DENS,
 						// <TYPE>.X.DIST = NAME(p1, p2). Case-insensitive type.
@@ -1623,6 +1818,45 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 				macros[name] = std::move(body);
 				break;
 			}
+			case Section::Animation:{
+				// (2.1.0) `Name{` … `}` (or the brace on the next line), with
+				// `key = value` lines inside. See ParseAnimationBlock.
+				const int headerLine = (int)i + 1;
+				std::string header = line;
+				auto bracePos = header.find('{');
+				std::string name = Trim(bracePos != std::string::npos
+					? header.substr(0, bracePos) : header);
+				bool foundBrace = (bracePos != std::string::npos);
+				if(!foundBrace){
+					size_t j = i + 1;
+					while(j < allLines.size() && Trim(allLines[j]).empty()) j++;
+					if(j < allLines.size() && !Trim(allLines[j]).empty()
+						&& Trim(allLines[j])[0] == '{'){
+						i = j;
+						foundBrace = true;
+					}
+				}
+				if(name.empty() || !foundBrace){
+					Scene::Warning w;
+					w.lineNumber = headerLine;
+					w.message = "[Animation]: expected 'Name{' but found '" + line + "'";
+					scene.warnings.push_back(std::move(w));
+					break;
+				}
+				std::vector<std::pair<int, std::string>> body;
+				i++;
+				while(i < allLines.size()){
+					std::string bodyLine = allLines[i];
+					auto cp = FindCommentStart(bodyLine);
+					if(cp != std::string::npos) bodyLine = bodyLine.substr(0, cp);
+					bodyLine = Trim(bodyLine);
+					if(bodyLine == "}") break;
+					if(!bodyLine.empty()) body.emplace_back((int)i + 1, bodyLine);
+					i++;
+				}
+				ParseAnimationBlock(scene, name, headerLine, body);
+				break;
+			}
 			case Section::Commands:{
 				// Detect `group NAME{ … }` block form. Every command inside
 				// the body is tagged with NAME so later `clear NAME` can drop
@@ -1697,6 +1931,45 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 		}
 	}
 
+	// (2.1.0) `use` / `fontSize` take effect on every text run after them
+	// in file order, up to the next one of the same kind. Stamping the runs
+	// here, once, means a cue draws the same whichever way the operator got
+	// to it (ENTER, arrow-key jumps, SHIFT+ENTER, U reload) and the fixed
+	// text centre plans with the right sizes. The state starts fresh in
+	// every scene, so it never carries into the next one.
+	{
+		std::string curFont;
+		int curSize = 0;
+		std::function<void(Command&)> stamp;
+		stamp = [&](Command& c){
+			if(c.directive == FontDirective::UseFont){ curFont = c.directiveFont; return; }
+			if(c.directive == FontDirective::FontSize){ curSize = c.directiveSize; return; }
+			for(auto& r : c.runs){
+				r.fontPath = curFont;
+				r.fontSize = curSize;
+			}
+			for(auto& sub : c.subCommands) stamp(sub);
+			for(auto& sub : c.loopBody)    stamp(sub);
+		};
+		for(auto& c : scene.commands) stamp(c);
+	}
+
+	// (2.1.0) `show NAME` / `stop NAME` / `clear NAME` naming an animation.
+	// Done after parsing, since [Animation] may come after [Commands].
+	if(!scene.animations.empty()){
+		std::function<void(Command&)> mark;
+		mark = [&](Command& c){
+			if((c.type == CommandType::Show || c.type == CommandType::Stop
+				|| c.type == CommandType::Clear)
+				&& !c.argument.empty() && scene.FindAnimation(c.argument)){
+				c.animationName = c.argument;
+			}
+			for(auto& sub : c.subCommands) mark(sub);
+			for(auto& sub : c.loopBody)    mark(sub);
+		};
+		for(auto& c : scene.commands) mark(c);
+	}
+
 	// (1.6.3) Lift any per-command `unknownKeyword` markers into the
 	// scene's warnings list so Overview Debug can render them without
 	// re-walking commands. Done after parsing so deeply-nested commands
@@ -1708,6 +1981,12 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 			Scene::Warning w;
 			w.lineNumber = c.lineNumber;
 			w.message = "Unknown keyword: '" + c.unknownKeyword + "'";
+			scene.warnings.push_back(std::move(w));
+		}
+		if(!c.parseWarning.empty()){
+			Scene::Warning w;
+			w.lineNumber = c.lineNumber;
+			w.message = c.parseWarning;
 			scene.warnings.push_back(std::move(w));
 		}
 		for(const auto& sub : c.subCommands) walk(sub);

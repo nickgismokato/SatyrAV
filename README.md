@@ -3,7 +3,7 @@
 An AV cue controller for SaTyR revyer. Dual-display output with keyboard-first
 navigation through acts, scenes, and commands.
 
-**Current version:** 2.0.2 — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
+**Current version:** 2.1.0-betaE (beta) — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
 
 Full documentation lives in [docs/](docs/README.md).
 
@@ -23,6 +23,15 @@ Full documentation lives in [docs/](docs/README.md).
   next two — name, expected time, actors and ninjas, from each scene's
   `[Backstage]` block — are sent to the revy's backstage ticker, in the
   background so the show never waits on the network.
+- Clear-screen key *(2.1.0)*: `BACKSPACE` wipes the slave like a `clearAll` cue,
+  at any moment, without needing a cue for it.
+- Show time log *(2.1.0)*: from the first cue, every scene (with its length),
+  cue and operator key is written with its time to
+  `showlog/<Revy>-<date>-<run>.log`, plus a matching `.srt` to drop onto the
+  recording in post-production.
+- Clock and stopwatches *(2.1.0)*: with *Clock on Master* on in Options, the
+  master shows the time of day, the time in the current scene and the time
+  since the show started.
 - `comment "..."` cues show in the master navigator as non-executable rows and
   are skipped during navigation.
 - **Cue Notes column** *(1.8.4)*: a fourth, read-only column right of the
@@ -47,6 +56,12 @@ Full documentation lives in [docs/](docs/README.md).
   `'...'`, and `´...´` — so a line can itself contain quotation marks.
 - `[Cue]` section *(1.8.4)*: named operator notes, claimed by a command with a
   trailing `\Name` and shown in the master window's Cue Notes column.
+- `[Animation]` section *(2.1.0)*: named, repeating animations — what moves
+  (any `show` / `text` expression), its path, how often, how many times or for
+  how long, and a random height or position per pass — started with
+  `show NAME`.
+- `use FONT` / `fontSize N` *(2.1.0)*: change the font or size of the text
+  below them in a scene, without a cue; shown as comment rows in the navigator.
 - New projects are generated with two acts and four tutorial scenes — one per
   engine layer (text, pictures, particles, groups/macros) — plus a
   `schema.toml` that lists every project option at its default *(1.8.0)*.
@@ -80,7 +95,13 @@ Full documentation lives in [docs/](docs/README.md).
   line appears where it stays instead of the block creeping up line by line.
   On in new projects.
 - `textCont "..."` appends to the most recently pushed text entry across cues,
-  so a line can be revealed piece by piece.
+  so a line can be revealed piece by piece. *(2.1.0)* After a `use` or
+  `fontSize`, the appended part is in the new font or size, on the same
+  baseline.
+- Per-scene text outline *(2.1.0)*: `TextOutline = N` and
+  `DisableTextOutline = true` in a scene's `[Options]`.
+- Fonts can live in the project *(2.1.0)*: a bare font name is looked for in
+  the project's `fonts/` and `font/` folders before the shared `FONTS` folder.
 - `countdown(SECONDS)` shows a live `MM:SS` timer at the top of the slave that
   ticks down in real time, with an optional `"en"` / `"da"` language label.
   Holds at `00:00` until cleared; scene-scoped, so it never bleeds into the
@@ -144,6 +165,11 @@ Full documentation lives in [docs/](docs/README.md).
   `MODE` is `once` (default), `loop`, or `pingpong`.
 - `layer(N, content)` *(1.8.3)* — explicit draw order for images. Higher is
   nearer the front; negatives sit behind unlayered content.
+- Repeating animations *(2.1.0)* — a tumbleweed that rolls across every few
+  seconds at a different height: `repeat`, `for`, `every` and
+  `randomY` / `randomX` (in slave pixels) in an `[Animation]` block. Every
+  modifier `show` and `text` take works per pass. `stop NAME` lets the pass on
+  screen finish; `clear NAME` cuts it.
 
 ### Display and output
 
@@ -155,6 +181,13 @@ Full documentation lives in [docs/](docs/README.md).
   — same composite, no targeted-display rect, no rotation, no letterbox — at
   slave-logical resolution. Display picker in `Options`, with a hard guard
   against picking the slave's own display.
+- See-through slave *(2.1.0)*: with `TransparentBackground = true` (per scene
+  or project) the slave shows whatever runs underneath it on that screen
+  wherever SatyrAV draws nothing — the background, the clear parts of a PNG.
+  Text stays in front. The window is only opened see-through for projects
+  that use it.
+- The Debug popup's `Capture:` line *(2.1.0)* shows whether the capture mirror
+  is a 1:1 copy of the slave canvas or scaled.
 - Windowed-slave dev mode: `Options` → `Slave Window Mode` → `Windowed (dev)`
   opens the slave as a resizable 1280×720 window on the primary display
   instead of fullscreen on the secondary. Saved targeted-display rect coords

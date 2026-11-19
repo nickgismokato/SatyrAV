@@ -2,6 +2,50 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 2.1.0-betaE — beta
+
+The first beta of 2.1.0, built up in five phases (`2.1.0-betaA` … `2.1.0-betaE`) and tested after each. It brings a clear-screen key, per-scene text outline, a show time log with clock and stopwatches, `use` / `fontSize` for fonts and sizes mid-scene, repeating animations, and a see-through slave. Existing projects and scene files load and look exactly as before: every new option is off unless a project or scene turns it on. What is left of 2.1.0 is listed under *Planned for 2.1.0* in [TODO.md](TODO.md).
+
+### Added
+- **`BACKSPACE` clears the slave** *(betaA)*, the same as a `clearAll` cue — text, images, particles and countdowns, grouped or not — at any time, without a cue for it. Video and sound keep playing (`K` / `M` handle those). In a text field it still deletes a character. Listed in the help popup.
+- **Per-scene text outline** *(betaA)*. `TextOutline = N` now works in a scene's `[Options]` as well as in `schema.toml`, and the new `DisableTextOutline = true` switches the outline off whatever the thickness. A scene can set `DisableTextOutline` either way, so `false` brings the outline back in a project that disables it. New projects get `DisableTextOutline = false`.
+- **Capture mirror readout** *(betaA)*. The Debug popup (`D`) has a `Capture:` line: `WxH 1:1` in green when the capture window shows the slave canvas pixel for pixel, `WxH -> WxH` in orange when SDL scales it, `off` when there is no capture.
+- **Show time log** *(betaB)*. From the first cue after a project is opened, SatyrAV writes down when everything happened, for lining the recording up with the show afterwards.
+    - Two files per run in `<project>/showlog/`: `<Revy>-YYYY-MM-DD-N.log` (`24/12-2026 | 19:32:59.634 | Akt 1 | Scene TeXIntro | play TeXIntro.mp4`) and a matching `.srt` timed from the start of the show, each subtitle lasting until the next event, at most 5 seconds. A second run on the same day writes `-2`, and so on. Opening a project without running a cue writes nothing.
+    - Logged: show start and end with its length, each scene's start and end with its length, every cue (each part of a `&` compound on its own line), and the keys `BACKSPACE`, `F1`–`F12`, `K`, `M` (pause / resume), `O` and `U`.
+    - The `.log` is written line by line, so a crash loses nothing; leaving the project closes both files.
+- **Clock and stopwatches on the master** *(betaB)*. New *Clock on Master* setting in Options (`[display] show_clock`, **off** by default): the time of day, the time in the current scene and the time since the show started, top right on the master. Never on the slave.
+- **`use FONT` and `fontSize N`** *(betaC)*. Two new lines for `[Commands]` that change the font or size of the text below them in the scene file, until the next one; `use default` / `fontSize default` go back to the scene's own.
+    - Not cues: they show as dimmed comment rows (`# Using font Fancy.ttf`, `# Font size 90`) and navigation skips them. The font and size are fixed onto each text line when the scene is read, so a cue looks the same however it is reached — ENTER, the arrow keys, `SHIFT+ENTER`, after `U`.
+    - Scene-scoped: every scene starts on its own font and size, and nothing carries into the next one.
+    - **Several fonts and sizes on one line** with `textCont`: the line is as tall as its biggest part and every part sits on the same baseline. The centred text block — including the fixed text centre — makes room for taller lines.
+    - Every font and size a scene uses is opened when the scene is entered; listing them in `[Preload]` is allowed but not needed. `fontSize big` and other bad values change nothing and are listed in the Overview popup (`D → O`).
+- **Repeating animations** *(betaD)*. A new `[Animation]` section holds named `Name{ key = value }` blocks, started with `show NAME`.
+    - `show =` / `text =` take anything `show` / `text` take — `rotate`, `spin`, `trans`, `scale`, `size`, `random`, `randomImages`, `layer`, `colour`, `+` … `randomImages` and `random` pick again for every pass. `particle()` can't follow a path and is ignored with a warning.
+    - `path` (as `pathMove`) and `duration` (one pass, ms) are required. Optional: `repeat = N | forever` (default `forever`), `for = SECONDS`, `every = MS` between pass starts (passes overlap when it is shorter than the duration), `randomY` / `randomX = MIN, MAX` in slave pixels — each pass's path is moved so its middle runs at a random height or position in that range.
+    - **Soft stop** (no new passes, the one on screen finishes): `stop NAME`; `clear` and `clearImages` for every animation; `repeat` or `for` running out. **Hard cut** (gone at once): `clear NAME`; `clearAll`, `BACKSPACE` and the next scene for every animation. `clearText` and a plain `stop` leave animations alone; `show NAME` while it runs starts it over.
+    - Finished passes remove themselves. Mistakes in a block are listed in the Overview popup, which also checks each animation's image.
+- **See-through slave** *(betaE)*. New option `TransparentBackground = true`, in a scene's `[Options]` or in `schema.toml` (a scene can switch it either way; off by default). Everything SatyrAV draws shows as normal, text in front; everywhere it draws nothing — the background, the clear parts of a PNG, the faded part of `trans(...)`, and the area outside the targeted rect — shows whatever runs underneath the slave window on that screen.
+    - The slave window is opened see-through only for projects that use the option anywhere, since on Windows it presents frames a little more slowly. Scenes that don't ask for it look as before. Adding the option mid-show with `U` needs the project reopened; the log says so.
+    - The capture mirror shows black where the slave is see-through, as a capture card has no transparency.
+
+### Changed
+- **Fonts are found in the project too** *(betaC)*. A bare font name — in `use`, or in the `Font` / `FontItalic` / `FontBold` / `FontBoldItalic` options — is looked for in the project's `fonts/` folder, then `font/`, then the project folder, then the shared `FONTS` folder. A relative path (`fonts/x.ttf`) is taken from the project folder; before, it was taken from wherever SatyrAV was started.
+- New projects' `schema.toml` gains `DisableTextOutline = false` and `TransparentBackground = false`.
+- `config.toml` gains `[display] show_clock`.
+- The `VERSION` file may now carry a pre-release suffix (`2.1.0-betaE`); CMake uses the number part and the program shows the whole string.
+
+### Fixed
+- **F-key toggling with several sounds** *(betaA)*. Each key now looks at its own sound. Before, F1, F2, F1 restarted F1's sound instead of stopping it, and with a video's sound playing a finished F-key sound needed two presses to play again.
+- **Starting a sound while `M` had paused sound** *(betaA)* left the paused sounds silent for good and never cleaned them up. Every sound now resumes.
+- **Fonts in a project's `font` folder did not load** *(betaC)* — see *Changed*.
+- **The first random placement of an animation was always the lowest value** on Windows *(betaD)*: the random generator was never seeded. It now is.
+
+### Tests
+- Six new files in the core suite, 266 test cases in all: `test_text_outline.cpp`, `test_show_log.cpp` (names, run numbers, the `.log` line, the `.srt` timing), `test_font_directives.cpp` (parsing, stamping in file order, compounds, bad values), `test_animation.cpp` (blocks, defaults, every key, modifiers and `+`, name marking, mistakes) and `test_transparent_background.cpp`.
+- Checked outside the suite with off-screen renders of the real `SlaveWindow` / `TextRenderer` / `Renderer`: mixed fonts and sizes sharing a baseline, plain scenes unchanged; animation passes moving, placed on the requested pixel rows and removed when done; a rotated, faded image and two-colour text along a path; and the see-through pipeline — background alpha 0 in the content and the window, correct premultiplied soft edges.
+- Tested on Windows by hand after each phase.
+
 ## Version 2.0.2 — shipped
 
 A fix for fonts leaking from one scene into the next, plus two features asked for by the revy: the backstage screen and a fixed centre for text. Existing projects load and look exactly as before; both features are switched on for new projects only (and the backstage screen needs a `[Backstage]` block in each scene before it sends anything).

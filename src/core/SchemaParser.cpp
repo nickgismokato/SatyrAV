@@ -112,6 +112,11 @@ RevySchema SchemaParser::ParseFile(const std::string& schemaPath){
 
 		schema.fontSize = option(OptionKey::FontSize).value_or(25);
 		schema.textOutline = option(OptionKey::TextOutline).value_or(4);
+		if(schema.textOutline < 0) schema.textOutline = 0;
+		// (2.1.0) Off when missing, so existing projects keep their outline.
+		schema.disableTextOutline = option(OptionKey::DisableTextOutline).value_or(false);
+		// (2.1.0) Off when missing.
+		schema.transparentBackground = option(OptionKey::TransparentBackground).value_or(false);
 		schema.fontPath = option(OptionKey::Font).value_or(std::string(""));
 		// (1.6.1) Optional per-style font faces. Empty falls back to the
 		// global Config path; missing-at-draw-time falls back to regular.

@@ -16,6 +16,7 @@ void OptionsScreen::OnEnter(){
 	slaveModeDropdown.Close();
 	captureDropdown.Close();
 	audioDeviceDropdown.Close();
+	showClockDropdown.Close();
 
 	fontColourDropdown.label = "Font Colour";
 	fontColourDropdown.SetOptions({"Orange", "White", "Lime Green"});
@@ -42,12 +43,17 @@ void OptionsScreen::OnEnter(){
 	audioDeviceDropdown.label = "Audio Output";
 	PopulateAudioDevices();
 
+	// (2.1.0) Master-window clock.
+	showClockDropdown.label = "Clock on Master";
+	showClockDropdown.SetOptions({"Off", "On"});
+
 	// Load current values
 	auto& config = Config::Instance();
 	fontSizeField.SetText(std::to_string(config.fontSize));
 	projectsDirField.SetText(config.projectsDir);
 	displayDropdown.SetSelectedIndex(config.slaveDisplayIndex);
 	slaveModeDropdown.SetSelectedIndex(config.slaveWindowed ? 1 : 0);
+	showClockDropdown.SetSelectedIndex(config.showClock ? 1 : 0);
 
 	PopulateCaptureOptions();
 
@@ -183,6 +189,7 @@ void OptionsScreen::HandleInput(InputAction action){
 	if(focusedField == 4) activeDropdown = &slaveModeDropdown;
 	if(focusedField == 5) activeDropdown = &captureDropdown;
 	if(focusedField == 6) activeDropdown = &audioDeviceDropdown;
+	if(focusedField == 7) activeDropdown = &showClockDropdown;
 
 	if(activeDropdown && activeDropdown->IsExpanded()){
 		switch(action){
@@ -212,6 +219,7 @@ void OptionsScreen::HandleInput(InputAction action){
 		slaveModeDropdown.Close();
 		captureDropdown.Close();
 		audioDeviceDropdown.Close();
+		showClockDropdown.Close();
 		UpdateFocus();
 	} else if(action == InputAction::NavDown || action == InputAction::Tab){
 		focusedField = (focusedField + 1) % FIELD_COUNT;
@@ -220,6 +228,7 @@ void OptionsScreen::HandleInput(InputAction action){
 		slaveModeDropdown.Close();
 		captureDropdown.Close();
 		audioDeviceDropdown.Close();
+		showClockDropdown.Close();
 		UpdateFocus();
 	}
 }
@@ -232,6 +241,7 @@ void OptionsScreen::UpdateFocus(){
 	slaveModeDropdown.focused  = (focusedField == 4);
 	captureDropdown.focused    = (focusedField == 5);
 	audioDeviceDropdown.focused = (focusedField == 6);
+	showClockDropdown.focused   = (focusedField == 7);
 
 	bool needsText = (focusedField == 1 || focusedField == 2);
 	app->GetInput().SetTextInputMode(needsText);
@@ -270,6 +280,8 @@ void OptionsScreen::SaveConfig(){
 		config.audioDeviceName = audioDeviceNames[audOpt];
 	}
 
+	config.showClock = (showClockDropdown.GetSelectedIndex() == 1);
+
 	config.Save();
 
 	app->SwitchScreen(ScreenID::MainMenu);
@@ -293,27 +305,30 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 	int fieldW = 400;
 	int fieldX = centerX - fieldW / 2;
 	int y = 80;
+	// (2.1.0) 70 rather than 80 per row, so nine rows and Save still fit
+	// on a 720-high master.
+	const int rowH = 70;
 
 	fontColourDropdown.x = fieldX; fontColourDropdown.y = y;
 	fontColourDropdown.w = fieldW;
 	fontColourDropdown.Draw(r, text);
 
-	y += 80;
+	y += rowH;
 	fontSizeField.x = fieldX; fontSizeField.y = y;
 	fontSizeField.w = fieldW;
 	fontSizeField.Draw(r, text);
 
-	y += 80;
+	y += rowH;
 	projectsDirField.x = fieldX; projectsDirField.y = y;
 	projectsDirField.w = fieldW;
 	projectsDirField.Draw(r, text);
 
-	y += 80;
+	y += rowH;
 	displayDropdown.x = fieldX; displayDropdown.y = y;
 	displayDropdown.w = fieldW;
 	displayDropdown.Draw(r, text);
 
-	y += 80;
+	y += rowH;
 	slaveModeDropdown.x = fieldX; slaveModeDropdown.y = y;
 	slaveModeDropdown.w = fieldW;
 	slaveModeDropdown.Draw(r, text);
@@ -345,7 +360,7 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 		}
 	}
 
-	y += 80;
+	y += rowH;
 	captureDropdown.x = fieldX; captureDropdown.y = y;
 	captureDropdown.w = fieldW;
 	captureDropdown.Draw(r, text);
@@ -357,12 +372,17 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 			fieldX + fieldW + 10, y + 10, Colours::ORANGE);
 	}
 
-	y += 80;
+	y += rowH;
 	audioDeviceDropdown.x = fieldX; audioDeviceDropdown.y = y;
 	audioDeviceDropdown.w = fieldW;
 	audioDeviceDropdown.Draw(r, text);
 
-	y += 80;
+	y += rowH;
+	showClockDropdown.x = fieldX; showClockDropdown.y = y;
+	showClockDropdown.w = fieldW;
+	showClockDropdown.Draw(r, text);
+
+	y += rowH;
 	Colour btnC = (focusedField == FIELD_COUNT - 1) ? Colours::ORANGE : Colours::WHITE;
 	text.DrawTextCentered(renderer, "[ Save ]", centerX, y, btnC);
 
@@ -372,6 +392,7 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 	slaveModeDropdown.DrawOverlay(r, text);
 	captureDropdown.DrawOverlay(r, text);
 	audioDeviceDropdown.DrawOverlay(r, text);
+	showClockDropdown.DrawOverlay(r, text);
 
 }
 

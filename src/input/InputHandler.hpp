@@ -26,6 +26,7 @@ enum class InputAction{
 	StepBack,
 	ReloadScenes,
 	MarkLine,       // (2.0.1) O: log the last executed cue to fix-it/
+	ClearScreen,    // (2.1.0) BACKSPACE outside text mode: clear the slave
 	TextInput,
 	Backspace,
 	// (1.6.3) F1..F12 collapsed into one action with an integer payload

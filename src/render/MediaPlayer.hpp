@@ -231,6 +231,8 @@ public:
 		int fadeInMs = 0, int fadeOutMs = 0);
 	void StopVideo();
 	void ToggleVideoPause();
+	// (2.1.0) For the show log: whether K / M currently have things paused.
+	bool IsVideoPaused() const{ return videoPaused; }
 	bool IsVideoPlaying() const;
 	bool HasVideo() const;
 	void UpdateVideoFrame(SDL_Renderer* renderer);
@@ -270,7 +272,13 @@ public:
 	bool PlayAudio(const std::string& path);
 	void StopAudio(const std::string& path = "");
 	void ToggleAudioPause();
+	bool IsSoundPaused() const{ return audioPaused; }
 	bool IsAudioPlaying() const;
+	// (2.1.0) True while the standalone sound started from `path` is still
+	// playing (not finished, not stopped, and sound not paused with M).
+	// Used by the F-key toggle, which used to ask IsAudioPlaying() — true
+	// for any sound or a video's audio.
+	bool IsSoundPlaying(const std::string& path) const;
 	// (2.0.0) Number of standalone sounds currently playing. More than one is
 	// now possible — see StandaloneAudio. Surfaced in the debug overlay so an
 	// operator can see how many effects are layered.

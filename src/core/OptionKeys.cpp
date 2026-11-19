@@ -33,6 +33,12 @@ const OptionName kNames[] = {
 	// (2.0.2) New in 2.0.2, so no old spelling; `center` is accepted the way
 	// `color` is.
 	{OptionKey::FixedTextCentre,      "FixedTextCentre",      {"fixedtextcenter", nullptr}},
+	// (2.1.0) Shorthand for `TextOutline = 0`, so a scene can switch the
+	// outline off without knowing the project's thickness.
+	{OptionKey::DisableTextOutline,   "DisableTextOutline",   {nullptr}},
+	// (2.1.0) The slave window shows what is underneath it wherever nothing
+	// is drawn.
+	{OptionKey::TransparentBackground, "TransparentBackground", {"seethrough", nullptr}},
 };
 
 std::string Lower(const std::string& s){

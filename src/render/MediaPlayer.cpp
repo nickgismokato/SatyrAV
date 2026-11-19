@@ -1496,8 +1496,12 @@ bool MediaPlayer::PlayAudio(const std::string& path){
 	s->stream     = CreateBoundStream(sr, ch);
 	if(!s->stream) return false;
 
+	// (2.1.0) Starting a sound while M has paused sound un-pauses all of
+	// it, as before — but now the paused sounds are re-attached to the
+	// device too. Before, only the flag was cleared, so they stayed silent
+	// for good and were never cleaned up.
+	if(audioPaused) ToggleAudioPause();
 	sfx.push_back(std::move(s));
-	audioPaused = false;
 	PumpSfx();   // prime it so playback starts immediately
 	return true;
 }
@@ -1568,6 +1572,14 @@ void MediaPlayer::ToggleAudioPause(){
 
 bool MediaPlayer::IsAudioPlaying() const{
 	return (!sfx.empty() || (active && active->hasAudio)) && !audioPaused;
+}
+
+bool MediaPlayer::IsSoundPlaying(const std::string& path) const{
+	if(audioPaused) return false;
+	for(const auto& s : sfx){
+		if(s->path == path) return true;
+	}
+	return false;
 }
 
 int MediaPlayer::GetActiveSoundCount() const{ return (int)sfx.size(); }

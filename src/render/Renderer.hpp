@@ -14,7 +14,18 @@ public:
 	// (1.5) `windowed` = true opens the slave as a resizable, decorated
 	// window on the primary display instead of fullscreen. Used for
 	// single-monitor development. Production setups pass false.
-	bool InitSlave(int slaveDisplayIndex, bool windowed = false);
+	// (2.1.0) `transparent` creates the window with per-pixel alpha, so a
+	// see-through scene (TransparentBackground) shows what is underneath.
+	// Only asked for when the project uses it: on Windows it costs the
+	// faster flip-model swap chain.
+	bool InitSlave(int slaveDisplayIndex, bool windowed = false, bool transparent = false);
+	bool IsSlaveWindowTransparent() const{ return slaveTransparentWindow; }
+	// (2.1.0) Per scene: clear the slave (and the area outside the targeted
+	// rect) to fully transparent instead of black, and composite the
+	// content target as premultiplied alpha. Ignored unless the window was
+	// created transparent.
+	void SetSlaveSeeThrough(bool on);
+	bool IsSlaveSeeThrough() const{ return slaveSeeThrough; }
 	void CloseSlave();
 	void Shutdown();
 
@@ -88,6 +99,13 @@ public:
 	void UpdateCaptureFromSlaveTarget();
 	// Present the most-recently-uploaded capture texture to its window.
 	void PresentCapture();
+	// (2.1.0) For the Debug popup's 1:1 check. Content = the size of the
+	// frame copied from the slave (the canvas); window = the capture
+	// window's real pixel size. Equal sizes mean the mirror is shown
+	// pixel for pixel; otherwise SDL scales it (letterboxed). All zero
+	// when the capture is not open.
+	void GetCaptureSizes(int& contentW, int& contentH,
+		int& windowW, int& windowH) const;
 
 	// Display info
 	int GetDisplayCount() const;
@@ -120,6 +138,8 @@ private:
 	// stay in production-slave pixel space, so fullscreen/windowed look
 	// identical aside from scale.
 	bool windowedMode    = false;
+	bool slaveTransparentWindow = false; // (2.1.0)
+	bool slaveSeeThrough        = false; // (2.1.0) window transparent AND scene asks
 	int  intendedSlaveW  = 0;
 	int  intendedSlaveH  = 0;
 	// Display the fullscreen slave lives on (for capture soft guard).

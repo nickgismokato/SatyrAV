@@ -2,6 +2,7 @@
 #include "core/Types.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
+#include <map>
 #include <string>
 
 namespace SatyrAV{
@@ -34,11 +35,15 @@ public:
 	// flags pick the matching loaded face — regular / italic / bold /
 	// bold-italic; falls back to regular when the requested variant is
 	// not configured for this project.
+	// (2.1.0) `fontPath` / `fontSize` pick a font other than the scene's:
+	// a resolved file from `use` and/or a size from `fontSize`. Empty / 0
+	// means the scene's font / size, exactly as before 2.1.0.
 	void DrawTextSlave(SDL_Renderer* renderer,
 		const std::string& text,
 		int x, int y,
 		Colour colour = Colours::WHITE,
-		bool bold = false, bool italic = false);
+		bool bold = false, bool italic = false,
+		const std::string& fontPath = "", int fontSize = 0);
 
 	void DrawTextCenteredSlave(SDL_Renderer* renderer,
 		const std::string& text,
@@ -53,11 +58,26 @@ public:
 		int x, int y,
 		Colour colour,
 		float rotationDeg,
-		bool bold = false, bool italic = false);
+		bool bold = false, bool italic = false,
+		const std::string& fontPath = "", int fontSize = 0);
 
 	// Measure slave-font glyph bounds for a given string.
 	void MeasureSlave(const std::string& text, int& w, int& h,
-		bool bold = false, bool italic = false) const;
+		bool bold = false, bool italic = false,
+		const std::string& fontPath = "", int fontSize = 0) const;
+
+	// (2.1.0) Line spacing and ascent (scaled) of the face a run would be
+	// drawn with, so a line mixing fonts or sizes can be as tall as its
+	// tallest run and keep its runs on one baseline. For the scene's own
+	// face these equal GetSlaveLineHeight() and that face's ascent.
+	int GetSlaveLineHeightFor(bool bold, bool italic,
+		const std::string& fontPath, int fontSize) const;
+	int GetSlaveAscentFor(bool bold, bool italic,
+		const std::string& fontPath, int fontSize) const;
+
+	// (2.1.0) Open a font ahead of time (a `.ttf` in a scene's [Preload]),
+	// so the first line drawn with it doesn't wait for the file.
+	void PreloadSlaveFont(const std::string& fontPath, int fontSize);
 
 	void SetSlaveFontSize(int size);
 	int GetSlaveFontSize() const;
@@ -106,6 +126,14 @@ private:
 	// Pick the best-fit slave face for the requested style, falling back
 	// to regular when the variant isn't loaded.
 	TTF_Font* PickSlaveFont(bool bold, bool italic) const;
+	// (2.1.0) Same, for a run with its own font file and/or size. Faces
+	// are opened on first use and kept in `extraFonts` until the scene's
+	// fonts change (OpenSlaveFonts). A file that cannot be opened is
+	// logged once and falls back to the scene's face at that size.
+	TTF_Font* PickSlaveFont(bool bold, bool italic,
+		const std::string& fontPath, int fontSize) const;
+	mutable std::map<std::string, TTF_Font*> extraFonts;
+	void CloseExtraFonts();
 	// Open all four slave faces from `slaveFontPaths` at the given size.
 	// Empty paths leave the slot null. Called when the size changes or when
 	// SetSlaveFontPaths swaps the path set.

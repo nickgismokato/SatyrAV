@@ -2,7 +2,7 @@
 
 Future work, newest first. Shipped features live in [CHANGELOG.md](CHANGELOG.md).
 
-> **Current release: 2.0.2.** The font-leak fix, the backstage screen and a fixed centre for text. Next is **2.1.0**.
+> **Current release: 2.1.0-betaE** (beta). Clear-screen key, per-scene outline, show time log and clock, `use` / `fontSize`, repeating animations and a see-through slave. The rest of **2.1.0** is below.
 
 The lists, with the exception of the bug list, is in no particular order. Some have the (**Critical**) on them which means they are important and should be looked at first in the update version, before the others, if it makes sense.
 
@@ -97,76 +97,50 @@ Bugs aren't tied to specific versions. It is just a list of all known bugs which
 ---
 
 ## Planned for 2.1.0
-- Make sure the capture window is an unscaled 1-1 copy of the slave window. This should already be the case but after the rework of the backend in **2.0.0**, a check is needed.
-- (**Critical**) Add `CLEAR` button such that you can clear all on the screen. This will be the `backspace` key that will do this.
-    - This will have to clear everything. So it works like a `clear` command we always have access to.
-- Multiple font loading in the same scene.
-    - This wasn't apart of my thought process, but a wish has been made to be able to use multiple fonts in the same scene.
-    - For this feature I think, we have to load multiple fonts in the preload part and then use a command to define when and where we use a font. So for example:
-        ```txt
-        [Preload]
-        font1.ttf
-        font2.ttf
-        [Commands]
-        use font1.ttf
-        text "Hello, "
-        use font2.ttf
-        textCont "World!"
-        ```
-        Essentially this would create a single line using two fonts. The `use` command should be done automatically when you go to the next line and shouldn't require user input.
-    - Futhermore this `use` command should show as a comment that we currently is using whatever font we have chosen.
-    - `use default` should use the default font.
-- Multiple font size options.
-    - This should be done as a command and again not be something we apply by pressing enter, but just do automatically when we get to the next line after the command.
-    - A comment should be shown to indicate that the font size has been changed.
-    - The command should be something like `fontSize 90 #Change font size from heron out to 90`.
-        - Note that testing on this is critical since we still want the next slide to respect the defined font size. So it should only live in the defined `.ngk` file.
-        - If we write `fontSize default` it should default to the defined font size in the `.ngk` file. If there is none, it should use the `schema.toml` definition and if nothing is there, use the global one.
-- (**Critical**) Add repeating animation option.
-    - If we want to add a Tumbleweed that rolls from the left of the screen to the right, that would be easy. But if we want it to repeat a certain amount of times or if we want to make it constantly repeat until cancelled, then this is harder. This should be added for easier writing of a scene and make it less programming heavy with the `.ngk` file. 
-    - Maybe it could be an idea to add a `[Animation]` section in the `.ngk` files and then just choose when to play what animation down in the `[Commands]` section. This way, our file stays more clean and organized.
-        - If this gets implemented in this version, then under the `[Animation]`, we should be able to define the function and then use `show animation1`. 
-    - The repeating animation should also be able to handle random start position. Like a tumbleweed at the top and later a tumbleweed at the bottom.
-    - The repeating animation should have have options for how long it should repeat (*in seconds*), how many times.
-- (**Critical**) Add an output file like a `.srt` or `.ass` file that creates a time log when a show is running. This can help with time alignment in post production.
-	- This is a style example:
-		```txt
-		24/12-2026 | 19:30:126 | Started MatRevy2026
-        24/12-2026 | 19:30:453 | Akt 1 | Scene BandIntro | started scene
-        24/12-2026 | 19:32:599 | Akt 1 | Scene TeXIntro | started scene
-		24/12-2026 | 19:32:634 | Akt 1 | Scene TeXIntro | play TeXIntro.mp4
-        24/12-2026 | 19:38:022 | Akt 1 | Scene RandomSketch | started scene
-		24/12-2026 | 19:57:238 | Akt 1 | Scene RandomSketch | show funnyImage.png
-		...
-		```
-	- The file should be named the project name and the date it has been created and then a number (or something similar) if you have started the show more than once during the day.
-	- The exact details of what it should show has not been decided. A design run through may be needed. But essentially everytime we change a scene or show something, like an image, movie or text.
-- *(Maybe — more information needed before this counts as a bug.)* F-key toggling when several sounds are layered.
-	- **Confirmed working in 2.0.0 testing:** different F-keys bound to different files can each be started and stopped independently, on top of each other and on top of video sound.
-	- **Known and accepted:** a sound is identified by its file, so the same file bound to two F-keys is one sound; the second key restarts it rather than layering a copy.
-	- **The open question comes from reading the code, not from anything seen in use.** `PerformanceScreen` remembers only the *last* F-key pressed (`currentHotkeyNum`) and decides "stop or play" by asking `MediaPlayer::IsAudioPlaying()`, which is also true whenever a video with sound is playing. On paper that gives two odd cases:
-		1. Press F1, then F2, then F1 again while F1's sound is still going: F1 would restart from the beginning instead of stopping.
-		2. With a video with sound playing, press an F-key, let its sound finish, press the same key again: the press would be taken as "stop" and nothing would play until a second press.
-	- **To settle it:** try those two sequences exactly. If neither happens, delete this item. If either does, the fix is small — ask the player whether *that* sound is playing instead of tracking one key number.
-- (**Critical**) Add function to disable `TextOutline` for specific scenes. The command should be `DisableTextOutline = true`. The default value should be false.
-- (**Critical**) Add function to change `TextOutline` for specific scenes.
-- A full scanner of a project to see if any scenes inside its `.ngk` files have wrong options/notations/commands. A full scanner to check for existence of assets should also be implemented.
-    - A shortcut to open specific window should be implemented. Just like how the debug window work. 
-    - The scan should be ran only when this window is open to minimize the amount of processing power needed during a show.
-    - It should report the physical line in the specific files that are wrong. 
+
+What is left of 2.1.0 after the beta. The next phase (**F**) is the video seek commands and the folder chooser.
+
 - *(moved from 1.8.0)* Make a fastforward-goback scroller for videos.
 	- Probably should just go forward or backward with 5 seconds interval using key `,`/`.`.
 	- A restart from the beginning function is also needed.
 	- *Why deferred:* needs `av_seek_frame` + decode-ring flush inside `VideoPlayback` — the exact code 2.0.0 rebuilds for zero-copy decode. The 2.0.0 redo leaves the pipeline seek-capable; this item is the user-facing commands on top of it.
 	- *Status after 2.0.0:* the plumbing exists and is tested on all three decode paths — `MediaPlayer::SeekVideo(seconds)`, `GetVideoPosition()` and `GetVideoDuration()`. What is left for this item is the commands, the key bindings, and one behaviour to decide: a seek made while paused currently shows its new picture only when playback resumes.
+	- *Keys after the beta:* `,` and `.` are still free; `BACKSPACE` is now taken by the clear-screen key.
 - *(moved from 1.8.0)* Create a true folder chooser for the folder picker inside Options.
 	- When pressing the folder-choose control for where projects are stored, a native folder dialog should open so the user can pick the storage folder.
 	- *Why deferred:* SDL3 ships [`SDL_ShowOpenFolderDialog`](https://wiki.libsdl.org/SDL3/SDL_ShowOpenFolderDialog) (cross-platform). Doing this pre-SDL3 means hand-rolling a Win32 COM `IFileDialog` path that would then be thrown away — exactly the double work to avoid.
-- *(moved from 2.0.0 Time API)* Add an in-project clock for easy time-of-day display, and a per-scene stopwatch command to time individual scenes. Pairs naturally with the `.srt`/`.ass` time-log above.
+	- *Layout note:* the Options screen rows were tightened to 70 px in the beta to fit *Clock on Master*; a chooser button must still fit on a 720-high master.
+- Make sure the capture window is an unscaled 1-1 copy of the slave window.
+	- *Status after the beta:* by the code, the capture copies the slave canvas pixel for pixel (before the targeted-display rect, as intended since 2.0.0) and is only scaled when the capture screen's resolution differs from the canvas. The Debug popup's new `Capture:` line shows `1:1` (green) or the scaling (orange). **Left: check it on the show hardware.**
+- A full scanner of a project to see if any scenes inside its `.ngk` files have wrong options/notations/commands. A full scanner to check for existence of assets should also be implemented.
+    - A shortcut to open specific window should be implemented. Just like how the debug window work. 
+    - The scan should be ran only when this window is open to minimize the amount of processing power needed during a show.
+    - It should report the physical line in the specific files that are wrong. 
+	- *Starting point:* the Overview popup (`D → O`) already lists unknown keywords, missing `show` / `play` files, bad `[Backstage]` blocks, bad `fontSize` / `use` lines, `[Animation]` mistakes and missing animation images, each with its line. The scanner can grow from it.
+	- It must know the beta's new syntax: `use`, `fontSize`, `[Animation]` and its keys, `TextOutline` / `DisableTextOutline` / `TransparentBackground` in scenes.
+- Update the VSCode `.ngk` extension for the beta's syntax: `use`, `fontSize`, the `[Animation]` section and its keys, and the options `DisableTextOutline` and `TransparentBackground`.
 - *(deferred from 1.8.0)* Extend the unit-test suite to the render / audio / `MediaPlayer` layer, once the SDL3 backend has settled. The SDL-independent core suite ships in **1.8.1**; see that section.
-- (**Critical — moved from 1.6**) Transparent-layer handling for `.png` files. Today the alpha channel in a PNG is composited onto the slave background as normal. Add a per-project `[Options]` toggle (default **off**) that switches the slave to a transparent composite path — the underlying pixels show through PNG alpha instead of being filled by the scene background.
-	- *Why deferred from 1.6:* SDL2 has no per-pixel-alpha window flag; `SDL_WINDOW_TRANSPARENT` is SDL3-only. A SDL2 implementation would require hand-rolling a D3D11 + DirectComposition swapchain to replace SDL2's slave renderer (and a separate ARGB-visual path on Linux/X11). After the 2.0.0 SDL3 migration this becomes a one-flag change on window creation, so it rides naturally with 2.1.
-	- Still needs investigation of how this interacts with the targeted-display black-fill and with the capture-mirror window (capture cards drop alpha; may need a chroma-key or NDI-with-alpha output path).
+	- *Starting point:* the beta's features were checked with off-screen renders of the real `Renderer`, `SlaveWindow` and `TextRenderer` (SDL's `offscreen` video driver). Those harnesses could become the first render tests. Not covered by anything yet: the `[Animation]` runner and the show time log's wiring, which live in `PerformanceScreen`.
+
+---
+
+## 2.1.0-betaE — shipped (beta)
+
+The first beta of 2.1.0, built in five phases and tested after each: **A** `2.1.0-betaA`, **B** `-betaB`, **C** `-betaC`, **D** `-betaD`, **E** `-betaE`. See [CHANGELOG.md](CHANGELOG.md) for the detail.
+
+- **A — Quick fixes.**
+	- `BACKSPACE` clears the slave like `clearAll` *(was Critical)*.
+	- `TextOutline` per scene and `DisableTextOutline = true` *(both were Critical)*.
+	- Debug popup `Capture:` line for the 1:1 check (hardware test still open, see above).
+	- F-key toggling: settled — both odd cases were real and are fixed; each key now checks its own sound. Also fixed: playing a sound while `M` had paused sound left the paused sounds silent.
+- **B — Show time log, clock and stopwatches** *(was Critical)*. `showlog/<Revy>-YYYY-MM-DD-N.log` and `.srt` per run, from the first cue: scenes with their length, every cue, and the operator keys. *Clock on Master* in Options (off by default): time of day, scene and show stopwatches.
+- **C — Fonts.**
+	- `use FONT` / `use default` and `fontSize N` / `fontSize default` as comment rows that apply to the text below them in the scene file, scene-scoped.
+	- Several fonts and sizes on one line with `textCont`, on a shared baseline.
+	- Known bug fixed: fonts in the project's `font/` (and `fonts/`) folder now load, for `use` and for the `Font` options.
+- **D — Repeating animations** *(was Critical)*. `[Animation]` section with `Name{ key = value }` blocks started by `show NAME`; any `show` / `text` expression; `repeat`, `for`, `every`, `randomX` / `randomY` in slave pixels; soft stop (`stop NAME`, `clear`, `clearImages`) and hard cut (`clear NAME`, `clearAll`, `BACKSPACE`, next scene).
+- **E — See-through slave** *(was Critical, moved from 1.6)*. `TransparentBackground = true` per scene or project: the empty slave shows what runs underneath on that screen. The window is only opened see-through for projects that use it. Capture shows black there.
+	- The open questions from the TODO were settled as: the black fill outside the targeted rect becomes see-through too in such scenes; the capture mirror shows black (no chroma-key or NDI-with-alpha path).
 
 ---
 
@@ -301,5 +275,3 @@ Most critical first.
 - Maybe only one image can be shown at a time. This need to be tested.
 - Not a bug, but we have to check what bit our movies is compatible with. 8/10 and 16 bit should all be suported.
 	- *State in 2.0.0:* 8-bit H.264 is the tested case and uses the zero-copy path. A 10-bit source is deliberately kept on the read-back path, where it is converted down to 8-bit for display, so it should play but without its extra depth. That has **not** been tested with a real 10-bit file, and 16-bit has not been looked at.
-- When placing a font in the `projects/<projectName>/font` folder, it doesn't load these fonts.
-    - This is less of a bug and more of a redoing of the feature since the `FONTS` folder should only be the one folder. So this is more of a feature request.

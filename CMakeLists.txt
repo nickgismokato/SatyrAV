@@ -3,8 +3,12 @@ cmake_minimum_required(VERSION 3.20)
 # Read version from VERSION file
 file(READ "${CMAKE_SOURCE_DIR}/VERSION" SATYR_VERSION)
 string(STRIP "${SATYR_VERSION}" SATYR_VERSION)
+# (2.1.0) The VERSION file may carry a pre-release suffix such as
+# "2.1.0-betaA". project() only accepts the numeric part, so split it off;
+# the full string still goes to SATYR_AV_VERSION for the app to display.
+string(REGEX MATCH "^[0-9]+(\\.[0-9]+)*" SATYR_VERSION_NUMERIC "${SATYR_VERSION}")
 
-project(SatyrAV VERSION ${SATYR_VERSION} LANGUAGES CXX)
+project(SatyrAV VERSION ${SATYR_VERSION_NUMERIC} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

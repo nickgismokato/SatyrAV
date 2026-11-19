@@ -235,6 +235,35 @@ int CueEngine::GetTextOutline() const{
 	return projectData.schema.textOutline;
 }
 
+int CueEngine::GetEffectiveTextOutline() const{
+	auto* scene = GetCurrentScene();
+	const auto& schema = projectData.schema;
+	if(scene){
+		if(scene->disableTextOutline == 1) return 0;
+		if(scene->textOutline >= 0) return scene->textOutline;
+		// An explicit `DisableTextOutline = false` in the scene brings the
+		// project's thickness back even when the project disables it.
+		if(scene->disableTextOutline == 0) return schema.textOutline;
+	}
+	return schema.disableTextOutline ? 0 : schema.textOutline;
+}
+
+bool CueEngine::GetEffectiveTransparentBackground() const{
+	auto* scene = GetCurrentScene();
+	if(scene && scene->transparentBackground >= 0) return scene->transparentBackground == 1;
+	return projectData.schema.transparentBackground;
+}
+
+bool CueEngine::UsesTransparentBackground(const ProjectData& project){
+	if(project.schema.transparentBackground) return true;
+	for(const auto& akt : project.schema.akts){
+		for(const auto& sc : akt.scenes){
+			if(sc.transparentBackground == 1) return true;
+		}
+	}
+	return false;
+}
+
 int CueEngine::GetProjectFontSize() const{
 	return projectData.schema.fontSize;
 }

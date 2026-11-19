@@ -27,13 +27,16 @@ Per-scene settings that override project-level defaults.
 - **Keys:**
     - `BackgroundColour` — background colour: any [colour](#colours). A scene that does not set it uses the project's `BackgroundColour`, which is black unless the project says otherwise. *(2.0.1: any colour, including hex; before that only black, blue, red, green and white. Before 2.0.1 a scene that did not set it was always black, whatever the project said.)*
     - `TextColour` *(2.0.1)* — default colour of the scene's slave text: any [colour](#colours). Text with its own `colour(...)` keeps that colour. A scene that does not set it uses the project's `TextColour`, then white. Countdowns use it too; `textD` subtitle lines use `SubtitleColour` instead.
-    - `FontSize` — slave font size in points. Overrides the project `FontSize`.
-    - `Font` — path (relative to project root, or a bare filename resolved against the shared `FONTS/` directory *(1.6.1)*) to a `.ttf` font file.
+    - `FontSize` — slave font size in points. Overrides the project `FontSize`. *(2.1.0)* `fontSize N` in `[Commands]` changes it for the text below it; see [`use` / `fontSize`](#use-font--fontsize-n-210).
+    - `Font` — path (relative to project root, or a bare filename resolved against the shared `FONTS/` directory *(1.6.1)*) to a `.ttf` font file. *(2.1.0)* A bare filename is looked for in the project's `fonts/` and `font/` folders and the project folder first, then `FONTS/`; a relative path is now taken from the project folder.
     - `FontItalic`, `FontBold`, `FontBoldItalic` *(1.6.1)* — paths to the italic / bold / bold-italic typeface variants. Used by `textbf`, `textit`, and inline `bold(...)` / `it(...)`. Empty or missing → falls back to project / global config, then to regular.
     - *Fonts are per scene* *(2.0.2)*: a scene without `Font` (or one of the style faces) uses the project's, then the global one — never the previous scene's. Before 2.0.2 a scene's font stayed on for every later scene that did not name its own.
     - `Capitalize` — `true` or `false` to capitalize every text line.
     - `AudioFade` *(2.0.0)* — `true` or `false`. When true, the fade times on a `play FILE FADE_IN, FADE_OUT` command ramp the clip's **audio** as well as its picture. Default **false**, so scenes written before 2.0.0 keep fading the picture only and cutting the sound at full volume. Like `Capitalize`, a scene can switch this on but cannot switch off a project that enabled it.
     - `FixedTextCentre` *(2.0.2)* — `true` or `false`. Normally the centred text stack is centred on the lines shown so far, so every new line pushes the block up by half a line. With `true`, the block is centred on **every line it will hold before it is cleared**, so each line appears where it stays. See [Fixed text centre](#fixed-text-centre-202). A scene can switch it either way, overriding the project. Off in projects that do not set it; new projects are generated with it on.
+    - `TransparentBackground` *(2.1.0)* — `true` or `false`. With `true` the slave becomes **see-through**: everything SatyrAV draws (text, images, video, particles) shows as normal, and everywhere it draws nothing — the background, the clear parts of a PNG, the faded part of `trans(...)` — shows whatever is underneath the slave window on that screen (another program, a camera feed, the desktop). Text stays in front of everything, as always. A scene can switch it either way, overriding the project; default `false`. See [See-through slave](#see-through-slave-210).
+    - `TextOutline` *(2.1.0)* — outline thickness in points for this scene's text, `0` = no outline. Overrides the project's `TextOutline`.
+    - `DisableTextOutline` *(2.1.0)* — `true` or `false`. `true` switches the outline off for this scene, whatever `TextOutline` says. A scene can switch it either way: `false` brings the outline back in a project that disables it. Default `false`.
     - `<TYPE>.SPEED`, `<TYPE>.DENS` (or `.DENSITY`), `<TYPE>.X.DIST = NAME(p1, p2)` *(1.4)*, `<TYPE>.VX.DIST`, `<TYPE>.VY.DIST` *(1.5)* — per-particle-type tunables. See [Particle tunables in `[Options]`](#particle-tunables-in-options-14) for details.
 - **Hex values:** *(2.0.1)* `TextColour = #FF8800` works unquoted. A `#` straight after the `=` followed by 3 or 6 hex digits is the colour; any later `#` starts a comment as usual.
 - **Example:**
@@ -165,6 +168,58 @@ What the backstage screen shows about this scene. When the show moves into a new
 - **Watching it:** the Debug popup (`D`) has a *Backstage* line — green with the HTTP status when the last POST arrived, red with the reason when it failed, grey when off. Every request is in the SatyrAV log: what was sent, line by line, then the result.
 - **Platforms:** https works in the Windows build (through Windows' own HTTP stack, including its proxy and certificate settings). The Linux build sends plain `http://` only.
 
+### `[Animation]` *(2.1.0)*
+
+Named animations that repeat — a tumbleweed that rolls across the stage every few seconds, at a different height each time. Define them here, start one in `[Commands]` with `show NAME`.
+
+- **Syntax:** `[Animation]` (or `[Animations]`, any case), then one block per animation: a name, `{`, `key = value` lines, `}`. The brace may also go on the line after the name.
+- **Keys** (any case):
+
+    | Key | Meaning |
+    |---|---|
+    | `show = …` | What moves: anything `show` takes — a file, or a file wrapped in `rotate()`, `spin()`, `trans()`, `scale()`, `size()`, `random()`, `randomImages()`, `layer()`… Or: |
+    | `text = …` | Text that moves: anything `text` takes, including `colour()`, `bold()`, `it()`, `rotate()`, `spin()` and `+`. One of `show` / `text` is required. |
+    | `path = P1, P2, …` | **Required.** Two or more points, as in `pathMove`: `[X, Y]` in percent or a side letter `N` / `S` / `E` / `W` (just off that edge). |
+    | `duration = MS` | **Required.** Milliseconds for one pass along the whole path. |
+    | `repeat = N` / `forever` | How many passes. Default `forever`. |
+    | `for = SECONDS` | No new pass starts after this long. Optional. |
+    | `every = MS` | Milliseconds from one pass's start to the next. Default: the duration, so passes run back to back. Shorter than the duration means passes overlap. |
+    | `randomY = MIN, MAX` | Each pass crosses at a random height between `MIN` and `MAX`, in **slave pixels** (0 = top; 1080 = bottom on a 1080p slave). The whole path is moved up or down so that its middle line (50 %) lands there — for a `W, E` path, the content's centre runs along that pixel row. The pixels are the slave canvas, so the numbers mean the same in windowed dev mode. |
+    | `randomX = MIN, MAX` | The same sideways, in slave pixels from the left edge, for `N, S` paths. |
+    | `layer = N` | Draw order for an image, as `layer()`. |
+    | `size = [W, H]` | Size of an image, as `size()`. |
+
+- **Modifiers:** each pass is drawn exactly like the same `show` / `text` line with a `pathMove` on it, so every modifier works the same way. `randomImages()` and `random()` pick again for every pass (a different picture or size each time). `pos()` and `move()` are overruled by `path`. `particle()` can't follow a path or end with a pass, so it is ignored with a warning and the image itself moves.
+- **Ending:** the animation ends by itself when `repeat` passes have started or `for` has run out; the pass on screen finishes its run.
+- **Stopping it yourself** — soft (no new passes, the one on screen finishes) or hard (gone at once):
+
+    | Command | Effect |
+    |---|---|
+    | `stop NAME` | Soft, that animation. |
+    | `clear`, `clearImages` | Soft, every animation. |
+    | `clear NAME` | Hard, that animation. |
+    | `clearAll`, `BACKSPACE`, next scene | Hard, every animation. |
+
+    `clearText` and plain `stop` leave animations alone. `show NAME` while it runs starts it over (count and `for` from zero).
+- **Names:** an animation name used with `show`, `stop` or `clear` means the animation, even if a file or group has the same name.
+- **Mistakes** (missing `path`, an unknown key, `repeat = lots`) are listed in the Overview popup (`D` → `O`), which also checks that each animation's image exists. A block without `show`/`text`, `path` or `duration` is skipped.
+- **Example:**
+    ```txt
+    [Animation]
+    Tumbleweed{
+        show     = spin(240, size([150, 150], tumbleweed.png))   # rolls as it goes
+        path     = W, E
+        duration = 3000
+        repeat   = 5
+        every    = 4000
+        randomY  = 650, 950    # low on a 1080p stage
+    }
+
+    [Commands]
+    show Tumbleweed      # five spinning tumbleweeds, one every 4 s, low on the stage
+    stop Tumbleweed      # ...or fewer: the one rolling finishes
+    ```
+
 ### `[Commands]`
 
 The sequence of cues. Each line is one cue; the operator presses ENTER to advance.
@@ -202,6 +257,32 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     text "Two"
     text "Three"
     clear
+    ```
+
+### See-through slave *(2.1.0)*
+
+`TransparentBackground = true` (in a scene's `[Options]` or in `schema.toml`) makes the slave see-through wherever nothing is drawn.
+
+- **The window:** a see-through slave needs a window made for it, and that can only be chosen when the window opens. SatyrAV opens it see-through when the project opens if the project, or any scene in it, uses `TransparentBackground = true`; other projects keep the normal window. If you add the option to a scene during a show with `U`, leave the project and open it again — until then that scene shows black where it would be see-through, and the log says so.
+- **Per scene:** with the see-through window open, scenes that don't ask for it look exactly as before (their background colour, black outside the targeted rect). Scenes that do ask are see-through everywhere nothing is drawn — **including outside the targeted rect**, which is normally painted black.
+- **What shows through** is whatever is on that screen under the slave window. Put the other program on the slave's screen first, then open the project.
+- **Capture mirror:** a capture card has no transparency, so the see-through parts are black on the capture mirror.
+- **Performance (Windows):** a see-through window uses an older, slightly slower way of presenting frames, which is why it is only opened for projects that use it. On laptops with two graphics cards it may not work at all (an SDL limitation); the slave then shows black there.
+- **Example:**
+    ```txt
+    [Options]
+    TransparentBackground = true
+
+    [Animation]
+    Tumbleweed{
+        show     = spin(240, size([150, 150], tumbleweed.png))
+        path     = W, E
+        duration = 3000
+        randomY  = 650, 950
+    }
+
+    [Commands]
+    show Tumbleweed    # rolls across whatever is on the screen underneath
     ```
 
 ### `textCont` *(1.4)*
@@ -264,7 +345,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
 
 - **Syntax:** `clear`
 - **Arguments:** none — but see the variants below.
-- **Behaviour:** Clears the slave's text stack, current image, and active particle system. Does **not** clear groups (see `clearAll`).
+- **Behaviour:** Clears the slave's text stack, current image, and active particle system. Does **not** clear groups (see `clearAll`). *(2.1.0)* Running [animations](#animation-210) start no new passes; the ones on screen finish.
 - **Output:** The slave goes back to its background colour (or video, if one is playing).
 - **Example:**
     ```txt
@@ -346,7 +427,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
 
 ### `stop`
 
-- **Syntax:** `stop` or `stop FILE`
+- **Syntax:** `stop` or `stop FILE` *(2.1.0: or `stop NAME` for an [animation](#animation-210) — no new passes, the one on screen finishes)*
 - **Arguments:** Optional filename. With no argument, stops all playback (video and every sound) and particle systems. With a filename, stops only that audio track.
 - **File names** resolve the same way as `play`: against the project folder, then `pictures/`, `movies/` and `sound/`, so `stop music.mp3` stops the sound that `play music.mp3` started. Other sounds keep playing. *(Broken in 2.0.0 — it had no effect — and fixed in 2.0.1.)*
 - **Note:** *(1.4)* Particle systems that are already in smooth-stop mode (see `stopParticleCont`) are **not** affected by `stop`/`clear`/`clearAll` — their endings always play out to completion.
@@ -419,6 +500,31 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     typewrite(80, colour(RED, "DANGER") + " — do not open")
     typewrite(30, pos([50, 80], "subtitle style reveal"))
     typewrite(0, "instant — same as text")
+    ```
+
+### `use FONT` / `fontSize N` *(2.1.0)*
+
+Change the font or the font size of the text **below** this line in the scene file.
+
+- **Syntax:** `use FONT`, `use default`, `fontSize N`, `fontSize default`. `FONT` may be quoted, which is needed for a name with spaces.
+- **Behaviour:** Neither is a cue. Both show in the navigator as a dimmed comment row (`# Using font Fancy.ttf`, `# Font size 90`) and navigation skips them, so you never press ENTER for them. Each one applies to every text cue after it in the file — `text`, `textCont`, `textbf`/`textit`, `typewrite`, the first part of `textD` — until the next `use` (or `fontSize`), whichever way you get to the cue (ENTER, arrow keys, SHIFT+ENTER, `U`).
+- **Scope:** One scene file. Every scene starts on its own font and size from `[Options]` (then `schema.toml`, then the global setting), and nothing carries into the next scene.
+- **`default`:** `use default` goes back to the scene's font; `fontSize default` goes back to the scene's `FontSize`, then the project's, then the global one.
+- **Mixing on one line:** `textCont` after a `use` or `fontSize` adds to the same line in the new font or size. The line gets as tall as its biggest part, and every part sits on the same baseline.
+- **Where fonts are found:** a bare file name is looked for in the project's `fonts/` folder, then `font/`, then the project folder, then the shared `FONTS/` folder. A path with a folder in it is taken from the project folder; a full path is used as it is. A font that cannot be found is logged and the scene's font is used instead.
+- **Bold and italic:** a `use` font is one file, so `textbf`, `bold(...)` and friends in it get a computed bold / slant rather than a separate face.
+- **Preloading:** every font and size a scene uses is opened when the scene is entered. Listing the font in `[Preload]` is allowed but not needed.
+- **Bad values:** `fontSize` takes 1 to 1000. Anything else (`fontSize big`) is shown as an ignored comment, changes nothing, and is listed in the Overview popup (`D` → `O`).
+- **Example:**
+    ```txt
+    [Commands]
+    use Fancy.ttf
+    text "Hello, "
+    use default
+    fontSize 110   # just for the punchline
+    textCont "World!"
+    fontSize default
+    text "Back to normal"
     ```
 
 ### `comment` *(1.2)*

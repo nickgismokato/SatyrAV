@@ -127,7 +127,9 @@ public:
 	// Remove all ungrouped text entries (preserves traditional `clear` behaviour).
 	void ClearText();
 	// Remove every text entry regardless of group (used by `clearText` / `clearAll`).
-	void ClearTextAll();
+	// (2.1.0) `keepPrefix`: entries whose group starts with it stay (the
+	// passes of a running [Animation] survive `clearText` / `clearImages`).
+	void ClearTextAll(const std::string& keepPrefix = "");
 	void SetBackgroundColour(Colour c);
 	void SetCapitalize(bool cap);
 	// (2.0.1) Colour for text pushed from now on that has no colour(...).
@@ -156,7 +158,7 @@ public:
 	// Remove ungrouped images.
 	void ClearImage();
 	// Remove every image entry regardless of group.
-	void ClearImageAll();
+	void ClearImageAll(const std::string& keepPrefix = "");
 
 	// Particle system. Ungrouped starts replace any existing ungrouped
 	// particles; grouped starts append.
@@ -184,6 +186,12 @@ public:
 	// Group / global clear helpers.
 	// Drop every text/image/particle entry tagged with groupName.
 	void ClearGroup(const std::string& groupName);
+	// (2.1.0) Drop text, images and particles of every group starting with
+	// `prefix` — a hard cut of all [Animation] passes.
+	void ClearGroupsWithPrefix(const std::string& prefix);
+	// (2.1.0) Remove text and images whose mods.lifetimeSec has run out.
+	// Called every frame from Update.
+	void PruneExpired();
 	// Drop all text, images, and particles regardless of group.
 	void ClearAll();
 

@@ -37,9 +37,12 @@ private:
 	Dropdown audioDeviceDropdown;
 	std::vector<std::string> audioDeviceNames; // option idx → SDL device name
 
+	// (2.1.0) Clock and stopwatches on the master window: Off / On.
+	Dropdown showClockDropdown;
+
 	int focusedField = 0;
-	// (1.6.3) +1 for the audio device dropdown.
-	static constexpr int FIELD_COUNT = 8; // 7 fields + save button
+	// (1.6.3) +1 for the audio device dropdown. (2.1.0) +1 for the clock.
+	static constexpr int FIELD_COUNT = 9; // 8 fields + save button
 
 	void SaveConfig();
 	void UpdateFocus();

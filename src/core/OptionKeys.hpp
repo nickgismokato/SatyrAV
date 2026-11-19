@@ -33,6 +33,8 @@ enum class OptionKey{
 	SubtitleTransparency,
 	SubtitlePosY,
 	FixedTextCentre,   // (2.0.2)
+	DisableTextOutline,// (2.1.0)
+	TransparentBackground, // (2.1.0)
 };
 
 // Case-insensitive; accepts the documented name and any alias.

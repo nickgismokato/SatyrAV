@@ -4,6 +4,7 @@
 #include "core/AssetPath.hpp"
 #include "core/Logger.hpp"
 #include "core/Version.hpp"
+#include "core/CueEngine.hpp"
 #include "screens/SplashScreen.hpp"
 #include "screens/MainMenuScreen.hpp"
 #include "screens/NewProjectScreen.hpp"
@@ -153,8 +154,11 @@ void App::SwitchScreen(ScreenID id){
 
 void App::OpenProject(const ProjectData& project){
 	auto& config = Config::Instance();
-	if(!renderer.GetSlave()){
-		renderer.InitSlave(config.slaveDisplayIndex, config.slaveWindowed);
+	// (2.1.0) A project with see-through scenes needs a transparent slave
+	// window, which can only be chosen when the window is created.
+	const bool transparent = CueEngine::UsesTransparentBackground(project);
+	if(!renderer.GetSlave() || renderer.IsSlaveWindowTransparent() != transparent){
+		renderer.InitSlave(config.slaveDisplayIndex, config.slaveWindowed, transparent);
 	}
 
 	// (1.5) Capture mirror. Force-off in windowed-slave dev mode — the
@@ -163,10 +167,10 @@ void App::OpenProject(const ProjectData& project){
 	if(!renderer.HasCapture() &&
 	   config.captureEnabled &&
 	   !config.slaveWindowed){
-		// Logical size = slave's logical output = the offscreen content
-		// surface size. That surface is (re)sized per-frame to the
-		// TargetedDisplay rect; for D.2 we use a reasonable default and
-		// let D.3 keep capture in sync with slaveTarget dims.
+		// Starting size only: UpdateCaptureFromSlaveTarget resizes the
+		// capture texture to the slave's content target, which since
+		// 2.0.0 is always the full canvas (not the TargetedDisplay rect),
+		// so the mirror carries the canvas pixel for pixel.
 		int logicalW = renderer.GetSlaveWidth();
 		int logicalH = renderer.GetSlaveHeight();
 		renderer.InitCapture(config.captureDisplayIndex, logicalW, logicalH);

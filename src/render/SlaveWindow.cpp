@@ -36,6 +36,15 @@ namespace{
 //
 // `contentW/H` size the content, and are only consulted for side sentinels
 // (N/S/E/W), which resolve to an off-screen position relative to it.
+// (2.1.0) randomX / randomY of an [Animation]: shift the whole path so its
+// middle (half the canvas) lands on the chosen canvas pixel. For a W, E
+// path that puts the content's centre on that pixel height.
+static void ApplyPathCentre(const RenderModifiers& mods, int screenW, int screenH,
+	int& x, int& y){
+	if(mods.hasPathCentreX) x += (int)(mods.pathCentreXPx - (float)screenW / 2.0f);
+	if(mods.hasPathCentreY) y += (int)(mods.pathCentreYPx - (float)screenH / 2.0f);
+}
+
 static bool EvalAnimatedPosition(const RenderModifiers& mods, float elapsed,
 	int contentW, int contentH, int screenW, int screenH,
 	int& outX, int& outY){
@@ -90,6 +99,8 @@ static bool EvalAnimatedPosition(const RenderModifiers& mods, float elapsed,
 		resolve(b.x, b.y, b.side, bx, by);
 		outX = (int)((1.0f - local) * (float)ax + local * (float)bx);
 		outY = (int)((1.0f - local) * (float)ay + local * (float)by);
+		// (2.1.0) An animation pass's random placement.
+		ApplyPathCentre(mods, screenW, screenH, outX, outY);
 		return true;
 	}
 
@@ -101,6 +112,7 @@ static bool EvalAnimatedPosition(const RenderModifiers& mods, float elapsed,
 		resolve(mods.moveToX,   mods.moveToY,   mods.moveToSide,   toX,   toY);
 		outX = (int)((1.0f - t) * (float)fromX + t * (float)toX);
 		outY = (int)((1.0f - t) * (float)fromY + t * (float)toY);
+		ApplyPathCentre(mods, screenW, screenH, outX, outY);
 		return true;
 	}
 
@@ -157,7 +169,7 @@ namespace{
 				t.text = s.substr(i, j - i);
 				t.isSpace = sp;
 				int tw = 0, th = 0;
-				text.MeasureSlave(t.text, tw, th, r.bold, r.italic);
+				text.MeasureSlave(t.text, tw, th, r.bold, r.italic, r.fontPath, r.fontSize);
 				t.width = tw;
 				toks.push_back(std::move(t));
 				i = j;
@@ -172,6 +184,7 @@ namespace{
 	// inside a continuous segment.
 	static bool RunStyleMatches(const TextRun& a, const TextRun& b){
 		return a.bold == b.bold && a.italic == b.italic &&
+			a.fontPath == b.fontPath && a.fontSize == b.fontSize &&
 			a.colour.r == b.colour.r && a.colour.g == b.colour.g &&
 			a.colour.b == b.colour.b && a.colour.a == b.colour.a &&
 			a.transparency == b.transparency;
@@ -243,11 +256,34 @@ namespace{
 		runWidthsOut.assign(runs.size(), 0);
 		for(size_t k = 0; k < runs.size(); k++){
 			int rw = 0, rh = 0;
-			text.MeasureSlave(runs[k].text, rw, rh, runs[k].bold, runs[k].italic);
+			text.MeasureSlave(runs[k].text, rw, rh, runs[k].bold, runs[k].italic,
+				runs[k].fontPath, runs[k].fontSize);
 			runWidthsOut[k] = rw;
 			outW += rw;
 			if(rh > outH) outH = rh;
 		}
+	}
+
+	// (2.1.0) A visual line's height and baseline. A line is as tall as its
+	// tallest run's line spacing, and every run sits on the line's
+	// baseline (the largest ascent). With only the scene's font both
+	// equal the scene's, so layout is exactly as before 2.1.0.
+	struct LineMetrics{
+		int height = 0;
+		int ascent = 0;
+	};
+
+	LineMetrics MeasureLineMetrics(const std::vector<TextRun>& runs,
+		TextRenderer& text){
+		LineMetrics m;
+		for(const auto& r : runs){
+			const int h = text.GetSlaveLineHeightFor(r.bold, r.italic, r.fontPath, r.fontSize);
+			const int a = text.GetSlaveAscentFor(r.bold, r.italic, r.fontPath, r.fontSize);
+			if(h > m.height) m.height = h;
+			if(a > m.ascent) m.ascent = a;
+		}
+		if(m.height <= 0) m.height = text.GetSlaveLineHeight();
+		return m;
 	}
 
 	// (1.8.2) ── Typewriter reveal ───────────────────────────────
@@ -342,6 +378,8 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 	std::vector<std::vector<int>> lineWidths(textEntries.size());
 	std::vector<std::vector<int>> lineHeights(textEntries.size());
 	std::vector<std::vector<std::vector<int>>> runWidthsPerLine(textEntries.size());
+	// (2.1.0) Height and baseline of each visual line (see LineMetrics).
+	std::vector<std::vector<LineMetrics>> lineMetrics(textEntries.size());
 	// (1.8.2) Typewriters are resolved to their currently-visible runs here,
 	// before wrapping, so a revealing line wraps and re-centres exactly as
 	// the finished line will. An entry with nothing revealed yet takes the
@@ -357,6 +395,9 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 			lineWidths[i].push_back(0);
 			lineHeights[i].push_back(slaveLineH);
 			runWidthsPerLine[i].push_back({});
+			// (2.1.0) Reserve the slot at the height the line will have,
+			// so a large `fontSize` typewriter doesn't grow when it starts.
+			lineMetrics[i].push_back(MeasureLineMetrics(entry.runs, text));
 			continue;
 		}
 		entryLines[i] = WrapEntryLines(visible, wrapWidth, text);
@@ -367,6 +408,7 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 			lineWidths[i].push_back(lw);
 			lineHeights[i].push_back(lh > 0 ? lh : slaveLineH);
 			runWidthsPerLine[i].push_back(std::move(rws));
+			lineMetrics[i].push_back(MeasureLineMetrics(line, text));
 		}
 	}
 
@@ -374,11 +416,15 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 	// Animated and subtitle entries float independently and don't take
 	// slots in the centred stack. With wrap, one entry can contribute
 	// several lines here.
+	// (2.1.0) Counted in pixels rather than lines, since a line set in a
+	// bigger `fontSize` is taller than the rest.
 	int defaultLineCount = 0;
+	int centredH = 0;
 	for(size_t i = 0; i < textEntries.size(); i++){
 		auto& entry = textEntries[i];
 		if(entry.mods.InCentredStack() && !entry.subtitleAnchor){
 			defaultLineCount += (int)entryLines[i].size();
+			for(const auto& m : lineMetrics[i]) centredH += m.height;
 		}
 	}
 	// (2.0.2) Fixed text centre: size the block for every line planned up
@@ -387,13 +433,15 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 	// it is larger (text the plan could not foresee, e.g. after jumping
 	// around in the cue list), which falls back to today's growing block.
 	if(fixedTextCentre && defaultLineCount > 0 && !plannedCentred.empty()){
-		int planned = 0;
+		int plannedH = 0;
 		for(const auto& line : plannedCentred){
-			planned += (int)WrapEntryLines(line, wrapWidth, text).size();
+			for(const auto& wrapped : WrapEntryLines(line, wrapWidth, text)){
+				plannedH += MeasureLineMetrics(wrapped.empty() ? line : wrapped, text).height;
+			}
 		}
-		defaultLineCount = std::max(defaultLineCount, planned);
+		centredH = std::max(centredH, plannedH);
 	}
-	int totalH = defaultLineCount * slaveLineH;
+	int totalH = centredH;
 	int defaultY = slaveH / 2 - totalH / 2;
 
 	// (1.6.1, 1.6.4) Subtitle bottom-Y assignment, wrap-aware. Each
@@ -437,11 +485,19 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 		const auto& widths = lineWidths[entryIdx];
 		const auto& heights = lineHeights[entryIdx];
 		const auto& runWs = runWidthsPerLine[entryIdx];
+		const auto& metrics = lineMetrics[entryIdx];
 		if(lines.empty()) continue;
 
 		int blockMaxW = 0;
 		for(int w : widths) if(w > blockMaxW) blockMaxW = w;
-		int blockH = (int)lines.size() * slaveLineH;
+		// (2.1.0) Lines stack by their own heights; offsets[li] is line
+		// li's top relative to the block.
+		std::vector<int> offsets(lines.size(), 0);
+		int blockH = 0;
+		for(size_t li = 0; li < lines.size(); li++){
+			offsets[li] = blockH;
+			blockH += metrics[li].height;
+		}
 
 		// ── Compute rotation: static rotate() + accumulated spin(). ──
 		float rotation = entry.mods.rotation;
@@ -495,23 +551,30 @@ void SlaveWindow::DrawText(Renderer& r, TextRenderer& text){
 				lineY = subtitleBottomY[entryIdx][li] - lineH;
 			} else if(centerEachLine){
 				lineX = blockX - lineW / 2;
-				lineY = blockY + (int)li * slaveLineH;
+				lineY = blockY + offsets[li];
 			} else{
 				lineX = blockX;
-				lineY = blockY + (int)li * slaveLineH;
+				lineY = blockY + offsets[li];
 			}
 
 			int cursorX = lineX;
 			for(size_t k = 0; k < lineRuns.size(); k++){
 				const TextRun& run = lineRuns[k];
 				Colour c = ResolveRunColour(run, entry.mods, entry.defaultColour);
+				// (2.1.0) Smaller runs drop to the line's baseline. Zero for
+				// subtitles and for lines in a single font.
+				int runY = lineY;
+				if(!entry.subtitleAnchor){
+					runY += metrics[li].ascent - text.GetSlaveAscentFor(
+						run.bold, run.italic, run.fontPath, run.fontSize);
+				}
 
 				if(rotation != 0.0f){
-					text.DrawTextSlaveRotated(renderer, run.text, cursorX, lineY, c,
-						rotation, run.bold, run.italic);
+					text.DrawTextSlaveRotated(renderer, run.text, cursorX, runY, c,
+						rotation, run.bold, run.italic, run.fontPath, run.fontSize);
 				} else{
-					text.DrawTextSlave(renderer, run.text, cursorX, lineY, c,
-						run.bold, run.italic);
+					text.DrawTextSlave(renderer, run.text, cursorX, runY, c,
+						run.bold, run.italic, run.fontPath, run.fontSize);
 				}
 				cursorX += runWs[li][k];
 			}
@@ -624,7 +687,10 @@ void SlaveWindow::DrawParticles(SDL_Renderer* renderer, float dt){
 
 void SlaveWindow::Update(Renderer& r, MediaPlayer& media, float dt){
 	lastDt = dt;
-	Clear(r, bgColour);
+	PruneExpired();
+	// (2.1.0) A see-through scene leaves the background empty (alpha 0), so
+	// whatever is underneath the slave window shows there.
+	Clear(r, r.IsSlaveSeeThrough() ? Colour{0, 0, 0, 0} : bgColour);
 	media.UpdateVideoFrame(r.GetSlave());
 	DrawMedia(r, media);
 	if(r.GetSlave()) DrawParticles(r.GetSlave(), dt);
@@ -820,9 +886,48 @@ void SlaveWindow::ClearText(){
 	if(!HasCentredText()) plannedCentred.clear();
 }
 
-void SlaveWindow::ClearTextAll(){
-	textEntries.clear();
+void SlaveWindow::ClearTextAll(const std::string& keepPrefix){
+	if(keepPrefix.empty()){
+		textEntries.clear();
+	} else{
+		textEntries.erase(
+			std::remove_if(textEntries.begin(), textEntries.end(),
+				[&](const SlaveTextEntry& e){ return e.groupName.rfind(keepPrefix, 0) != 0; }),
+			textEntries.end());
+	}
 	plannedCentred.clear();
+}
+
+void SlaveWindow::ClearGroupsWithPrefix(const std::string& prefix){
+	if(prefix.empty()) return;
+	auto matches = [&](const std::string& g){ return g.rfind(prefix, 0) == 0; };
+	textEntries.erase(
+		std::remove_if(textEntries.begin(), textEntries.end(),
+			[&](const SlaveTextEntry& e){ return matches(e.groupName); }),
+		textEntries.end());
+	imageEntries.erase(
+		std::remove_if(imageEntries.begin(), imageEntries.end(),
+			[&](const SlaveImageEntry& e){ return matches(e.groupName); }),
+		imageEntries.end());
+	particleEntries.erase(
+		std::remove_if(particleEntries.begin(), particleEntries.end(),
+			[&](const SlaveParticleEntry& e){ return matches(e.groupName); }),
+		particleEntries.end());
+}
+
+void SlaveWindow::PruneExpired(){
+	const float now = SDL_GetTicks() / 1000.0f;
+	auto expired = [&](const RenderModifiers& m, float spawn){
+		return m.lifetimeSec > 0.0f && now - spawn > m.lifetimeSec;
+	};
+	textEntries.erase(
+		std::remove_if(textEntries.begin(), textEntries.end(),
+			[&](const SlaveTextEntry& e){ return expired(e.mods, e.spawnTimeSec); }),
+		textEntries.end());
+	imageEntries.erase(
+		std::remove_if(imageEntries.begin(), imageEntries.end(),
+			[&](const SlaveImageEntry& e){ return expired(e.mods, e.spawnTimeSec); }),
+		imageEntries.end());
 }
 
 void SlaveWindow::SetBackgroundColour(Colour c){
@@ -893,8 +998,15 @@ void SlaveWindow::ClearImage(){
 		imageEntries.end());
 }
 
-void SlaveWindow::ClearImageAll(){
-	imageEntries.clear();
+void SlaveWindow::ClearImageAll(const std::string& keepPrefix){
+	if(keepPrefix.empty()){
+		imageEntries.clear();
+		return;
+	}
+	imageEntries.erase(
+		std::remove_if(imageEntries.begin(), imageEntries.end(),
+			[&](const SlaveImageEntry& e){ return e.groupName.rfind(keepPrefix, 0) != 0; }),
+		imageEntries.end());
 }
 
 void SlaveWindow::StartParticles(ParticleType type, SDL_Texture* tex,

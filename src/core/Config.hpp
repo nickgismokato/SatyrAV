@@ -79,6 +79,11 @@ public:
 	// driver misbehaves. `[video] zero_copy` in config.toml.
 	bool videoZeroCopy = true;
 
+	// (2.1.0) Show the time of day, the time in the current scene and the
+	// time since the show started on the master window. Off by default.
+	// `[display] show_clock` in config.toml, a toggle in Options.
+	bool showClock = false;
+
 private:
 	Config() = default;
 };
