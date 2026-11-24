@@ -943,7 +943,8 @@ void SlaveWindow::SetDefaultTextColour(Colour c){
 }
 
 void SlaveWindow::ShowImage(SDL_Texture* tex, int w, int h,
-	const RenderModifiers& mods, const std::string& groupName){
+	const RenderModifiers& mods, const std::string& groupName,
+	const std::string& source){
 	// (1.6.5) Ungrouped images now coexist — successive `show` calls stack
 	// instead of replacing. `clear` / `clearImages` still drop them all.
 	SlaveImageEntry entry;
@@ -954,12 +955,14 @@ void SlaveWindow::ShowImage(SDL_Texture* tex, int w, int h,
 	entry.spawnTimeSec = SDL_GetTicks() / 1000.0f;
 	entry.currentSpin = 0.0f;
 	entry.groupName = groupName;
+	entry.source = source;
 	InsertImageByLayer(std::move(entry));
 }
 
 void SlaveWindow::ShowAnimation(const std::vector<SDL_Texture*>& frames,
 	const std::vector<int>& delaysMs, int w, int h,
-	const RenderModifiers& mods, const std::string& groupName){
+	const RenderModifiers& mods, const std::string& groupName,
+	const std::string& source){
 	// (1.6.5) Same coexist-on-show rule as ShowImage — ungrouped animations
 	// stack with whatever images/animations are already on screen.
 	SlaveImageEntry entry;
@@ -974,6 +977,7 @@ void SlaveWindow::ShowAnimation(const std::vector<SDL_Texture*>& frames,
 	entry.frameDelaysMs = delaysMs;
 	entry.frameIdx = 0;
 	entry.frameElapsedSec = 0.0f;
+	entry.source = source;
 	InsertImageByLayer(std::move(entry));
 }
 
@@ -985,6 +989,7 @@ void SlaveWindow::ShowAnimation(const std::vector<SDL_Texture*>& frames,
 // its default 0, `upper_bound` always returns end(), so this degenerates to
 // the pre-1.8.3 push_back and existing scenes render pixel-identically.
 void SlaveWindow::InsertImageByLayer(SlaveImageEntry&& entry){
+	entry.id = nextImageId++;
 	const int layer = entry.mods.layer;
 	auto pos = std::upper_bound(imageEntries.begin(), imageEntries.end(), layer,
 		[](int value, const SlaveImageEntry& e){ return value < e.mods.layer; });

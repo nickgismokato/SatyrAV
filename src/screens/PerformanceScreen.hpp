@@ -4,6 +4,7 @@
 #include "core/MarkLog.hpp"
 #include "core/BackstageSender.hpp"
 #include "core/ShowLog.hpp"
+#include "core/Subtitles.hpp"
 #include "core/Types.hpp"
 #include "render/MasterWindow.hpp"
 #include "render/SlaveWindow.hpp"
@@ -30,7 +31,7 @@ public:
 	TargetedDisplay& GetTargetedDisplay(){ return targetedDisplay; }
 	SlaveWindow& GetSlaveWindow(){ return slaveUI; }
 	const std::string& GetProjectPath() const{ return projectBasePath; }
-	// (1.6.3) Read-only access for the Overview Debug popup.
+	// Read-only access to the loaded show.
 	const CueEngine& GetCueEngine() const{ return engine; }
 
 private:
@@ -96,6 +97,8 @@ private:
 	// time, without needing a cue for it. Video and sound are left alone
 	// (K / M handle those).
 	void ClearScreen();
+	// `,` / `.` / SHIFT+`,`: seek the playing video. Logged, not a cue.
+	void SeekVideoKey(double delta, const char* key, bool toStart = false);
 	MarkedLine lastExecuted;
 	bool haveLastExecuted = false;
 	std::string markStatus;
@@ -170,6 +173,20 @@ private:
 	int    logScene = -1;
 	std::string logAktLabel;     // "Akt 1"
 	std::string logSceneLabel;   // "Scene BandIntro"
+	double actStartTicks   = 0;
+
+	// Per-act .srt / .ass (core/Subtitles.hpp), next to the .log. Open
+	// while the show log is on and an act is running.
+	ActSubtitleWriter actSubs;
+	std::string showLogBase;     // the run's path without extension
+	// Pictures and video coming and going, for the .log, across the
+	// whole show (not cut at act boundaries like the subtitle files).
+	SubtitleTrack logMedia;
+	void OpenActSubtitles(int aktIdx);
+	// Hands the slave's current text, pictures and video to the act's
+	// subtitles and the log. Every frame while the show log is open.
+	void UpdateShowLogMedia();
+	void SnapshotSlave(std::vector<SubLine>& lines, std::vector<SubMedia>& mediaOut);
 };
 
 } // namespace SatyrAV

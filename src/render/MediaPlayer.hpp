@@ -60,6 +60,7 @@ namespace SatyrAV{
 //
 struct VideoPlayback{
 	std::string path;
+	uint64_t serial = 0; // set each time the clip becomes the active video
 
 	// FFmpeg
 	AVFormatContext* formatCtx     = nullptr;
@@ -251,15 +252,19 @@ public:
 	// whole texture, as the read-back paths always have.
 	bool GetVideoSrcRect(SDL_FRect* out) const;
 
-	// (2.0.0) Seek support. This is the plumbing only: nothing in the app
-	// calls SeekVideo yet. The fast-forward / rewind / restart commands that
-	// will use it are 2.1.0 work.
-	//
 	// Jumps the active video to `seconds` (clamped to the clip). Picture and
 	// sound both restart from there, in sync. Works on all three decode
 	// paths, and after the decoder has already reached the end of the file.
-	// While paused, the new picture appears when playback resumes.
+	// While paused (K), the frame at the new position is shown at once and
+	// the clip stays paused there. Used by the `,` / `.` / SHIFT+`,` keys.
 	bool   SeekVideo(double seconds);
+	// Moves the active video by `deltaSeconds` from where it is now
+	// (negative = back). Returns false if there is no video.
+	bool   SeekVideoBy(double deltaSeconds);
+	// For the subtitles' video cues: a number that is new each time a clip
+	// starts playing (0 when no video is active), and the clip's file.
+	uint64_t GetVideoSerial() const;
+	std::string GetVideoPath() const;
 	// Timestamp, in seconds, of the frame currently on screen; -1 if none.
 	double GetVideoPosition() const;
 	// Length of the active clip in seconds; 0 if unknown or none.
@@ -338,6 +343,15 @@ private:
 
 	bool audioPaused     = false;
 	bool videoPaused     = false;
+	// A seek was made while paused: show the first frame at the new position
+	// as soon as the decode thread has it, then hold it until resume.
+	bool showFrameWhilePaused = false;
+	uint64_t videoSerialCounter = 0;
+	// Puts one ring frame on the video texture. Sets `firstFrameFailed` when
+	// the clip's very first zero-copy frame could not be shown.
+	void PresentRingFrame(VideoPlayback* vp, SDL_Renderer* renderer,
+		AVFrame* show, bool& firstFrameFailed);
+	void PresentPausedSeekFrame(SDL_Renderer* renderer);
 	bool audioFadeEnabled = false;   // see SetAudioFade
 
 	SDL_Texture* imageTexture = nullptr;

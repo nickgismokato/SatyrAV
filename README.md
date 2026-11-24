@@ -1,276 +1,53 @@
 # SatyrAV
 
-An AV cue controller for SaTyR revyer. Dual-display output with keyboard-first
-navigation through acts, scenes, and commands.
+SatyrAV runs the screens of a SaTyR revy. The operator steps through the show one cue at a time on the **master** screen; the audience sees text, pictures, video and effects on the **slave** screen (the projector), and a **capture** output can feed the recording.
 
-**Current version:** 2.1.0-betaE (beta) — see [docs/CHANGELOG.md](docs/CHANGELOG.md) for the full change history.
+**Current version:** see [VERSION](VERSION) · [changelog](docs/CHANGELOG.md)
 
-Full documentation lives in [docs/](docs/README.md).
+## What it does
 
-## Features
+**A show is a list of cues.** A project is split into akter and scenes. Each scene is a small text file (`.ngk`) with one cue per line: show this text, show that picture, play this video, start the confetti. During the show the operator presses ENTER for the next cue; the master shows where you are, what comes next, and notes for the crew beside the cues.
 
-### Performance and navigation
+**Everything the slave can show.** Text in any font, colour, size, bold and italic, with translations underneath (`textD`) and typewriter reveals. Pictures and animated GIFs that can be placed, sized, turned, faded, moved along paths and layered. Video with fades, which can be paused and wound back or forward during the show. Sound effects on the F-keys. Particle effects — rain, snow, confetti and more — from any picture. Repeating animations, countdowns, and a see-through slave that lets another program show underneath.
 
-- Dual-display output: an operator master screen with a cue navigator, and a
-  fullscreen slave on the secondary display for the audience.
-- Keyboard-first navigation through acts, scenes, and commands. `ENTER` fires a
-  cue and advances; `U` reloads every `.ngk` in the current project without
-  leaving the performance screen.
-- Mark-line log *(2.0.1)*: press `O` during a show to note the last cue's file,
-  line and code in the project's `fix-it/ErrorInFiles-<date>.LOG`, so problems
-  spotted live can be fixed afterwards.
-- Backstage screen *(2.0.2)*: at every scene change, the current scene and the
-  next two — name, expected time, actors and ninjas, from each scene's
-  `[Backstage]` block — are sent to the revy's backstage ticker, in the
-  background so the show never waits on the network.
-- Clear-screen key *(2.1.0)*: `BACKSPACE` wipes the slave like a `clearAll` cue,
-  at any moment, without needing a cue for it.
-- Show time log *(2.1.0)*: from the first cue, every scene (with its length),
-  cue and operator key is written with its time to
-  `showlog/<Revy>-<date>-<run>.log`, plus a matching `.srt` to drop onto the
-  recording in post-production.
-- Clock and stopwatches *(2.1.0)*: with *Clock on Master* on in Options, the
-  master shows the time of day, the time in the current scene and the time
-  since the show started.
-- `comment "..."` cues show in the master navigator as non-executable rows and
-  are skipped during navigation.
-- **Cue Notes column** *(1.8.4)*: a fourth, read-only column right of the
-  command list showing stage-management notes from the scene's `[Cue]`
-  section. Scrolls in lockstep with the commands, wraps long notes, and never
-  reaches the audience display. Appears only for scenes that define notes.
+**Made for a live show.** Nothing waits on disk or the network during a cue: media is loaded ahead, video is decoded on the graphics card where it can be. `BACKSPACE` clears the slave at any moment. `O` notes a line that went wrong so it can be fixed after the show, and `U` reloads the scene files without leaving the show.
 
-### Scene format
+**Around the show.** The backstage screen is told who is on stage next at every scene change. A show log records everything with its time, and per-act subtitle files (`.srt` / `.ass`) of the text on screen can go straight onto the recording. The project scanner (`C`) finds mistakes in the scene files before the audience does.
 
-- `.ngk` scene files grouped into acts, scenes, and commands.
-- `run{ ... }` blocks fire every sub-command on a single cue row — the
-  multi-line equivalent of the `&` compound operator.
-- `[Macro]` blocks define named command blocks expanded inline from
-  `[Commands]` via `macro <Name>`. Expansion happens at parse time.
-- `loop(N){ ... }` for repeated command blocks.
-- `group NAME{ ... }` tags every piece of slave content produced by the body so
-  it can be dropped later with `clear NAME` without disturbing anything else
-  on screen.
-- Fine-grained clears: `clear NAME`, `clearText`, `clearImages`, `clearAll`,
-  and `clearCountdown`.
-- Quoted text accepts three interchangeable delimiter pairs — `"..."`,
-  `'...'`, and `´...´` — so a line can itself contain quotation marks.
-- `[Cue]` section *(1.8.4)*: named operator notes, claimed by a command with a
-  trailing `\Name` and shown in the master window's Cue Notes column.
-- `[Animation]` section *(2.1.0)*: named, repeating animations — what moves
-  (any `show` / `text` expression), its path, how often, how many times or for
-  how long, and a random height or position per pass — started with
-  `show NAME`.
-- `use FONT` / `fontSize N` *(2.1.0)*: change the font or size of the text
-  below them in a scene, without a cue; shown as comment rows in the navigator.
-- New projects are generated with two acts and four tutorial scenes — one per
-  engine layer (text, pictures, particles, groups/macros) — plus a
-  `schema.toml` that lists every project option at its default *(1.8.0)*.
+## Quick start
 
-### Content rendering
+1. Install SatyrAV (Windows installer), or build it — see [building.md](docs/building.md).
+2. Start it, choose **New project**, pick the revy and year.
+3. Open the project: it comes with four example scenes that show what the scene files can do.
+4. Read [the first-time guide](docs/howto/firstime.md) — it walks you from an empty project to a running show.
 
-- Static images (`.png`, `.jpg`).
-- Animated GIFs: `show foo.gif` plays every frame at the file's delays. All
-  position, rotation, spin, move, size, and transparency modifiers apply to
-  the animation as a whole.
-- Video playback with D3D11VA hardware decode on Windows (H.264 / HEVC via the
-  GPU decode engine) and a multi-threaded software fallback on Linux or
-  unsupported codecs. *(2.0.0)* On Windows the decoded frame stays on the GPU
-  all the way to the screen (zero-copy), with the previous read-back route as
-  the automatic fallback.
-- *(2.0.0)* Overlapping sound: F-key sound effects and `play` audio tracks
-  play over each other and over a video's own sound. An opt-in `AudioFade`
-  option makes a video's fade times fade its sound as well as its picture.
-- Preload-driven playback: videos in the current, previous, and next scene are
-  decoded into a ring buffer ahead of time so the first frames go out
-  instantly when `play` fires. Configurable RAM budget
-  (`preload_budget_mb` in `[video]`, default 4 GB) split in command-priority
-  order, with a per-video cap (`preload_max_seconds`, default 60). See
-  [docs/video-pipeline.md](docs/video-pipeline.md).
-- Styled text with `+` concatenation in `text` and `textCont` — multiple
-  styled segments on a single line, each with its own `colour` and `trans`.
-  Line-level modifiers (`pos`, `move`, `rotate`, `spin`, `size`) apply to the
-  whole line.
-- Fixed text centre *(2.0.2)*: with `FixedTextCentre = true` the centred text
-  block is laid out for every line it will hold before the next clear, so each
-  line appears where it stays instead of the block creeping up line by line.
-  On in new projects.
-- `textCont "..."` appends to the most recently pushed text entry across cues,
-  so a line can be revealed piece by piece. *(2.1.0)* After a `use` or
-  `fontSize`, the appended part is in the new font or size, on the same
-  baseline.
-- Per-scene text outline *(2.1.0)*: `TextOutline = N` and
-  `DisableTextOutline = true` in a scene's `[Options]`.
-- Fonts can live in the project *(2.1.0)*: a bare font name is looked for in
-  the project's `fonts/` and `font/` folders before the shared `FONTS` folder.
-- `countdown(SECONDS)` shows a live `MM:SS` timer at the top of the slave that
-  ticks down in real time, with an optional `"en"` / `"da"` language label.
-  Holds at `00:00` until cleared; scene-scoped, so it never bleeds into the
-  next scene.
-- `typewrite(MS_PER_CHAR, TEXT)` *(1.8.2)* reveals a line one character at a
-  time. Takes the full `text` grammar; advancing the cue snaps a half-typed
-  line to complete so nothing is left mid-word on the slave.
-- LaTeX symbol macros in displayed text *(1.8.2)*: all Greek letters plus ~45
-  mathematical symbols and `\mathbb{X}` for any capital — `text "pick \delta
-  \in \mathbb{R}"` renders `pick δ ∈ ℝ`. Every glyph is present in the four
-  bundled DejaVu faces.
-- `layer(N, content)` *(1.8.3)* gives images an explicit draw order; the
-  default of 0 with ties by show order keeps pre-1.8.3 scenes identical.
-- `pathMove(P1, …, PN, DURATION_MS[, MODE], content)` *(1.8.3)* moves content
-  through multiple waypoints, with `once`, `loop`, or `pingpong` repeat.
-- Canvas-relative slave text: text scales with the targeted-display rect in
-  lockstep with images, videos, GIFs, and particles.
+## Where to find things
 
-### Particle system
+| I want to… | Read |
+|---|---|
+| Get started, run my first show | [howto/firstime.md](docs/howto/firstime.md) |
+| Write scenes — every command, by what it does | [howto/scene.md](docs/howto/scene.md) |
+| Know the keys during a show | [howto/controls.md](docs/howto/controls.md) |
+| Set up a project: folders, files, `schema.toml` | [howto/project.md](docs/howto/project.md) |
+| Change options (fonts, colours, outline, …) | [howto/options.md](docs/howto/options.md) |
+| Understand how a show is built and loaded, logs and subtitles | [howto/structure.md](docs/howto/structure.md) |
+| Build SatyrAV from source | [building.md](docs/building.md) |
+| Change the code: architecture, full references | [docs/dev/](docs/README.md#for-developers) |
+| See what's planned, what's done, what's broken | [planned](docs/plans/planned.md) · [implemented](docs/plans/implemented.md) · [known bugs](docs/known-bugs.md) |
 
-- Motion models: `RAIN`, `SNOW`, `CONFETTI`, `RISE`, `SCATTER`, `BROWNIAN`
-  (random walk), `OSCILLATION` (sinusoidal X with per-particle phase),
-  `ORBIT` (circular motion around screen centre), `NOISE` (2D value-noise
-  flow field), `LIFECURVE` (linear motion with a triangular scale + alpha
-  envelope).
-- `trail(N, MODE, content)` modifier with three looks: `GHOST` (distance-gated
-  fade and shrink), `STRETCH` (single velocity-aligned quad per particle, real
-  motion-blur streaks), and `GLOW` (Ghost geometry with additive blending).
-  `trailGlow(N, content)` is sugar for `trail(N, GLOW, content)`.
-- `bounce(true, content)` — particles reflect off the four screen edges with
-  an 0.8 energy-loss coefficient per hit, plus constant downward gravity
-  (≈ 900 px/s²) and a rest threshold so settled particles pile up on the floor
-  and fade in place.
-- Per-particle-type tunables in scene `[Options]`: `<TYPE>.SPEED`,
-  `<TYPE>.DENS`, `<TYPE>.X.DIST = NAME(p1, p2)`, and velocity-shaping
-  `<TYPE>.VX.DIST` / `<TYPE>.VY.DIST`. Distributions: `UNIFORM`, `NORMAL`,
-  `LOGNORMAL`, `BINOMIAL`, `BERNOULLI`, `GAMMA`. Project-level defaults under
-  `[Particle.<TYPE>]` in `schema.toml`. Cascade is scene → project → built-in
-  defaults.
-- `stopParticleCont [GROUP]` stops spawning but lets live particles finish
-  their animation. Sticky — later `stop` / `clear` / `clearAll` no longer cut
-  the ending short.
-- Multiple concurrent ungrouped particle systems coexist without a `group`
-  wrapper. `clear`, `stop`, and `stopParticleCont` still act on every
-  ungrouped system as a unit.
-- `randomImages(folder)` combined with `particle()` picks a fresh random image
-  per spawn.
-
-### Animation and modifiers
-
-- `move(FROM, TO, DURATION_MS, content)` — linear tween of position over time.
-  `FROM` / `TO` accept `[x,y]` percent pairs or side letters `N`/`S`/`E`/`W`
-  (spawns off-screen against that edge).
-- `spin(degPerSec, content)` — continuous rotation. Composes with static
-  `rotate()`.
-- `scale(content, [w,h])` — pixel-dimension alias of `size()` with the
-  argument order matching `random()` and the other content-first modifiers.
-- `pathMove(P1, P2, …, PN, DURATION_MS[, MODE], content)` *(1.8.3)* — the
-  multi-waypoint generalisation of `move()`, using the same endpoint
-  vocabulary. `DURATION_MS` covers the whole path, split evenly per leg;
-  `MODE` is `once` (default), `loop`, or `pingpong`.
-- `layer(N, content)` *(1.8.3)* — explicit draw order for images. Higher is
-  nearer the front; negatives sit behind unlayered content.
-- Repeating animations *(2.1.0)* — a tumbleweed that rolls across every few
-  seconds at a different height: `repeat`, `for`, `every` and
-  `randomY` / `randomX` (in slave pixels) in an `[Animation]` block. Every
-  modifier `show` and `text` take works per pass. `stop NAME` lets the pass on
-  screen finish; `clear NAME` cuts it.
-
-### Display and output
-
-- Targeted-display rectangle inside the physical slave, with a hidden size
-  menu (Debug → `S`, adjust with `Z/X/Q/E/WASD`, `SHIFT` = 10× finer steps,
-  `C` = reset, `ESC` = save).
-- Capture-mirror window (third OS window) for feeding a capture card or
-  recorder. A borderless fullscreen output mirrors the slave's logical content
-  — same composite, no targeted-display rect, no rotation, no letterbox — at
-  slave-logical resolution. Display picker in `Options`, with a hard guard
-  against picking the slave's own display.
-- See-through slave *(2.1.0)*: with `TransparentBackground = true` (per scene
-  or project) the slave shows whatever runs underneath it on that screen
-  wherever SatyrAV draws nothing — the background, the clear parts of a PNG.
-  Text stays in front. The window is only opened see-through for projects
-  that use it.
-- The Debug popup's `Capture:` line *(2.1.0)* shows whether the capture mirror
-  is a 1:1 copy of the slave canvas or scaled.
-- Windowed-slave dev mode: `Options` → `Slave Window Mode` → `Windowed (dev)`
-  opens the slave as a resizable 1280×720 window on the primary display
-  instead of fullscreen on the secondary. Saved targeted-display rect coords
-  stay in production pixel space — the virtual slave is letterboxed inside
-  the live window, so scenes look identical in both modes at proportional
-  scale.
-
-### Project management
-
-- New-project wizard: selectable revy types (including `SaTyR`), a `Jubi`
-  toggle (folder becomes `<Revy>Jubi_<year>`), and a custom-name field under
-  `Other`.
-- Project `schema.toml` defines revy-wide options and particle defaults; scene
-  `[Options]` overrides per scene. *(2.0.1)* An option has the same name in
-  both places, in any case, and every colour option — including the new
-  `TextColour` default text colour — takes the same colour names, `#RRGGBB`
-  and `#RGB`.
+All documentation starts at [docs/README.md](docs/README.md). Scene files get syntax highlighting in VSCode with the extension in [VSCodeExt/](VSCodeExt/README.md).
 
 ## Building
 
-Full build instructions, including cross-compilation, are in
-[docs/building.md](docs/building.md).
-
-### Linux
-
-SatyrAV needs SDL3 (3.2 or newer), SDL3_ttf and SDL3_image *(2.0.0)*. Debian 13
-packages them:
+Debian 13 has everything packaged:
 
 ```bash
 sudo apt install cmake g++ libsdl3-dev libsdl3-ttf-dev libsdl3-image-dev \
     libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev
-
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
+cmake -S . -B build && cmake --build build -j$(nproc)
 ```
 
-Ubuntu 24.04 does not package SDL3. There, build it from source into
-`~/sdl3-prefix` first and add `-DCMAKE_PREFIX_PATH=$HOME/sdl3-prefix` to the
-`cmake` line, as described in [docs/building.md](docs/building.md).
-
-### Cross-compile for Windows (MinGW via WSL, Debian or Ubuntu)
-
-```bash
-sudo apt install mingw-w64 mingw-w64-tools p7zip-full wget
-chmod +x setup-mingw-deps.sh
-rm -rf ~/mingw-deps             # only if it still holds SDL2 from a 1.x build
-./setup-mingw-deps.sh           # installs SDL3 + FFmpeg to ~/mingw-deps
-
-mkdir build-win && cd build-win
-cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/MinGW-w64.cmake \
-      -DMINGW_DEPS_DIR=$HOME/mingw-deps ..
-make -j$(nproc)
-```
-
-The required DLLs are copied next to `satyr-av.exe` automatically. To build a
-Windows installer:
-
-```bash
-makensis ../installer/satyr-av.nsi
-```
-
-### Unit tests *(1.8.1)*
-
-Tests are **off by default** — a normal build compiles no test code and
-downloads no test framework. Opt in with one flag:
-
-```bash
-cmake .. -DSATYR_BUILD_TESTS=ON
-make -j$(nproc)
-ctest --output-on-failure
-```
-
-The suite covers the SDL-independent core (`SceneParser`, `SchemaParser`,
-`CueEngine`, `Config`, `Project`, `Types`), so it also builds standalone on a
-machine with no SDL3 or FFmpeg installed:
-
-```bash
-cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/satyr-tests
-```
-
-See [tests/README.md](tests/README.md) for the layout and for what is
-deliberately left untested.
+Other Linux versions, the Windows cross-build, the installer and the tests are in [docs/building.md](docs/building.md).
 
 ## License
 

@@ -1,31 +1,47 @@
 # SatyrAV documentation
 
-SatyrAV is an AV cue controller for SaTyR revyer (Danish student revue theater productions). It provides dual-display output with keyboard-first navigation through acts, scenes, and commands.
+Two kinds of documents live here: **how-to guides** for the people who write and run shows, and **developer references** for the people who change SatyrAV itself. Each fact is written once: a guide says what something does and how to use it, and links to the reference for the detail.
 
-## Documentation index
+## For people writing and running shows — [`howto/`](howto/README.md)
 
-- [Architecture](architecture.md) — system overview, module responsibilities, data flow
-- [Scene file format](scene-format.md) — `.ngk` file syntax, commands, modifiers, loops
-- [Command reference](commands.md) — every command, block, modifier, and option with full detail
-- [Command reference — compact](commands-compact.md) — quick cheat-sheet of every name, no prose
-- [Project structure](project-structure.md) — `schema.toml`, directory layout, options cascade
-- [Video pipeline](video-pipeline.md) — how video playback works internally (FFmpeg, threading, sync)
-- [Building](building.md) — compiling for Linux and cross-compiling for Windows
-- [Controls](controls.md) — keyboard shortcuts and navigation
-- [VSCode extension](../VSCodeExt/README.md) *(1.6.3)* — syntax highlighting for `.ngk` files
-- [Unit tests](../tests/README.md) *(1.8.1)* — the core test suite, how to run it, and what is deliberately untested
-- [Changelog](CHANGELOG.md) — full version history
-- [Roadmap](TODO.md) — planned features and known bugs
+| Guide | What's in it |
+|---|---|
+| [First time](howto/firstime.md) | From a new project to a running show, step by step |
+| [Scene files](howto/scene.md) | Every command and section of a `.ngk`, in tables by what it does, with examples |
+| [Controls](howto/controls.md) | Every key, the popups, the project scanner |
+| [Projects](howto/project.md) | Folders, file names, `schema.toml`, akter and scenes |
+| [Options](howto/options.md) | Every option in scenes, `schema.toml` and the Options screen |
+| [How a show fits together](howto/structure.md) | How SatyrAV loads a show, what you're free to do, the show log and subtitles |
 
-## Quick start
+## For developers
 
-1. Build the project (see [building.md](building.md))
-2. Launch `satyr-av`
-3. Create a new project — choose a revy type, year, and your name
-4. Edit scene files in `scenes/` using the `.ngk` format (see [scene-format.md](scene-format.md))
-5. Load the project and navigate with arrow keys
-6. Press `ENTER` to execute commands and advance through scenes
+| Reference | What's in it |
+|---|---|
+| [Architecture](dev/architecture.md) | Modules, data flow, threads |
+| [Command reference](dev/commands.md) | Every command, block, modifier and section in full detail, and where each lives in the code |
+| [Scene file format](dev/scene-format.md) | How the parser reads a `.ngk` |
+| [Project structure](dev/project-structure.md) | `schema.toml`, `config.toml`, the options cascade, how projects are created and loaded |
+| [Video pipeline](dev/video-pipeline.md) | Decoding, preload, sound, clock, seeking, threads |
+| [Building](building.md) | Linux, the Windows cross-build, the installer, troubleshooting |
+| [Tests](../tests/README.md) | The core suite and the off-screen render tests |
+| [VSCode extension](../VSCodeExt/README.md) | Syntax highlighting for `.ngk` |
 
-## License
+## Plans and history
 
-MIT — see [LICENSE](../LICENSE) in the project root.
+- [plans/planned.md](plans/planned.md) — what is planned, by version
+- [plans/implemented.md](plans/implemented.md) — what was planned and shipped
+- [known-bugs.md](known-bugs.md) — known problems and things to check
+- [CHANGELOG.md](CHANGELOG.md) — every release in detail
+
+## Words used throughout
+
+| Word | Means |
+|---|---|
+| **Master** | The operator's screen: the cue list, the notes, the popups. |
+| **Slave** | The audience's screen (the projector). Everything a cue shows goes here. |
+| **Capture** | An optional third output: a copy of the slave for the recording. |
+| **Revy** | The production. A **project** is one revy in one year, e.g. `MatRevy_2026`. |
+| **Akt** | An act: a list of scenes. A show has one or more akter. |
+| **Scene** | One `.ngk` file: its options, and its cues in order. |
+| **Cue** | One line under `[Commands]` — what happens when the operator presses ENTER. |
+| **Targeted display** | The part of the slave screen SatyrAV draws into, set with `D` → `S`. Positions in percent are of this rect. |

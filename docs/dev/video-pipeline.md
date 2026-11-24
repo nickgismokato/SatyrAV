@@ -1,6 +1,6 @@
 # Video pipeline
 
-How SatyrAV plays a video file: the three ways a frame can reach the screen, the preload window, how sound and picture are kept together, and what runs on which thread. Current as of **2.0.0**. Everything here lives in [`MediaPlayer.cpp`](../src/render/MediaPlayer.cpp) and [`D3D11Interop.cpp`](../src/render/D3D11Interop.cpp).
+How SatyrAV plays a video file: the three ways a frame can reach the screen, the preload window, how sound and picture are kept together, and what runs on which thread. Everything here lives in [`MediaPlayer.cpp`](../../src/render/MediaPlayer.cpp) and [`D3D11Interop.cpp`](../../src/render/D3D11Interop.cpp).
 
 ## Three decode paths
 
@@ -8,7 +8,7 @@ Each clip picks one path when it is set up, and keeps it for its lifetime.
 
 | Path | Used when | Where the frame travels |
 |---|---|---|
-| **Zero-copy** *(2.0.0)* | Windows, D3D11 renderer, hardware decode available, 8-bit source, `zero_copy = true` | Decoder → GPU copy → screen. Never leaves VRAM. |
+| **Zero-copy** | Windows, D3D11 renderer, hardware decode available, 8-bit source, `zero_copy = true` | Decoder → GPU copy → screen. Never leaves VRAM. |
 | **Hardware read-back** | Hardware decode available but zero-copy is not (10-bit source, `zero_copy = false`, or zero-copy setup failed) | Decoder (VRAM) → system RAM → `sws_scale` → VRAM |
 | **Software** | Linux, or a codec the GPU cannot decode | CPU decoder → `sws_scale` → VRAM |
 
@@ -28,7 +28,7 @@ Three details follow from this design:
 
 ### Hardware read-back and software
 
-These are the pre-2.0.0 paths and are unchanged. Both end with YUV420P frames in system RAM, scaled down to fit the slave if the source is larger, uploaded with `SDL_UpdateYUVTexture` to an IYUV texture.
+The paths used where zero-copy isn't available (always on Linux). Both end with YUV420P frames in system RAM, scaled down to fit the slave if the source is larger, uploaded with `SDL_UpdateYUVTexture` to an IYUV texture.
 
 - **Read-back:** the decode thread calls `av_hwframe_transfer_data` to pull the frame out of VRAM, then `sws_scale` converts it. The transfer format is whatever the driver produces (usually NV12), so the conversion context is created on the first frame once the real format is known.
 - **Software:** FFmpeg's multi-threaded decoders produce the frame and `sws_scale` converts it straight into the ring.
@@ -84,7 +84,7 @@ On the zero-copy path the wait is not idle. The playback clock runs on audio, an
 
 ## Sound
 
-*(Rewritten in 2.0.0.)* One logical audio device is opened on first use and held open for the life of the application. Every source of sound owns an `SDL_AudioStream` bound to it, and SDL mixes them:
+One logical audio device is opened on first use and held open for the life of the application. Every source of sound owns an `SDL_AudioStream` bound to it, and SDL mixes them:
 
 - Each video creates its stream at setup and leaves it **unbound**, so a preloaded clip can queue its sound ahead of time. Starting the clip binds the stream.
 - Each standalone sound (`play x.mp3`, F-key hotkeys) has its own stream. Several can play at once, over each other and over a video's sound.
@@ -92,10 +92,8 @@ On the zero-copy path the wait is not idle. The playback clock runs on audio, an
 Streams convert independently into the device's format, so clips with different sample rates coexist without the device being reopened. The device follows `[audio] device` in `config.toml` and falls back to the system default if the named device is missing.
 
 The optional `AudioFade` project/scene option ramps a video stream's gain together with the picture fade. SDL applies stream gain when the device pulls audio, not when it is queued, so a fade is heard immediately even though seconds of audio are already queued.
-
-*(2.0.1)* **Pausing one source.** `K` pauses the video and its sound; `M` pauses the standalone sounds. Neither pauses the device, because pausing the device would silence every source on it. A paused source's stream is unbound instead (its queued audio is kept) and bound again on resume, so the other sources play on.
-
-*(2.0.1)* **No sound device.** If no audio output can be opened — no device at start-up, or a device that stops taking audio mid-clip — videos play without sound on the wall clock instead of waiting for audio that never drains. This is logged once. Standalone sounds cannot play in that state.
+ **Pausing one source.** `K` pauses the video and its sound; `M` pauses the standalone sounds. Neither pauses the device, because pausing the device would silence every source on it. A paused source's stream is unbound instead (its queued audio is kept) and bound again on resume, so the other sources play on.
+ **No sound device.** If no audio output can be opened — no device at start-up, or a device that stops taking audio mid-clip — videos play without sound on the wall clock instead of waiting for audio that never drains. This is logged once. Standalone sounds cannot play in that state.
 
 ## Clock
 
@@ -107,13 +105,15 @@ position = audioStartPTS + (bytesPushed − bytesStillQueued) / bytesPerSecond
 
 `bytesPushed` is what the decode thread has handed to the stream; `SDL_GetAudioStreamQueued` reports what the device has not yet taken. The difference is what the sound card has actually consumed, so the clock is driven by the hardware and does not drift. Between the device's pulls the value is interpolated with wall-clock time so it advances smoothly every frame.
 
-A clip without audio uses the wall clock. *(2.0.1)* So does a clip whose sound stops reaching the device: a watchdog notices when the consumed count has not moved for 0.75 s, re-anchors the wall clock at the current position and carries on, so the picture never freezes waiting for sound. A sound track that is simply shorter than the picture takes the same route. Either way, each frame the main thread takes the newest ring frame whose timestamp is not later than the clock, skips any older ones, and presents it.
+A clip without audio uses the wall clock. So does a clip whose sound stops reaching the device: a watchdog notices when the consumed count has not moved for 0.75 s, re-anchors the wall clock at the current position and carries on, so the picture never freezes waiting for sound. A sound track that is simply shorter than the picture takes the same route. Either way, each frame the main thread takes the newest ring frame whose timestamp is not later than the clock, skips any older ones, and presents it.
 
 ## Seeking
 
-*(2.0.0, plumbing only.)* `MediaPlayer::SeekVideo(seconds)` jumps the active clip to a time. Nothing in the application calls it yet; the fast-forward, rewind and restart commands are planned for 2.1.0.
+`MediaPlayer::SeekVideo(seconds)` jumps the active clip to a time, `SeekVideoBy(delta)` from where it is. The keys `,` / `.` (5 s back / forward) and SHIFT + `,` (restart) call them from `PerformanceScreen::SeekVideoKey`; a seek past the end lets the clip end.
 
 The main thread files the request; the decode thread carries it out at the top of its loop, the one point where it holds no half-produced frame. It empties the ring, seeks the file to the keyframe before the target, flushes both decoders, clears the queued audio, and then discards the frames and audio between that keyframe and the requested time, so playback resumes where asked. While the request is pending the main thread presents nothing from the ring.
+
+**While paused** (`K`) a seek sets `showFrameWhilePaused`: once the decode thread has the first frame at the new position, `PresentPausedSeekFrame` puts it on the texture and consumes it, so the picture moves at once and holds there. Its sound is already queued in the (unbound) stream and plays on resume.
 
 At end of file the decode thread parks instead of exiting, which is what allows a clip to be rewound after its decoding has finished.
 

@@ -6,7 +6,7 @@
 #include "ui/HelpPopup.hpp"
 #include "ui/DebugPopup.hpp"
 #include "ui/DisplaySizePopup.hpp"
-#include "ui/OverviewPopup.hpp"
+#include "ui/ScannerPopup.hpp"
 #include <unordered_map>
 #include <memory>
 
@@ -16,6 +16,11 @@ class App{
 public:
 	bool Init();
 	void Run();
+	// One frame of Run's loop. For the render tests.
+	void Frame(float dt);
+	bool IsRunning() const{ return running; }
+	// For the render tests: the project screen.
+	Screen* GetScreen(ScreenID id){ return screens[id].get(); }
 	void Shutdown();
 
 	void SwitchScreen(ScreenID id);
@@ -39,9 +44,9 @@ private:
 	HelpPopup helpPopup;
 	DebugPopup debugPopup;
 	DisplaySizePopup sizePopup;
-	// (1.6.3) Overview Debug — modal scene-health popup, opened with the
-	// `D → O` chord while a project is loaded.
-	OverviewPopup overviewPopup;
+	// Project scanner — modal, opened with C (or the `D → O` chord) while a
+	// project is loaded. Replaces the 1.6.3 Overview popup.
+	ScannerPopup scannerPopup;
 
 	std::unordered_map<ScreenID, std::unique_ptr<Screen>> screens;
 	Screen* currentScreen = nullptr;

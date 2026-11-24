@@ -1,11 +1,13 @@
 # Unit tests
 
-The core regression suite, added in **1.8.1**. It covers `src/core/` only —
-`SceneParser`, `SchemaParser`, `CueEngine`, `Config`, `Project`, and `Types`.
+The core regression suite. It covers `src/core/` only —
+`SceneParser`, `SchemaParser`, `CueEngine`, `Config`, `Project`, `Types`, the
+show log, subtitles and project scanner. The render tests (below) cover the
+SDL side.
 
 Those modules have **no SDL and no FFmpeg dependency**, which is the whole
-point: the suite survived the 2.0.0 SDL3 migration untouched, and was the
-regression net while SDL2 was replaced.
+point: it builds and runs on a machine with no media libraries, and it
+survives changes to the SDL side untouched.
 
 ## Tests are off by default
 
@@ -56,26 +58,58 @@ cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/saty
 | `test_scene_parser.cpp` | the `.ngk` language — sections, every keyword, quoting, modifiers, `+` runs, compound `&`, `run{}` / `loop(){}` / `group{}` / `[Macro]` |
 | `test_schema_parser.cpp` | `schema.toml` → `RevySchema`, every option present and absent |
 | `test_cue_engine.cpp` | navigation, comment-skipping indices, dispatch, the options cascade, `ReloadScenes` |
-| `test_config.cpp` | `config.toml` round-trip, the 1.5.1 Windows-backslash regression, `ResolveFontPath` |
-| `test_project.cpp` | project scaffolding and the 1.8.0 generators |
-| `test_latex_symbols.cpp` | *(1.8.2)* LaTeX symbol macros in displayed text |
-| `test_cue_notes.cpp` | *(1.8.4)* the `[Cue]` section, `\Name` references and their warnings |
-| `test_option_names.cpp` | *(2.0.1)* one name per option in scenes and `schema.toml`, the shared colour reader, hex in `[Options]`, `TextColour` and the background cascade |
-| `test_mark_log.cpp` | *(2.0.1)* the `O` mark-line log — file and folder names, appending, one file per day, what a mark points at |
-| `test_backstage.cpp` | *(2.0.2)* the `[Backstage]` block, times and lists, the lineup across akter, the ticker line format, the Url, and the `schema.toml` defaults |
-| `test_backstage_send.cpp` | *(2.0.2)* sending, against a small HTTP server inside the test: the exact request, failures, newest-lineup-wins (POSIX only; the Windows sender is checked against a local server by hand) |
-| `test_text_plan.cpp` | *(2.0.2)* fixed text centre — which cues form a block, where it ends, and the `FixedTextCentre` option |
+| `test_config.cpp` | `config.toml` round-trip, the Windows-backslash regression, `ResolveFontPath` |
+| `test_project.cpp` | project scaffolding and the generators |
+| `test_latex_symbols.cpp` | LaTeX symbol macros in displayed text |
+| `test_cue_notes.cpp` | the `[Cue]` section, `\Name` references and their warnings |
+| `test_option_names.cpp` | one name per option in scenes and `schema.toml`, the shared colour reader, hex in `[Options]`, `TextColour` and the background cascade |
+| `test_mark_log.cpp` | the `O` mark-line log — file and folder names, appending, one file per day, what a mark points at |
+| `test_backstage.cpp` | the `[Backstage]` block, times and lists, the lineup across akter, the ticker line format, the Url, and the `schema.toml` defaults |
+| `test_backstage_send.cpp` | sending, against a small HTTP server inside the test: the exact request, failures, newest-lineup-wins (POSIX only; the Windows sender is checked against a local server by hand) |
+| `test_text_plan.cpp` | fixed text centre — which cues form a block, where it ends, and the `FixedTextCentre` option |
+| `test_show_log.cpp` | the show log — file names, run numbers, the `.log` line |
+| `test_subtitles.cpp` | the per-act `.srt` / `.ass` — text and media cues from slave snapshots, bold / italic / font tags, file names per act |
+| `test_project_scanner.cpp` | the project scanner — every kind of finding with its file and line, and a new project scanning clean |
+
+## Render tests
+
+`tests/render/` holds a second suite, `satyr-render-tests`, that runs the
+**real app**: `Renderer`, `SlaveWindow`, `TextRenderer`, `MediaPlayer`,
+`PerformanceScreen` and `App`, with SDL's off-screen video driver and dummy
+audio driver — no window opens and nothing plays. It needs SDL3 and FFmpeg,
+so it only exists in the root build with `-DSATYR_BUILD_TESTS=ON`, and
+`ctest` runs it next to the core suite.
+
+```bash
+cmake --build . --target satyr-render-tests
+./tests/render/satyr-render-tests        # run from the source root (assets/)
+```
+
+Before SDL starts, `render_main.cpp` points `HOME` / `USERPROFILE` at a
+scratch folder, so `config.toml`, the logs and anything the app writes stay
+out of your own folders.
+
+| File | Covers |
+|---|---|
+| `render_main.cpp` | entry point: off-screen drivers, scratch home, working directory |
+| `render_helpers.hpp` | `OffscreenRig` (SDL, master + windowed slave, fonts), reading the slave canvas back |
+| `test_render_slave.cpp` | text drawn in its colour and cleared, background colour, `layer()` order, image file names / ids, font family names |
+| `test_render_video.cpp` | a clip encoded in the test: play, seek, **seek while paused** (the new frame shows at once), restart, past the end |
+| `test_render_app.cpp` | the whole app driven with key presses: cues, an `[Animation]` running its passes, the seek and scanner keys, the show log and per-act subtitles it writes — and that nothing is written with the show log off |
+
+`App::Frame` is one pass of the main loop, split out of `App::Run` so these
+tests can step the app frame by frame.
 
 ## What is deliberately not tested
 
 Coverage is not the goal — catching regressions that are invisible until a
 show is. The following are out of scope on purpose:
 
-- **Everything visual.** `render/`, `ui/`, `screens/`, `input/`. These are
-  SDL-bound and are verified by running the program. Render / audio /
-  `MediaPlayer` tests are deferred to **2.1.0**. They were held back until
-  the SDL3 backend landed in 2.0.0, since testing against SDL2 would have
-  meant writing them twice.
+- **Most of the UI.** `ui/` popups, the menu screens and `input/` are
+  checked by running the program. The slave, the video pipeline and the
+  performance screen are covered by the render tests above; the zero-copy
+  video path (Windows, D3D11) and real audio output are not, since the
+  off-screen and dummy drivers have neither.
 - **Stubs and placeholders.** `CueEngine::StopAllMedia` / `ToggleVideo` /
   `ToggleMusic` and `SceneParser::ParseLoop` have no behaviour yet. A test
   would pin the placeholder rather than the feature. Each carries a

@@ -1,18 +1,31 @@
 # Command reference
 
-Full reference for every command, modifier, and section available in a SatyrAV `.ngk` scene file. Every entry follows the same layout:
+The full reference for every section, command, block and modifier of a `.ngk` scene file: exact syntax, every argument, edge cases, and where each part lives in the code. Written for people changing SatyrAV. To *use* the commands, [howto/scene.md](../howto/scene.md) has them in tables by what they do, with examples.
 
-| Field | Meaning |
-| --- | --- |
-| **Syntax** | Exact syntax with the argument names in UPPER_CASE. |
-| **Arguments** | Type and meaning of each argument. |
-| **Behaviour** | What it does when executed. |
-| **Output** | What the operator and audience see. |
-| **Example** | A copy-pasteable example. |
+Every entry has the same fields where they apply: **Syntax** (argument names in UPPER_CASE), **Arguments**, **Behaviour**, **Output** (what the operator and audience see) and **Example**.
 
-Commands are grouped by role: scene-file sections, executable commands, modifiers, and structural blocks (`loop`, `run`, `group`, `macro`).
+## Where it lives in the code
 
-> **Versioning:** features marked *(1.2)*, *(1.3)*, *(1.4)*, *(1.4.1)*, *(1.5)*, *(1.6.0)*, *(1.6.1)*, *(1.6.2)*, *(1.6.3)*, *(1.6.6)*, *(1.7)*, *(1.8.x)*, *(2.0.0)*, *(2.0.1)* and *(2.0.2)* indicate the version they were introduced. Everything unmarked was already in 1.0.
+A cue goes through three stages: the parser turns a line into a `Command` (`core/Types.hpp`), `CueEngine` runs it, and `PerformanceScreen` puts it on the slave.
+
+| Part | Code |
+|---|---|
+| Sections, `[Options]`, `[Preload]`, `[Macro]`, `[Cue]`, `[Backstage]`, `[Animation]` | `SceneParser::ParseFile` (`core/SceneParser.cpp`); `[Animation]` blocks in `ParseAnimationBlock`, `[Backstage]` keys in `Backstage::ApplyKey` (`core/Backstage.cpp`) |
+| Option names and aliases | `LookupOptionKey` (`core/OptionKeys.cpp`) |
+| One command line: keyword, arguments | `ParseSingleCommand` (`core/SceneParser.cpp`) |
+| `&`, `run{}`, `loop(){}`, `group{}`, `macro` | `ProcessLogicalCommand`, `ExpandLoop`, `TagCommandWithGroup` |
+| Modifiers | `ParseModifiers` → `RenderModifiers` (`core/Types.hpp`) |
+| Text, `+` pieces, `bold()` / `it()` / `colour()` per piece | `ParseTextRuns`, `SplitPlus` → `TextRun` |
+| `use` / `fontSize` | parsed in `ParseSingleCommand`, applied to the text below by the stamping pass at the end of `ParseFile` |
+| Comments, quotes, `#` inside parentheses | `FindStructural`, `FindCommentStart`, `FindOptionCommentStart`, `DelimAt` |
+| LaTeX symbols | `ExpandLatexSymbols` (`core/LatexSymbols.cpp`) |
+| Colours | `ParseColour` (`core/Types.cpp`) |
+| Running a cue, the options cascade | `CueEngine` (`core/CueEngine.cpp`) |
+| What a command does on the slave | `PerformanceScreen::DispatchSlaveCommand`; animations in `StartAnimation` / `UpdateAnimations` |
+| Drawing text, images, countdowns, layers, clears | `SlaveWindow` (`render/SlaveWindow.cpp`), glyphs in `TextRenderer` |
+| Video and sound | `MediaPlayer` (`render/MediaPlayer.cpp`) — see [video-pipeline.md](video-pipeline.md) |
+| Particles, trails, bounce, distributions | `ParticleSystem` (`render/ParticleSystem.cpp`) |
+| Fixed text centre | `TextPlan` (`core/TextPlan.cpp`) |
 
 ---
 
@@ -23,22 +36,22 @@ Commands are grouped by role: scene-file sections, executable commands, modifier
 Per-scene settings that override project-level defaults.
 
 - **Syntax:** `[Options]` on its own line, followed by `key = value` pairs.
-- **Names** *(2.0.1)*: an option has one name, the same here and in the project's `schema.toml`, and case does not matter (`TextColour`, `textcolour` and `TEXTCOLOUR` are the same option). A value may be wrapped in quotes, which is needed for a font path with spaces.
+- **Names**: an option has one name, the same here and in the project's `schema.toml`, and case does not matter (`TextColour`, `textcolour` and `TEXTCOLOUR` are the same option). A value may be wrapped in quotes, which is needed for a font path with spaces.
 - **Keys:**
-    - `BackgroundColour` — background colour: any [colour](#colours). A scene that does not set it uses the project's `BackgroundColour`, which is black unless the project says otherwise. *(2.0.1: any colour, including hex; before that only black, blue, red, green and white. Before 2.0.1 a scene that did not set it was always black, whatever the project said.)*
-    - `TextColour` *(2.0.1)* — default colour of the scene's slave text: any [colour](#colours). Text with its own `colour(...)` keeps that colour. A scene that does not set it uses the project's `TextColour`, then white. Countdowns use it too; `textD` subtitle lines use `SubtitleColour` instead.
-    - `FontSize` — slave font size in points. Overrides the project `FontSize`. *(2.1.0)* `fontSize N` in `[Commands]` changes it for the text below it; see [`use` / `fontSize`](#use-font--fontsize-n-210).
-    - `Font` — path (relative to project root, or a bare filename resolved against the shared `FONTS/` directory *(1.6.1)*) to a `.ttf` font file. *(2.1.0)* A bare filename is looked for in the project's `fonts/` and `font/` folders and the project folder first, then `FONTS/`; a relative path is now taken from the project folder.
-    - `FontItalic`, `FontBold`, `FontBoldItalic` *(1.6.1)* — paths to the italic / bold / bold-italic typeface variants. Used by `textbf`, `textit`, and inline `bold(...)` / `it(...)`. Empty or missing → falls back to project / global config, then to regular.
-    - *Fonts are per scene* *(2.0.2)*: a scene without `Font` (or one of the style faces) uses the project's, then the global one — never the previous scene's. Before 2.0.2 a scene's font stayed on for every later scene that did not name its own.
+    - `BackgroundColour` — background colour: any [colour](#colours). A scene that does not set it uses the project's `BackgroundColour`, which is black unless the project says otherwise.
+    - `TextColour` — default colour of the scene's slave text: any [colour](#colours). Text with its own `colour(...)` keeps that colour. A scene that does not set it uses the project's `TextColour`, then white. Countdowns use it too; `textD` subtitle lines use `SubtitleColour` instead.
+    - `FontSize` — slave font size in points. Overrides the project `FontSize`. `fontSize N` in `[Commands]` changes it for the text below it; see [`use` / `fontSize`](#use-font--fontsize-n).
+    - `Font` — path (relative to project root, or a bare filename resolved against the shared `FONTS/` directory) to a `.ttf` font file. A bare filename is looked for in the project's `fonts/` and `font/` folders and the project folder first, then `FONTS/`; a relative path is now taken from the project folder.
+    - `FontItalic`, `FontBold`, `FontBoldItalic` — paths to the italic / bold / bold-italic typeface variants. Used by `textbf`, `textit`, and inline `bold(...)` / `it(...)`. Empty or missing → falls back to project / global config, then to regular.
+    - *Fonts are per scene*: a scene without `Font` (or one of the style faces) uses the project's, then the global one — never the previous scene's.
     - `Capitalize` — `true` or `false` to capitalize every text line.
-    - `AudioFade` *(2.0.0)* — `true` or `false`. When true, the fade times on a `play FILE FADE_IN, FADE_OUT` command ramp the clip's **audio** as well as its picture. Default **false**, so scenes written before 2.0.0 keep fading the picture only and cutting the sound at full volume. Like `Capitalize`, a scene can switch this on but cannot switch off a project that enabled it.
-    - `FixedTextCentre` *(2.0.2)* — `true` or `false`. Normally the centred text stack is centred on the lines shown so far, so every new line pushes the block up by half a line. With `true`, the block is centred on **every line it will hold before it is cleared**, so each line appears where it stays. See [Fixed text centre](#fixed-text-centre-202). A scene can switch it either way, overriding the project. Off in projects that do not set it; new projects are generated with it on.
-    - `TransparentBackground` *(2.1.0)* — `true` or `false`. With `true` the slave becomes **see-through**: everything SatyrAV draws (text, images, video, particles) shows as normal, and everywhere it draws nothing — the background, the clear parts of a PNG, the faded part of `trans(...)` — shows whatever is underneath the slave window on that screen (another program, a camera feed, the desktop). Text stays in front of everything, as always. A scene can switch it either way, overriding the project; default `false`. See [See-through slave](#see-through-slave-210).
-    - `TextOutline` *(2.1.0)* — outline thickness in points for this scene's text, `0` = no outline. Overrides the project's `TextOutline`.
-    - `DisableTextOutline` *(2.1.0)* — `true` or `false`. `true` switches the outline off for this scene, whatever `TextOutline` says. A scene can switch it either way: `false` brings the outline back in a project that disables it. Default `false`.
-    - `<TYPE>.SPEED`, `<TYPE>.DENS` (or `.DENSITY`), `<TYPE>.X.DIST = NAME(p1, p2)` *(1.4)*, `<TYPE>.VX.DIST`, `<TYPE>.VY.DIST` *(1.5)* — per-particle-type tunables. See [Particle tunables in `[Options]`](#particle-tunables-in-options-14) for details.
-- **Hex values:** *(2.0.1)* `TextColour = #FF8800` works unquoted. A `#` straight after the `=` followed by 3 or 6 hex digits is the colour; any later `#` starts a comment as usual.
+    - `AudioFade` — `true` or `false`. When true, the fade times on a `play FILE FADE_IN, FADE_OUT` command ramp the clip's **audio** as well as its picture. Default **false**: the picture fades and the sound cuts at full volume. Like `Capitalize`, a scene can switch this on but cannot switch off a project that enabled it.
+    - `FixedTextCentre` — `true` or `false`. Normally the centred text stack is centred on the lines shown so far, so every new line pushes the block up by half a line. With `true`, the block is centred on **every line it will hold before it is cleared**, so each line appears where it stays. See [Fixed text centre](#fixed-text-centre). A scene can switch it either way, overriding the project. Off in projects that do not set it; new projects are generated with it on.
+    - `TransparentBackground` — `true` or `false`. With `true` the slave becomes **see-through**: everything SatyrAV draws (text, images, video, particles) shows as normal, and everywhere it draws nothing — the background, the clear parts of a PNG, the faded part of `trans(...)` — shows whatever is underneath the slave window on that screen (another program, a camera feed, the desktop). Text stays in front of everything, as always. A scene can switch it either way, overriding the project; default `false`. See [See-through slave](#see-through-slave).
+    - `TextOutline` — outline thickness in points for this scene's text, `0` = no outline. Overrides the project's `TextOutline`.
+    - `DisableTextOutline` — `true` or `false`. `true` switches the outline off for this scene, whatever `TextOutline` says. A scene can switch it either way: `false` brings the outline back in a project that disables it. Default `false`.
+    - `<TYPE>.SPEED`, `<TYPE>.DENS` (or `.DENSITY`), `<TYPE>.X.DIST = NAME(p1, p2)`, `<TYPE>.VX.DIST`, `<TYPE>.VY.DIST` — per-particle-type tunables. See [Particle tunables in `[Options]`](#particle-tunables-in-options) for details.
+- **Hex values:** `TextColour = #FF8800` works unquoted. A `#` straight after the `=` followed by 3 or 6 hex digits is the colour; any later `#` starts a comment as usual.
 - **Example:**
     ```txt
     [Options]
@@ -62,7 +75,7 @@ Files to pre-decode/pre-cache before the scene runs, so the first `show` or `pla
     intro.mp3
     ```
 
-### `[Cue]` *(1.8.4)*
+### `[Cue]`
 
 Named operator notes, shown in the master window's **Cue Notes** column beside the command that references them. Nothing reaches the slave — these are stage-management notes, not audience-facing text.
 
@@ -72,8 +85,8 @@ Named operator notes, shown in the master window's **Cue Notes** column beside t
 - **Binding:** the reference attaches to the whole **navigator row**. On a compound (`clear & play x.mp3 \Cue1`) the note belongs to the row, not to one sub-command. A `run{ … }` collapses its body into one row, so a reference written on a command inside the body surfaces on that row.
 - **Blocks:** a reference on a block's closing brace (`} \Cue1`) is dropped — notes bind to command rows. The brace still closes the block, so the rest of the scene parses normally. Put the reference on a command inside the body instead.
 - **Wrapping:** a long note wraps onto as many rows as it needs, and its command's row grows to match so the two stay aligned while scrolling.
-- **Warnings:** a note that nothing references, a duplicate name, or a name with no text each raise a parser warning, visible in the Overview Debug popup (`D → O`). The unreferenced-note warning is how a mistyped `\Name` surfaces — see the note on collisions below.
-- **Collision with LaTeX symbols:** a reference is only recognised when the name is actually defined in `[Cue]`. `\alpha` and `\Cue1` have the same shape, and an undefined `\Name` is left alone for the [symbol expander](#latex-symbols-182). A `\Name` inside quotes is always text.
+- **Warnings:** a note that nothing references, a duplicate name, or a name with no text each raise a parser warning, listed by the project scanner (`C`). The unreferenced-note warning is how a mistyped `\Name` surfaces — see the note on collisions below.
+- **Collision with LaTeX symbols:** a reference is only recognised when the name is actually defined in `[Cue]`. `\alpha` and `\Cue1` have the same shape, and an undefined `\Name` is left alone for the [symbol expander](#latex-symbols). A `\Name` inside quotes is always text.
 - **Example:**
     ```txt
     [Cue]
@@ -86,7 +99,7 @@ Named operator notes, shown in the master window's **Cue Notes** column beside t
     stop \Cue2
     ```
 
-### `[Macro]` *(1.3)*
+### `[Macro]`
 
 Defines reusable command blocks that can be expanded anywhere in `[Commands]` via the `macro` command.
 
@@ -115,7 +128,7 @@ Defines reusable command blocks that can be expanded anywhere in `[Commands]` vi
     macro Chorus
     ```
 
-### `[Hotkeys]` *(1.6.3)*
+### `[Hotkeys]`
 
 Project-level audio hotkeys bound to `F1`–`F12`. Pressing the key during a performance plays the configured audio file via the standalone-audio path; pressing the **same** key again while its sound is still playing **stops** it (toggle behaviour, useful for long ambient cues).
 
@@ -130,7 +143,7 @@ Project-level audio hotkeys bound to `F1`–`F12`. Pressing the key during a per
 - **Notes:** Hotkeys are project-only. F-keys are ignored while a text field is focused (search field, creator field, etc.) so typing in those inputs doesn't fire a cue.
 - **Help popup:** the `H` popup lists `F1-F12` once you're inside a project.
 
-### `[Backstage]` *(2.0.2)*
+### `[Backstage]`
 
 What the backstage screen shows about this scene. When the show moves into a new scene, SatyrAV sends the current scene and the next two to the revy's backstage ticker ([@fysikrevy/backstage-ticker](https://www.npmjs.com/package/@fysikrevy/backstage-ticker)), so the people backstage see who is on next.
 
@@ -164,11 +177,11 @@ What the backstage screen shows about this scene. When the show moves into a new
 - **Request:** `POST` with the header `sl-cmd: waiting` and a plain-text UTF-8 body, as the ticker expects.
 - **Never blocks the show:** the request is made in the background with a 4-second limit and is not retried — the next scene change sends a fresh lineup anyway. If a newer lineup is ready before an older one went out, only the newest is sent.
 - **Text the ticker cannot take:** `;` and line breaks would split a field and are removed. `<`, `>` and `&` are sent as they are, but the ticker shows text as HTML, so they raise a warning.
-- **Warnings** in the Overview Debug popup (`D → O`): unknown keys, a time it cannot read, a line without `=`, and the characters above.
+- **Warnings** in the project scanner (`C`): unknown keys, a time it cannot read, a line without `=`, and the characters above.
 - **Watching it:** the Debug popup (`D`) has a *Backstage* line — green with the HTTP status when the last POST arrived, red with the reason when it failed, grey when off. Every request is in the SatyrAV log: what was sent, line by line, then the result.
 - **Platforms:** https works in the Windows build (through Windows' own HTTP stack, including its proxy and certificate settings). The Linux build sends plain `http://` only.
 
-### `[Animation]` *(2.1.0)*
+### `[Animation]`
 
 Named animations that repeat — a tumbleweed that rolls across the stage every few seconds, at a different height each time. Define them here, start one in `[Commands]` with `show NAME`.
 
@@ -202,7 +215,7 @@ Named animations that repeat — a tumbleweed that rolls across the stage every 
 
     `clearText` and plain `stop` leave animations alone. `show NAME` while it runs starts it over (count and `for` from zero).
 - **Names:** an animation name used with `show`, `stop` or `clear` means the animation, even if a file or group has the same name.
-- **Mistakes** (missing `path`, an unknown key, `repeat = lots`) are listed in the Overview popup (`D` → `O`), which also checks that each animation's image exists. A block without `show`/`text`, `path` or `duration` is skipped.
+- **Mistakes** (missing `path`, an unknown key, `repeat = lots`) are listed by the project scanner (`C`), which also checks that each animation's image exists. A block without `show`/`text`, `path` or `duration` is skipped.
 - **Example:**
     ```txt
     [Animation]
@@ -230,9 +243,9 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
 
 ### `text`
 
-- **Syntax:** `text "MESSAGE"` — or `text SEGMENT + SEGMENT + ...` *(1.4)*
+- **Syntax:** `text "MESSAGE"` — or `text SEGMENT + SEGMENT + ...`
 - **Arguments:** `MESSAGE` — quoted string. `\n` inside the string inserts a line break (each line becomes its own entry in the stack).
-- **Behaviour:** Appends a text line onto the slave's text stack. Multiple `text` commands stack vertically, centred by default unless a `pos()` / `move()` modifier overrides. With the *(1.4)* `+` operator, multiple styled segments render side-by-side on a single line — each segment can wrap its own `colour(...)` / `trans(...)` (see [the `+` operator](#-concatenation-14)).
+- **Behaviour:** Appends a text line onto the slave's text stack. Multiple `text` commands stack vertically, centred by default unless a `pos()` / `move()` modifier overrides. With the `+` operator, multiple styled segments render side-by-side on a single line — each segment can wrap its own `colour(...)` / `trans(...)` (see [the `+` operator](#-concatenation)).
 - **Output:** The message appears on the slave screen with the current font, colour, and outline.
 - **Example:**
     ```txt
@@ -241,11 +254,11 @@ The sequence of cues. Each line is one cue; the operator presses ENTER to advanc
     text colour(RED, "Hello, ") + colour(BLUE, "World!")
     ```
 
-### Fixed text centre *(2.0.2)*
+### Fixed text centre
 
 How the centred text stack is placed when `FixedTextCentre = true` (in `schema.toml`'s `[Options]`, or a scene's).
 
-- **Without it** (the behaviour since 1.0): the stack is centred on the lines currently on screen. A second line moves the first up by half a line, a third moves both up again, and so on.
+- **Without it**: the stack is centred on the lines currently on screen. A second line moves the first up by half a line, a third moves both up again, and so on.
 - **With it:** when a centred line appears on an empty screen, SatyrAV looks ahead in the scene and counts every centred line still to come before the next `clear`, `clearText` or `clearAll` (or the end of the scene), and centres the block on all of them. The first line appears at the top of the finished block, and no line moves as the rest appear.
 - **What counts:** `text`, `textbf`, `textit`, `typewrite`, and the main line of `textD`, including the lines of a `\n` break and lines that word-wrap (the planned lines are measured exactly like the real ones). Text placed with `pos(...)`, `move(...)` or `pathMove(...)`, `textD`'s subtitle line, and `textCont` (which adds to the last line) are not part of the stack, as before.
 - **What ends a block:** `clear` without a name, `clearText`, `clearAll`, and the end of the scene. `clear NAME` only removes one group, so the block carries on. Cues inside `run{ … }`, `loop(…){ … }`, a `macro`, or a compound `&` count in the order they fire — so in `clear & text "A"` the clear ends the old block and `"A"` starts the new one.
@@ -259,7 +272,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     clear
     ```
 
-### See-through slave *(2.1.0)*
+### See-through slave
 
 `TransparentBackground = true` (in a scene's `[Options]` or in `schema.toml`) makes the slave see-through wherever nothing is drawn.
 
@@ -285,7 +298,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     show Tumbleweed    # rolls across whatever is on the screen underneath
     ```
 
-### `textCont` *(1.4)*
+### `textCont`
 
 - **Syntax:** `textCont "MESSAGE"` — supports the `+` operator identically to `text`.
 - **Arguments:** `MESSAGE` — quoted string, optionally with `+` concatenation.
@@ -298,7 +311,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     # Slave now shows: Hello, World!
     ```
 
-### `textbf` / `textit` *(1.6.1)*
+### `textbf` / `textit`
 
 - **Syntax:** `textbf "MESSAGE"` and `textit "MESSAGE"` — both support the `+` operator and inline modifiers identically to `text`.
 - **Behaviour:** Identical to `text` but stamps a default style onto every produced run — `textbf` sets `bold`, `textit` sets `italic`. Per-segment inline `bold(...)` / `it(...)` wrappers OR onto the line default, so `textbf "A " + it("B")` renders A as bold and B as bold-italic.
@@ -310,7 +323,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     textbf "Heads up: " + it("Don't miss this.")
     ```
 
-### `textbfCont` / `textitCont` *(1.6.1)*
+### `textbfCont` / `textitCont`
 
 - **Syntax:** `textbfCont "MESSAGE"` and `textitCont "MESSAGE"`.
 - **Behaviour:** Same as `textCont` (append to the most recently pushed text entry, falling back to a new line if there's nothing to extend) but the appended runs inherit the keyword's bold / italic style.
@@ -321,7 +334,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     # Slave shows: The verdict is guilty.   (with "guilty." in bold)
     ```
 
-### `textD "PRIMARY", "SECONDARY"` *(1.6.1)*
+### `textD "PRIMARY", "SECONDARY"`
 
 - **Syntax:** Two quoted strings separated by a comma. Whitespace around the comma is irrelevant. Either side accepts the full `+` / `bold(...)` / `it(...)` / `colour(...)` machinery.
 - **Behaviour:** Pushes the primary text as a normal centred-stack entry (identical to `text`) **and** pushes the secondary text as a separate bottom-anchored subtitle with project-configured italic / colour / transparency / position defaults applied. Intended for bilingual revues — the primary line is the language the audience hears, the secondary line is the translation.
@@ -345,32 +358,32 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
 
 - **Syntax:** `clear`
 - **Arguments:** none — but see the variants below.
-- **Behaviour:** Clears the slave's text stack, current image, and active particle system. Does **not** clear groups (see `clearAll`). *(2.1.0)* Running [animations](#animation-210) start no new passes; the ones on screen finish.
+- **Behaviour:** Clears the slave's text stack, current image, and active particle system. Ungrouped content only — groups stay (see `clear NAME` and `clearAll`). Countdowns go too. Running [animations](#animation) start no new passes; the ones on screen finish.
 - **Output:** The slave goes back to its background colour (or video, if one is playing).
 - **Example:**
     ```txt
     clear
     ```
 
-### `clearText` *(1.3)*
+### `clearText`
 
 - **Syntax:** `clearText`
-- **Behaviour:** Removes only the text stack. Any current image, particles, or groups continue running.
+- **Behaviour:** Removes all text — grouped too, and `textD` subtitle lines — except the passes of running [animations](#animation). Images, particles and countdowns stay.
 - **Example:**
     ```txt
     clearText
     ```
 
-### `clearImages` *(1.3)*
+### `clearImages`
 
 - **Syntax:** `clearImages`
-- **Behaviour:** Removes the current image and stops the particle system. Text and groups are untouched.
+- **Behaviour:** Removes every image, grouped or not, and stops every particle system (those already smooth-stopping finish). Running animations start no new passes; the ones on screen finish. Text and countdowns stay.
 - **Example:**
     ```txt
     clearImages
     ```
 
-### `clear NAME` *(1.3)*
+### `clear NAME`
 
 - **Syntax:** `clear NAME`
 - **Arguments:** `NAME` — the identifier used in a preceding `group NAME{ ... }` block.
@@ -385,10 +398,10 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     clear SpinningHearts
     ```
 
-### `clearAll` *(1.3)*
+### `clearAll`
 
 - **Syntax:** `clearAll`
-- **Behaviour:** Removes text, the current image, particles, **and every group**. Equivalent to a full reset of the slave content layer.
+- **Behaviour:** Removes text, images, particles and countdowns, **including every group**, and cuts running animations at once. A full reset of the slave content. Video and sound keep playing. `BACKSPACE` does the same without a cue.
 - **Example:**
     ```txt
     clearAll
@@ -398,10 +411,10 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
 
 - **Syntax:** `show FILE` or `show MODIFIER(..., FILE)`
 - **Arguments:** `FILE` — image filename (resolved against the project root, `pictures/`, etc.). Modifiers wrap around the filename.
-- **Supported formats:** `.png`, `.jpg`/`.jpeg`, `.bmp`, `.webp`, and `.gif`. Animated `.gif` files cycle through their frames at the delays encoded in the file — see the note below. *(1.4)*
-- **Behaviour:** Sets the current image layer. A new `show` replaces the previous image. `clear` / `clearImages` remove it.
+- **Supported formats:** `.png`, `.jpg`/`.jpeg`, `.bmp`, `.webp`, and `.gif`. Animated `.gif` files cycle through their frames at the delays encoded in the file — see the note below.
+- **Behaviour:** Adds the image to the slave. Images stack: a new `show` goes on top of the ones already there (see [`layer()`](#layern-content) to choose the order). `clear` removes ungrouped images, `clearImages` all of them.
 - **Output:** The image is drawn into the targeted slave rect, fitted to target dimensions unless `size()` / `scale()` overrides.
-- **Animated GIFs:** *(1.4)* Every frame is pre-decoded to a texture at preload / first-show time; the slave then advances the current frame by wall time. All position, rotation, spin, move, size and transparency modifiers apply to the whole animation. GIFs used as particles (`particle(..., anim.gif)`) currently render frame 0 only.
+- **Animated GIFs:** Every frame is pre-decoded to a texture at preload / first-show time; the slave then advances the current frame by wall time. All position, rotation, spin, move, size and transparency modifiers apply to the whole animation. GIFs used as particles (`particle(..., anim.gif)`) currently render frame 0 only.
 - **Example:**
     ```txt
     show satyr-logo.png
@@ -411,13 +424,13 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
 
 ### `play`
 
-- **Syntax:** `play FILE` — or `play FILE FADE_IN_MS, FADE_OUT_MS` *(1.6.6)*
+- **Syntax:** `play FILE` — or `play FILE FADE_IN_MS, FADE_OUT_MS`
 - **Arguments:**
     - `FILE` — audio or video file. Extension determines which.
-    - `FADE_IN_MS`, `FADE_OUT_MS` *(1.6.6)* — optional integer milliseconds for a fade-from-black on start and a fade-to-black on end. `0` on either side disables that side of the fade. Bare `play FILE` is equivalent to `play FILE 0, 0`. By default the fade is visual only and the sound cuts. Set the `audioFade` option (scene) or `AudioFade` (project) to fade a video's sound together with its picture *(2.0.0)*.
+    - `FADE_IN_MS`, `FADE_OUT_MS` — optional integer milliseconds for a fade-from-black on start and a fade-to-black on end. `0` on either side disables that side of the fade. Bare `play FILE` is equivalent to `play FILE 0, 0`. By default the fade is visual only and the sound cuts. Set the `audioFade` option (scene) or `AudioFade` (project) to fade a video's sound together with its picture.
 - **Behaviour:**
     - Video (`.mp4`, `.mkv`, `.webm`, `.avi`, `.mov`) — opens the hardware-decoded video pipeline and renders frames into the slave beneath text. The fade pair is applied as a per-frame brightness multiplier on the video texture; 0 % brightness is solid black, 100 % is the decoded frame untouched.
-    - Audio (`.mp3`, `.wav`, etc.) — plays in the background. *(2.0.0)* Several tracks can play at once, and over a video's own sound; before 2.0.0 starting a track stopped whatever else was playing, including a video. Playing a file that is already playing restarts it. Fade pair is ignored.
+    - Audio (`.mp3`, `.wav`, etc.) — plays in the background. Several tracks can play at once, and over a video's own sound. Playing a file that is already playing restarts it. Fade pair is ignored.
 - **Example:**
     ```txt
     play intro.mp3
@@ -427,22 +440,22 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
 
 ### `stop`
 
-- **Syntax:** `stop` or `stop FILE` *(2.1.0: or `stop NAME` for an [animation](#animation-210) — no new passes, the one on screen finishes)*
+- **Syntax:** `stop`, `stop FILE`, or `stop NAME` for an [animation](#animation) — no new passes, the one on screen finishes.
 - **Arguments:** Optional filename. With no argument, stops all playback (video and every sound) and particle systems. With a filename, stops only that audio track.
-- **File names** resolve the same way as `play`: against the project folder, then `pictures/`, `movies/` and `sound/`, so `stop music.mp3` stops the sound that `play music.mp3` started. Other sounds keep playing. *(Broken in 2.0.0 — it had no effect — and fixed in 2.0.1.)*
-- **Note:** *(1.4)* Particle systems that are already in smooth-stop mode (see `stopParticleCont`) are **not** affected by `stop`/`clear`/`clearAll` — their endings always play out to completion.
+- **File names** resolve the same way as `play`: against the project folder, then `pictures/`, `movies/` and `sound/`, so `stop music.mp3` stops the sound that `play music.mp3` started. Other sounds keep playing.
+- **Note:** Particle systems that are already in smooth-stop mode (see `stopParticleCont`) are **not** affected by `stop`/`clear`/`clearAll` — their endings always play out to completion.
 - **Example:**
     ```txt
     stop
     stop music.mp3
     ```
 
-### `stopParticleCont` *(1.4)*
+### `stopParticleCont`
 
 - **Syntax:** `stopParticleCont` or `stopParticleCont GROUP`
 - **Arguments:** Optional group name. With no argument, applies to ungrouped particle systems; with a group name, applies to that group only.
 - **Behaviour:** Stops new particles from spawning, but lets every currently-alive particle finish its animation naturally — the system deactivates itself once the last live particle dies. Once issued, the smooth-stop is sticky: subsequent `stop`, `clear`, `clear NAME`, or `clearAll` commands leave the ending alone.
-- **Multiple ungrouped systems (1.5):** Ungrouped `show particle(...)` calls now coexist — starting a second one no longer replaces the first. `stopParticleCont` with no group drains every ungrouped system together; `clear` and `stop` still clear all ungrouped systems at once (smooth-stopping ones survive per the sticky rule above).
+- **Multiple ungrouped systems :** Ungrouped `show particle(...)` calls now coexist — starting a second one no longer replaces the first. `stopParticleCont` with no group drains every ungrouped system together; `clear` and `stop` still clear all ungrouped systems at once (smooth-stopping ones survive per the sticky rule above).
 - **Example:**
     ```txt
     show particle(CONFETTI, 50, heart.png)
@@ -456,7 +469,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     stopParticleCont Sparkles  # only the Sparkles group enters smooth-stop
     ```
 
-### `countdown` *(1.7)*
+### `countdown`
 
 - **Syntax:** `countdown(SECONDS)` — or `countdown(SECONDS, "LANG")`
 - **Arguments:**
@@ -464,7 +477,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     - `LANG` — optional language tag: `"en"` → prefix `"Countdown: "`, `"da"` → prefix `"Nedtælling: "`. Any other value (or omitting the argument entirely) renders only the digits — useful when the countdown is meant as a neutral overlay without an explicit label.
 - **Behaviour:** Pushes a live timer onto the slave. The display ticks down once per second in real time, formatted as zero-padded `MM:SS` (e.g. `02:00`, `00:05`). When the timer reaches `00:00` it **holds at zero** until cleared — the operator decides when to advance. Multiple `countdown(...)` calls stack vertically at the top of the slave in the order they were pushed.
 - **Clear semantics:** `clear` (no name), `clearAll`, and the new `clearCountdown` all remove every countdown. `clearText` and `clearImages` deliberately do NOT touch them, so a timer can survive routine text refreshes during the scene.
-- **Output:** Centred horizontally at the top of the canvas (≈ 8 % from the top edge), at the project font size, in the scene's `TextColour` *(2.0.1; white unless set)*.
+- **Output:** Centred horizontally at the top of the canvas (≈ 8 % from the top edge), at the project font size, in the scene's `TextColour` *(white unless set)*.
 - **Example:**
     ```txt
     countdown(300, "da")     # "Nedtælling: 05:00" → ticks to "00:00"
@@ -472,7 +485,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     countdown(60)            # just "01:00"
     ```
 
-### `clearCountdown` *(1.7)*
+### `clearCountdown`
 
 - **Syntax:** `clearCountdown`
 - **Behaviour:** Removes every active countdown. Text, images, particles, and groups are untouched. Use when you want to dismiss a timer without disturbing the rest of the scene.
@@ -483,7 +496,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     clearCountdown
     ```
 
-### `typewrite` *(1.8.2)*
+### `typewrite`
 
 - **Syntax:** `typewrite(MS_PER_CHAR, TEXT)`
 - **Arguments:**
@@ -502,7 +515,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
     typewrite(0, "instant — same as text")
     ```
 
-### `use FONT` / `fontSize N` *(2.1.0)*
+### `use FONT` / `fontSize N`
 
 Change the font or the font size of the text **below** this line in the scene file.
 
@@ -514,7 +527,7 @@ Change the font or the font size of the text **below** this line in the scene fi
 - **Where fonts are found:** a bare file name is looked for in the project's `fonts/` folder, then `font/`, then the project folder, then the shared `FONTS/` folder. A path with a folder in it is taken from the project folder; a full path is used as it is. A font that cannot be found is logged and the scene's font is used instead.
 - **Bold and italic:** a `use` font is one file, so `textbf`, `bold(...)` and friends in it get a computed bold / slant rather than a separate face.
 - **Preloading:** every font and size a scene uses is opened when the scene is entered. Listing the font in `[Preload]` is allowed but not needed.
-- **Bad values:** `fontSize` takes 1 to 1000. Anything else (`fontSize big`) is shown as an ignored comment, changes nothing, and is listed in the Overview popup (`D` → `O`).
+- **Bad values:** `fontSize` takes 1 to 1000. Anything else (`fontSize big`) is shown as an ignored comment, changes nothing, and is listed by the project scanner (`C`).
 - **Example:**
     ```txt
     [Commands]
@@ -527,7 +540,7 @@ Change the font or the font size of the text **below** this line in the scene fi
     text "Back to normal"
     ```
 
-### `comment` *(1.2)*
+### `comment`
 
 - **Syntax:** `comment "TEXT"`
 - **Behaviour:** Displays `# TEXT` in the master navigator as a dimmed row. **Not executable** and **not selectable** — navigation skips over it. Does not consume a line number in the gray index column.
@@ -538,7 +551,7 @@ Change the font or the font size of the text **below** this line in the scene fi
     text "Det er revytid"
     ```
 
-### `macro NAME` *(1.3)*
+### `macro NAME`
 
 - **Syntax:** `macro NAME`
 - **Arguments:** `NAME` — identifier of a block defined under `[Macro]`.
@@ -563,7 +576,7 @@ Change the font or the font size of the text **below** this line in the scene fi
 
 - **Syntax:** `cmd1 & cmd2 & cmd3 ...`
 - **Behaviour:** Executes all parts as a single cue. Occupies one navigator row.
-- **Behaviour:** *(1.8.2)* Only a **structural** `&` separates commands — one that is outside every quoted string and outside every modifier argument list. An `&` in displayed text is literal, so `text "Tom & Jerry"` is one text line. Before 1.8.2 it was split into two bogus commands.
+- **Behaviour:** Only a **structural** `&` separates commands — one that is outside every quoted string and outside every modifier argument list. An `&` in displayed text is literal, so `text "Tom & Jerry"` is one text line.
 - **Example:**
     ```txt
     clear & text "Next slide" & play sting.mp3
@@ -571,7 +584,7 @@ Change the font or the font size of the text **below** this line in the scene fi
     clear & text colour(RED, "Salt & Pepper")  # one separator, one literal
     ```
 
-### `run{ ... }` *(1.2)*
+### `run{ ... }`
 
 - **Syntax:**
     ```txt
@@ -611,7 +624,7 @@ Change the font or the font size of the text **below** this line in the scene fi
     }
     ```
 
-### `group NAME{ ... }` *(1.3)*
+### `group NAME{ ... }`
 
 - **Syntax:**
     ```txt
@@ -620,7 +633,7 @@ Change the font or the font size of the text **below** this line in the scene fi
     }
     ```
 - **Arguments:** `NAME` — identifier used later with `clear NAME`.
-- **Behaviour:** Every command inside the body is parsed just like at the top level — plain lines, `run{}`, `loop(){}`, and `macro NAME` all work — and each one becomes its own navigator row. The group block adds *no* cueing behaviour; its sole effect is to tag every piece of slave content the body produces with the group name. Wrap the body in `run{}` (as in the example below) if you want everything to fire on a single key press. `clear` / `clearText` / `clearImages` leave groups alone; only `clear NAME` or `clearAll` remove them.
+- **Behaviour:** Every command inside the body is parsed just like at the top level — plain lines, `run{}`, `loop(){}`, and `macro NAME` all work — and each one becomes its own navigator row. The group block adds *no* cueing behaviour; its sole effect is to tag every piece of slave content the body produces with the group name. Wrap the body in `run{}` (as in the example below) if you want everything to fire on a single key press. Plain `clear` leaves groups alone; `clearText` and `clearImages` remove grouped text and images too; `clear NAME` removes one group, `clearAll` everything.
 - **Example:**
     ```txt
     group SpinningHearts{
@@ -642,8 +655,7 @@ Change the font or the font size of the text **below** this line in the scene fi
 Modifiers wrap around command arguments. They can be nested freely. For `text` they affect colour/rotation/position/animation; for `show` they additionally affect size and particles.
 
 ### Colours
-
-*(2.0.1)* Every colour in SatyrAV — the `colour(...)` modifier and the `BackgroundColour`, `TextColour` and `SubtitleColour` options — accepts the same values:
+ Every colour in SatyrAV — the `colour(...)` modifier and the `BackgroundColour`, `TextColour` and `SubtitleColour` options — accepts the same values:
 
 | Name | Value | | Name | Value |
 |---|---|---|---|---|
@@ -662,20 +674,20 @@ Modifiers wrap around command arguments. They can be nested freely. For `text` t
 
 - **Arguments:** any [colour](#colours).
 - **Example:** `text colour(RED, "Warning!")`
-- **Example:** `text colour(#FF5500, "Custom colour")` — *(fixed in 1.8.2; before that the `#` was read as a comment marker and the rest of the cue was discarded)*
-- Without `colour(...)`, text uses the scene's [`TextColour`](#options) *(2.0.1)*, which is white unless set.
+- **Example:** `text colour(#FF5500, "Custom colour")`
+- Without `colour(...)`, text uses the scene's [`TextColour`](#options), which is white unless set.
 
 ### `trans(PERCENT, content)`
 
 - **Arguments:** `PERCENT` — 0 (opaque) … 100 (invisible).
 - **Example:** `show trans(50, image.png)`
 
-### `bold(content)` *(1.6.1)*
+### `bold(content)`
 
 - **Behaviour:** Marks a single text segment as bold. Composes with `colour(...)`, `trans(...)`, and `it(...)` like any other modifier — order doesn't matter. Only meaningful on `text` / `textCont` / `textD` runs (or their styled variants); ignored elsewhere.
 - **Example:** `text "Plain " + bold("BANG!") + " then plain again"`
 
-### `it(content)` *(1.6.1)*
+### `it(content)`
 
 - **Behaviour:** Italic counterpart of `bold(...)`. The short name matches the LaTeX-flavoured `\it` spelling and keeps `+` lines compact.
 - **Stacking:** `bold(it("X"))` (or `it(bold("X"))`) renders bold-italic.
@@ -697,7 +709,7 @@ Modifiers wrap around command arguments. They can be nested freely. For `text` t
 - **Behaviour:** Overrides the default "fit inside the targeted rect" sizing for images.
 - **Example:** `show size([200, 150], thumbnail.png)`
 
-### `scale(content, [W, H])` *(1.3)*
+### `scale(content, [W, H])`
 
 - **Arguments:** `content` first, then `[W, H]` in pixels.
 - **Behaviour:** Alias of `size()` with the argument order flipped to match `random()`. Both modifiers set the same underlying dimensions; use whichever order you prefer.
@@ -711,26 +723,26 @@ Modifiers wrap around command arguments. They can be nested freely. For `text` t
 
 ### `particle(TYPE, [INTENSITY,] content)`
 
-- **Arguments:** `TYPE` — `RAIN`, `SNOW`, `CONFETTI`, `RISE`, `SCATTER`, `BROWNIAN` *(1.4)*, `OSCILLATION` *(1.4)*, `ORBIT` *(1.4)*, `NOISE` *(1.4)*, `LIFECURVE` *(1.4)*; `INTENSITY` — 1-100 (default 100).
+- **Arguments:** `TYPE` — `RAIN`, `SNOW`, `CONFETTI`, `RISE`, `SCATTER`, `BROWNIAN`, `OSCILLATION`, `ORBIT`, `NOISE`, `LIFECURVE`; `INTENSITY` — 1-100 (default 100).
 - **Behaviour:** Starts a particle system using the wrapped image (or randomised image via `randomImages()`). Motion model per type:
     - `RAIN` — near-vertical fall, slight X jitter.
     - `SNOW` — slower fall with sinusoidal sway and rotation.
     - `CONFETTI` — medium fall speed with strong rotation.
     - `RISE` — spawns at the bottom and rises.
     - `SCATTER` — radial burst from screen centre, fades with lifetime.
-    - `BROWNIAN` *(1.4)* — spawns anywhere; velocity drifts via random-walk kicks with mild damping. No gravity. Lifetime-linked alpha fade.
-    - `OSCILLATION` *(1.4)* — sinusoidal X around a per-particle anchor column, linear Y descent. Each particle has its own amplitude, frequency, and phase so the swarm doesn't move in lock-step.
-    - `ORBIT` *(1.4)* — circular motion around the screen centre at a random radius and angular velocity per particle. Direction is random (cw/ccw).
-    - `NOISE` *(1.4)* — velocity steered by a 2D value-noise flow field sampled at the particle's position; nearby particles follow similar currents.
-    - `LIFECURVE` *(1.4)* — linear motion with a triangular scale/alpha envelope (grow + fade in, shrink + fade out).
+    - `BROWNIAN` — spawns anywhere; velocity drifts via random-walk kicks with mild damping. No gravity. Lifetime-linked alpha fade.
+    - `OSCILLATION` — sinusoidal X around a per-particle anchor column, linear Y descent. Each particle has its own amplitude, frequency, and phase so the swarm doesn't move in lock-step.
+    - `ORBIT` — circular motion around the screen centre at a random radius and angular velocity per particle. Direction is random (cw/ccw).
+    - `NOISE` — velocity steered by a 2D value-noise flow field sampled at the particle's position; nearby particles follow similar currents.
+    - `LIFECURVE` — linear motion with a triangular scale/alpha envelope (grow + fade in, shrink + fade out).
 - **Example:** `show particle(SNOW, 30, snowflake.png)`
-- **Example (1.4):** `show particle(ORBIT, heart.png)`
+- **Example :** `show particle(ORBIT, heart.png)`
 
-### `trail(N, content)` / `trail(N, MODE, content)` *(1.4, MODE added 1.4.1)*
+### `trail(N, content)` / `trail(N, MODE, content)`
 
 - **Arguments:**
   - `N` — integer count of past frames kept per particle (clamped to 0–64; 0 disables).
-  - `MODE` *(optional, 1.4.1)* — `GHOST` (default), `STRETCH`, or `GLOW`.
+  - `MODE` *(optional)* — `GHOST` (default), `STRETCH`, or `GLOW`.
 - **Behaviour:** Each particle keeps a ring buffer of its last `N` transforms (position, rotation, scale, alpha) plus an `age` per sample. New samples are pushed only after the particle has moved a small distance, so slow particles don't stack copies on themselves. Samples expire when `age` exceeds `max(0.5, N * 0.08)` seconds.
   - `GHOST` — fade-and-shrink past samples behind the live particle (exponential alpha decay + linear age-shrink scale). Default.
   - `STRETCH` — single elongated quad per particle, rotated along the vector from the oldest sample to the live position. Reads as real motion blur. Best with `NOISE`, `OSCILLATION`, `ORBIT`.
@@ -739,13 +751,13 @@ Modifiers wrap around command arguments. They can be nested freely. For `text` t
 - **Example:** `show particle(NOISE, trail(12, STRETCH, star.png))`
 - **Example:** `show particle(ORBIT, trail(20, size([40,40], heart.png)))`
 
-### `trailGlow(N, content)` *(1.4.1)*
+### `trailGlow(N, content)`
 
 - **Arguments:** `N` — same as `trail`.
 - **Behaviour:** Sugar for `trail(N, GLOW, content)`. Past samples are drawn with additive blending so overlapping trails accumulate brightness. Live particle still draws with normal alpha blend.
 - **Example:** `show particle(NOISE, trailGlow(16, star.png))`
 
-### Particle tunables in `[Options]` *(1.4)*
+### Particle tunables in `[Options]`
 
 The scene `[Options]` block accepts per-type tunables using the `<TYPE>.<KEY>` convention. Project-level defaults live under `[Particle.<TYPE>]` tables in `schema.toml`. The cascade is scene → project → built-in defaults, and only fields the author explicitly set override the level below.
 
@@ -753,7 +765,7 @@ The scene `[Options]` block accepts per-type tunables using the `<TYPE>.<KEY>` c
 - `<TYPE>.SPEED = f` — scalar multiplier on spawn velocity (and on angular velocity / oscillation frequency for the formula-driven types). Default `1.0`, clamped to `[0.01, 20]`.
 - `<TYPE>.DENS = f` (or `<TYPE>.DENSITY`) — scalar multiplier on spawn rate. `2.0` doubles the density. Default `1.0`, clamped to `[0.01, 20]`.
 - `<TYPE>.X.DIST = NAME(p1, p2)` — distribution used when picking the spawn X for types that randomise X (`RAIN`, `SNOW`, `CONFETTI`, `RISE`, `BROWNIAN`, `OSCILLATION`, `NOISE`, `LIFECURVE`). Formula-positioned types (`ORBIT`, `SCATTER`) ignore it.
-- `<TYPE>.VX.DIST = NAME(p1, p2)` *(1.5)*, `<TYPE>.VY.DIST = NAME(p1, p2)` *(1.5)* — distributions that reshape how each motion model samples its spawn velocity within its built-in `[vmin, vmax]` range. `NORMAL(0.5, 0.1)` on `RAIN.VY` clusters fall speeds near the range midpoint; the default `UNIFORM` reproduces 1.4 behaviour exactly. Formula-driven types (`ORBIT`, `NOISE`) ignore these; `SCATTER` derives vx/vy from a polar sample and also ignores them. Params are in `[0, 1]` (mapped into the range), matching `X.DIST`.
+- `<TYPE>.VX.DIST = NAME(p1, p2)`, `<TYPE>.VY.DIST = NAME(p1, p2)` — distributions that reshape how each motion model samples its spawn velocity within its built-in `[vmin, vmax]` range. `NORMAL(0.5, 0.1)` on `RAIN.VY` clusters fall speeds near the range midpoint; the default `UNIFORM` reproduces 1.4 behaviour exactly. Formula-driven types (`ORBIT`, `NOISE`) ignore these; `SCATTER` derives vx/vy from a polar sample and also ignores them. Params are in `[0, 1]` (mapped into the range), matching `X.DIST`.
 
 **Distributions:** `UNIFORM` (default), `NORMAL(mean, stddev)`, `LOGNORMAL(mu, sigma)`, `BINOMIAL(n, p)`, `BERNOULLI(p)`, `GAMMA(shape, scale)`. Parameters are in the normalised `[0, 1]` screen-fraction space — e.g. `NORMAL(0.5, 0.1)` clusters spawns around the horizontal centre with ~10 % screen stddev.
 
@@ -763,8 +775,8 @@ The scene `[Options]` block accepts per-type tunables using the `<TYPE>.<KEY>` c
 RAIN.SPEED     = 1.5
 RAIN.DENS      = 2.0
 RAIN.X.DIST    = NORMAL(0.5, 0.1)
-RAIN.VY.DIST   = NORMAL(0.2, 0.1)    # (1.5) slow-skewed rainfall
-SNOW.VX.DIST   = NORMAL(0.5, 0.3)    # (1.5) wider sway
+RAIN.VY.DIST   = NORMAL(0.2, 0.1)    # slow-skewed rainfall
+SNOW.VX.DIST   = NORMAL(0.5, 0.3)    # wider sway
 BROWNIAN.DENS  = 3.0
 NOISE.SPEED    = 2.0
 ```
@@ -777,26 +789,25 @@ Density  = 2.0
 XDist    = "normal"
 XDistP1  = 0.5
 XDistP2  = 0.15
-VYDist   = "normal"    # (1.5)
-VYDistP1 = 0.2
+VYDist   = "normal"    # VYDistP1 = 0.2
 VYDistP2 = 0.1
 ```
 
-### `bounce(BOOL, content)` *(1.4)*
+### `bounce(BOOL, content)`
 
 - **Arguments:** `BOOL` — `true` or `false` (or `1` / `0`).
 - **Behaviour:** When `true`, each particle reflects off the four screen edges. The reflected velocity component loses 20 % energy per hit. Applied uniformly across every particle type, including formula-driven types like `ORBIT`/`OSCILLATION` — for those, bounce acts as a soft clamp.
-- **Gravity + settling (1.5):** Enabling `bounce(true, …)` also switches on a constant downward gravity (≈ 900 px/s²) for every integrating type (`RAIN`, `SNOW`, `CONFETTI`, `RISE`, `SCATTER`, `BROWNIAN`, `OSCILLATION`, `LIFECURVE`). Particles accelerate, bounce off the floor, lose energy each hit, and once both |vx| and |vy| drop below the rest threshold they lock in place — forming a visible pile. Settled particles skip physics but still tick their lifetime, so the pile fades out as droplets expire naturally (use `clear` or `stopParticleCont` to tear it down). `ORBIT` and `NOISE` are formula-driven and gravity does not affect them.
+- **Gravity + settling :** Enabling `bounce(true, …)` also switches on a constant downward gravity (≈ 900 px/s²) for every integrating type (`RAIN`, `SNOW`, `CONFETTI`, `RISE`, `SCATTER`, `BROWNIAN`, `OSCILLATION`, `LIFECURVE`). Particles accelerate, bounce off the floor, lose energy each hit, and once both |vx| and |vy| drop below the rest threshold they lock in place — forming a visible pile. Settled particles skip physics but still tick their lifetime, so the pile fades out as droplets expire naturally (use `clear` or `stopParticleCont` to tear it down). `ORBIT` and `NOISE` are formula-driven and gravity does not affect them.
 - **Example:** `show particle(BROWNIAN, bounce(true, heart.png))`
-- **Example (1.5):** `show particle(RAIN, 50, bounce(true, droplet.png))` — droplets accelerate, bounce off the floor, and pile up.
+- **Example :** `show particle(RAIN, 50, bounce(true, droplet.png))` — droplets accelerate, bounce off the floor, and pile up.
 
 ### `randomImages([LIST])` and `randomImages(FOLDER)`
 
 - **Arguments:** a comma-separated list, or a folder name under `pictures/`.
-- **Behaviour (1.3):** Each particle spawn picks a *new* random image from the list/folder, so a rain of `randomImages(professorPhotos)` drops many different photos, not the same one repeatedly.
+- **Behaviour :** Each particle spawn picks a *new* random image from the list/folder, so a rain of `randomImages(professorPhotos)` drops many different photos, not the same one repeatedly.
 - **Example:** `show particle(RAIN, 50, randomImages(professorPhotos))`
 
-### `move(FROM, TO, DURATION_MS, content)` *(1.2)*
+### `move(FROM, TO, DURATION_MS, content)`
 
 - **Arguments:**
     - `FROM` / `TO` — either `[X, Y]` percent coords or a side letter (`N`, `S`, `E`, `W`) meaning "just off that edge of the targeted rect".
@@ -804,7 +815,7 @@ VYDistP2 = 0.1
 - **Behaviour:** Linear slide from `FROM` to `TO` over the duration, then static.
 - **Example:** `show move(W, [50,50], 800, logo.png)`
 
-### `pathMove(P1, P2, …, PN, DURATION_MS [, MODE], content)` *(1.8.3)*
+### `pathMove(P1, P2, …, PN, DURATION_MS [, MODE], content)`
 
 - **Arguments:**
     - `P1 … PN` — two or more waypoints, each in `move()`'s endpoint vocabulary: `[X, Y]` percent coords or a side letter (`N`, `S`, `E`, `W`).
@@ -824,10 +835,10 @@ VYDistP2 = 0.1
     show pathMove(W, [50,50], E, 2500, logo.png)                  # in from the left, out to the right
     ```
 
-### `layer(N, content)` *(1.8.3)*
+### `layer(N, content)`
 
 - **Arguments:** `N` — integer draw order. Higher numbers draw **in front**; negative values are legal and sit behind unlayered content.
-- **Behaviour:** Controls the depth of images relative to each other. The default is `0`, and images on the same layer keep the order they were shown in — so a scene that never mentions `layer()` renders exactly as it did before 1.8.3, with the most recent `show` on top.
+- **Behaviour:** Controls the depth of images relative to each other. The default is `0`, and images on the same layer keep the order they were shown in — so without `layer()` the most recent `show` is on top.
 - **Scope:** Images only. `layer()` on `text` or on a particle system parses but has no effect — text is always drawn above the image layer.
 - **Example:**
     ```txt
@@ -837,7 +848,7 @@ VYDistP2 = 0.1
     show layer(5, curtain.png)     # same layer — ties break by show order, so this is on top of foreground
     ```
 
-### `spin(DEG_PER_SEC, content)` *(1.2)*
+### `spin(DEG_PER_SEC, content)`
 
 - **Arguments:** `DEG_PER_SEC` — positive = clockwise, negative = counter-clockwise.
 - **Behaviour:** Continuously rotates the content. Composes additively with `rotate()` (the static angle is the initial offset).
@@ -853,7 +864,7 @@ show move(N, [50,50], 800, spin(180, logo.png))
 show particle(RAIN, 50, random(heart.png, [50,50], [200,200], true))
 ```
 
-### `+` concatenation *(1.4)*
+### `+` concatenation
 
 - **Syntax:** `text SEGMENT + SEGMENT + ...` (also works inside `textCont`).
 - **Arguments:** each `SEGMENT` is any expression you would otherwise pass to `text` — a bare quoted string, or a modifier chain wrapping one.
@@ -873,11 +884,11 @@ show particle(RAIN, 50, random(heart.png, [50,50], [200,200], true))
 
 - `\n` inside a quoted `text` string produces a new text entry.
 - `#` starts a line/end-of-line comment — everything after it on the line is discarded. Two exceptions, both cases where the `#` is data rather than a comment marker:
-    - *(1.6.6)* `#` inside a quoted string is kept verbatim, so `text "Item #1"` renders the `#` literally.
-    - *(1.8.2)* `#` **inside a modifier argument list** (i.e. between `(` and its matching `)`) is kept verbatim, so `text colour(#FF5500, "Warm")` passes the hex colour through. Parentheses are only counted outside strings, so a `)` in displayed text — `text "smile :)"` — cannot confuse the rule. A comment that merely starts with something hex-shaped, such as `#FFFFFF looks nice`, is still a comment.
+    - `#` inside a quoted string is kept verbatim, so `text "Item #1"` renders the `#` literally.
+    - `#` **inside a modifier argument list** (i.e. between `(` and its matching `)`) is kept verbatim, so `text colour(#FF5500, "Warm")` passes the hex colour through. Parentheses are only counted outside strings, so a `)` in displayed text — `text "smile :)"` — cannot confuse the rule. A comment that merely starts with something hex-shaped, such as `#FFFFFF looks nice`, is still a comment.
 - Blank lines are ignored.
 
-## LaTeX symbols *(1.8.2)*
+## LaTeX symbols
 
 Displayed text accepts LaTeX-style macros for Greek letters and common mathematical symbols. They are expanded at parse time, so the master navigator, the word-wrap, and the slave all deal in real characters. Expansion applies to every text-bearing command — `text` and its styled/`Cont` variants, both sides of `textD`, `typewrite`, each segment of a `+` concatenation, and `comment` rows — but **never** to filenames, group names, or section keys.
 
@@ -919,7 +930,7 @@ This is a lookup table, not a LaTeX engine:
 - **`\omicron` is a deliberate addition.** LaTeX omits it (omicron is visually identical to Latin `o`); SatyrAV accepts it because a scene author looking for a Greek letter should not have to know that.
 - **Fonts:** every symbol above is present in all four bundled DejaVu faces (regular, bold, oblique, bold-oblique). A custom `Font` in `[Options]` without these glyphs will render boxes instead.
 
-## Quoting rules *(1.7)*
+## Quoting rules
 
 Every quoted argument in scene files accepts **three interchangeable delimiter pairs**:
 

@@ -37,15 +37,21 @@ InputAction InputHandler::Poll(SDL_Event& event){
 	}
 
 	if(event.type == SDL_EVENT_KEY_DOWN){
-		return TranslateKey(event.key.key, event.key.mod);
+		return TranslateKey(event.key.key, event.key.scancode, event.key.mod);
 	}
 
 	return InputAction::None;
 }
 
-InputAction InputHandler::TranslateKey(SDL_Keycode key, uint16_t mod){
+InputAction InputHandler::TranslateKey(SDL_Keycode key, SDL_Scancode scancode, uint16_t mod){
 	bool shift = (mod & SDL_KMOD_SHIFT) != 0;
 	bool ctrl  = (mod & SDL_KMOD_CTRL) != 0;
+
+	// Seek keys go by physical key; see KeyBindings.hpp.
+	if(scancode == Keys::SEEK_BACK){
+		return shift ? InputAction::RestartVideo : InputAction::SeekBack;
+	}
+	if(scancode == Keys::SEEK_FORWARD && !shift) return InputAction::SeekForward;
 
 	if(key == Keys::NAV_UP){
 		if(ctrl)  return InputAction::JumpTop;

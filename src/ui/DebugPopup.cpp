@@ -142,7 +142,7 @@ void DebugPopup::Draw(Renderer& r, TextRenderer& text){
 	// (1.6) Footer hint — sub-menus reachable from this popup.
 	int footerY = boxY + totalH - lineH - 10;
 	text.DrawTextCentered(renderer,
-		"Press S: Display rect    O: Overview Debug",
+		"Press S: Display rect    O: Project scanner (also C)",
 		boxX + totalW / 2, footerY, dim);
 }
 

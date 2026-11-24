@@ -2,6 +2,9 @@
 #include "screens/Screen.hpp"
 #include "ui/TextField.hpp"
 #include "ui/Dropdown.hpp"
+#include <memory>
+#include <mutex>
+#include <string>
 #include <vector>
 
 namespace SatyrAV{
@@ -39,10 +42,28 @@ private:
 
 	// (2.1.0) Clock and stopwatches on the master window: Off / On.
 	Dropdown showClockDropdown;
+	// Show log and per-act .srt / .ass: Off / On.
+	Dropdown showLogDropdown;
+
+	// Native folder dialog for the projects directory, opened with ENTER on
+	// that field. SDL may answer on another thread, and after this screen
+	// has been left, so the answer goes into a shared, locked slot that
+	// Update() picks up on the main thread.
+	struct FolderPick{
+		std::mutex mtx;
+		bool open = false;     // a dialog is showing
+		bool ready = false;    // `path` holds a new choice
+		std::string path;
+		std::string error;     // set if the dialog could not be shown
+	};
+	std::shared_ptr<FolderPick> folderPick = std::make_shared<FolderPick>();
+	std::string folderPickStatus; // shown beside the field
+	void OpenFolderDialog();
+	static void SDLCALL OnFolderChosen(void* userdata,
+		const char* const* filelist, int filter);
 
 	int focusedField = 0;
-	// (1.6.3) +1 for the audio device dropdown. (2.1.0) +1 for the clock.
-	static constexpr int FIELD_COUNT = 9; // 8 fields + save button
+	static constexpr int FIELD_COUNT = 10; // 9 fields + save button
 
 	void SaveConfig();
 	void UpdateFocus();

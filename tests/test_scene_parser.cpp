@@ -296,7 +296,7 @@ TEST_CASE("textbf and textit set the style on every run"){
 }
 
 TEST_CASE("Line-level style ORs with inline style"){
-	// Documented in scene-format.md: `textbf "A " + it("B")` renders A bold
+	// Documented in docs/dev/scene-format.md: `textbf "A " + it("B")` renders A bold
 	// and B bold-italic.
 	auto cmd = ParseOneCommand("textbf \"A \" + it(\"B\")");
 	REQUIRE(cmd.runs.size() == 2);
@@ -1182,7 +1182,7 @@ TEST_CASE("CRLF scene files"){
 	//
 	// The assertions below therefore differ per platform *on purpose* —
 	// they document the real behaviour rather than an aspiration. See the
-	// note in docs/scene-format.md.
+	// note in docs/dev/scene-format.md.
 	auto scene = ParseScene("[Commands]\r\nclear\r\ntext \"a\"\r\n");
 #ifdef _WIN32
 	REQUIRE(scene.commands.size() == 2);

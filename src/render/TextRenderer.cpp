@@ -346,6 +346,26 @@ void TextRenderer::SetSlaveFontPaths(const std::string& regular,
 
 int TextRenderer::GetSlaveFontSize() const{ return slaveFontSize; }
 
+std::string TextRenderer::FontFamilyName(const std::string& fontPath) const{
+	if(fontPath.empty()) return "DejaVu Sans"; // the bundled default
+	auto it = familyNames.find(fontPath);
+	if(it != familyNames.end()) return it->second;
+
+	std::string name;
+	if(TTF_Font* f = TTF_OpenFont(fontPath.c_str(), 12)){
+		if(const char* fam = TTF_GetFontFamilyName(f)) name = fam;
+		TTF_CloseFont(f);
+	}
+	if(name.empty()){
+		const size_t slash = fontPath.find_last_of("/\\");
+		name = slash == std::string::npos ? fontPath : fontPath.substr(slash + 1);
+		const size_t dot = name.find_last_of('.');
+		if(dot != std::string::npos && dot > 0) name = name.substr(0, dot);
+	}
+	familyNames[fontPath] = name;
+	return name;
+}
+
 int TextRenderer::GetSlaveLineHeight() const{
 	int raw = slaveLineHeight > 0 ? slaveLineHeight : lineHeight;
 	return (int)(raw * slaveScale);

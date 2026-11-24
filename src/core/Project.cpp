@@ -139,7 +139,7 @@ void Project::GenerateDefaultSchema(const std::string& path, const ProjectData& 
 # ============================================================
 # Every option is listed at its default value. Scene [Options] in a
 # .ngk file override these for that scene only; see the cascade table
-# in docs/project-structure.md.
+# in docs/howto/options.md.
 
 )NGK";
 
@@ -259,7 +259,7 @@ void Project::GenerateExampleScenes(const std::string& scenesDir){
 # =============================================
 # Every non-comment line under [Commands] is one cue. Press ENTER to
 # fire the next one. Anything after a # is a comment and never runs.
-# Full command reference: docs/commands.md
+# How to write scenes: docs/howto/scene.md
 
 [Options]
 # BackgroundColour = blue  # Overrides the project BackgroundColour

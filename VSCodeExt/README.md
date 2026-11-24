@@ -4,20 +4,20 @@ Syntax highlighting for SatyrAV scene files (`.ngk`).
 
 Highlights:
 
-- Section headers — `[Options]`, `[Preload]`, `[Macro]`, `[Cue]`, `[Commands]`, `[Backstage]` *(0.4.2, any case)*, and the `schema.toml` tables `[Hotkeys]`, `[RevyData]`, `[Structure]`, `[Display]`, `[Particle.<TYPE>]`.
+- Section headers — `[Options]`, `[Preload]`, `[Macro]`, `[Cue]`, `[Commands]`, `[Backstage]` *(0.4.2, any case)*, `[Animation]` / `[Animations]` *(0.5.0, any case)*, and the `schema.toml` tables `[Hotkeys]`, `[RevyData]`, `[Structure]`, `[Display]`, `[Particle.<TYPE>]`.
 - Command keywords — `text`, `textCont`, `textbf`, `textit`, `textbfCont`, `textitCont`, `textD`, `typewrite`, `clear`, `clearText`, `clearImages`, `clearAll`, `clearCountdown`, `play`, `stop`, `stopParticleCont`, `show`, `comment`, `countdown`.
+- Font rows *(0.5.0)* — `use FONT` / `use default` and `fontSize N` / `fontSize default`.
+- `[Animation]` keys *(0.5.0)* — `show`, `text`, `path`, `duration`, `repeat` (and `forever`), `for`, `every`, `randomX`, `randomY`, `layer`, `size`.
 - Modifier wrappers — `colour(...)`, `trans(...)`, `rotate(...)`, `move(...)`, `pathMove(...)`, `spin(...)`, `pos(...)`, `size(...)`, `scale(...)`, `layer(...)`, `particle(...)`, `random(...)`, `randomImages(...)`, `randomSize(...)`, `bold(...)`, `it(...)`, `trail(...)`, `trailGlow(...)`, `bounce(...)`.
 - Block keywords — `group NAME{...}`, `loop(count, every){...}`, `run{...}` *(0.4.0)*, and `macro NAME` calls *(0.4.0)*.
-- `[Options]` keys *(0.4.0; any case from 0.4.1)* — `BackgroundColour`, `TextColour` *(0.4.1)*, `FontSize`, `TextOutline`, `Font`, `FontItalic`, `FontBold`, `FontBoldItalic`, `Capitalize`, `AudioFade`, `FixedTextCentre` *(0.4.2)*, and the `Subtitle*` keys. The older spellings that SatyrAV still accepts are highlighted too.
+- `[Options]` keys *(0.4.0; any case from 0.4.1)* — `BackgroundColour`, `TextColour` *(0.4.1)*, `FontSize`, `TextOutline`, `Font`, `FontItalic`, `FontBold`, `FontBoldItalic`, `Capitalize`, `AudioFade`, `FixedTextCentre` *(0.4.2)*, `DisableTextOutline` and `TransparentBackground` *(0.5.0)*, and the `Subtitle*` keys. The older spellings that SatyrAV still accepts are highlighted too. Hex colour values (`TextColour = #FF8800`) are no longer shown as comments *(0.5.0)*.
+- Particle tunables in `[Options]` *(0.5.0)* — `RAIN.SPEED`, `SNOW.VY.DIST` and the rest, any case.
+- `\Name` cue references at the end of a command *(0.5.0)*.
 - `[Backstage]` keys *(0.4.2)* — `Name`, `ExpectedTime`, `Actors`, `Ninjas` in a scene; `Url`, `Enabled` in `schema.toml`.
 - Particle / distribution constants — `RAIN`, `SNOW`, `CONFETTI`, `RISE`, `SCATTER`, `BROWNIAN`, `OSCILLATION`, `ORBIT`, `NOISE`, `LIFECURVE`, `GHOST`, `STRETCH`, `GLOW`, `UNIFORM`, `NORMAL`, `LOGNORMAL`, `BINOMIAL`, `BERNOULLI`, `GAMMA`.
 - String literals — `"..."`, `'...'`, and `´...´` *(1.7)* — numbers, line comments (`# ...`).
 
-Not highlighted: the per-particle tunables in `[Options]` (`RAIN.SPEED = …`) and `\Name` cue references.
-
-Syntax highlighting only — extension version **0.4.2**, current as of SatyrAV **2.0.2**. Auto-completion, diagnostics, and snippets are intentionally deferred to a later cycle.
-
-> The `satyrav-ngk-0.1.0.vsix` file in this folder is an **old build** and does not contain the current grammar. Use option 1 below, or build a fresh `.vsix` with option 3.
+Syntax highlighting only — extension version **0.5.0**, current as of SatyrAV **2.1.0**. Auto-completion, diagnostics, and snippets are intentionally deferred to a later cycle.
 
 ## Install — option 1: copy folder (no tooling needed) ★ recommended
 
@@ -26,13 +26,13 @@ VSCode auto-loads any folder dropped into its `extensions` directory. No npm, no
 **Windows (cmd or PowerShell):**
 
 ```cmd
-xcopy /E /I /Y VSCodeExt %USERPROFILE%\.vscode\extensions\satyrav-ngk-0.4.2
+xcopy /E /I /Y VSCodeExt %USERPROFILE%\.vscode\extensions\satyrav-ngk-0.5.0
 ```
 
 **Linux / WSL / macOS:**
 
 ```bash
-cp -r VSCodeExt ~/.vscode/extensions/satyrav-ngk-0.4.2
+cp -r VSCodeExt ~/.vscode/extensions/satyrav-ngk-0.5.0
 ```
 
 Restart VSCode. Open any `.ngk` file — the grammar will be active.
@@ -56,8 +56,8 @@ Useful while editing the grammar — `Ctrl+R` reloads the host window so you see
 ```bash
 cd VSCodeExt
 npm install -g @vscode/vsce
-vsce package          # produces satyrav-ngk-0.4.2.vsix in this folder
-code --install-extension ./satyrav-ngk-0.4.2.vsix
+vsce package          # produces satyrav-ngk-0.5.0.vsix in this folder
+code --install-extension ./satyrav-ngk-0.5.0.vsix
 ```
 
 **Stick with Node 18** by pinning `vsce` to the last Node-18-compatible release:
@@ -66,10 +66,10 @@ code --install-extension ./satyrav-ngk-0.4.2.vsix
 cd VSCodeExt
 sudo npm install -g @vscode/vsce@2.32.0
 vsce package
-code --install-extension ./satyrav-ngk-0.4.2.vsix
+code --install-extension ./satyrav-ngk-0.5.0.vsix
 ```
 
-> If the `code --install-extension` step prints `ENOENT: no such file or directory`, it means `vsce package` didn't actually produce the `.vsix` — check the previous command's output. From WSL, prefix the path with `./` (or use the absolute Windows path: `code --install-extension "C:\Users\you\…\satyrav-ngk-0.4.2.vsix"`).
+> If the `code --install-extension` step prints `ENOENT: no such file or directory`, it means `vsce package` didn't actually produce the `.vsix` — check the previous command's output. From WSL, prefix the path with `./` (or use the absolute Windows path: `code --install-extension "C:\Users\you\…\satyrav-ngk-0.5.0.vsix"`).
 
 For most people, **option 1 is the path of least resistance** — it's a single copy with no toolchain. Use option 3 only if you want a redistributable `.vsix` to share.
 

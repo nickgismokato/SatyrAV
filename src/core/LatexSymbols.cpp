@@ -52,7 +52,7 @@ static const std::unordered_map<std::string, uint32_t>& SymbolTable(){
 		// ── Greek, lower case ────────────────────────────────
 		// LaTeX's \epsilon and \phi are the lunate/closed forms; the
 		// familiar ε and φ are \varepsilon and \varphi. That trips people
-		// up, so both spellings are listed in docs/commands.md.
+		// up, so both spellings are listed in docs/dev/commands.md.
 		{"alpha",   0x3B1}, {"beta",    0x3B2}, {"gamma",   0x3B3},
 		{"delta",   0x3B4}, {"epsilon", 0x3F5}, {"zeta",    0x3B6},
 		{"eta",     0x3B7}, {"theta",   0x3B8}, {"iota",    0x3B9},

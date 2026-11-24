@@ -46,6 +46,7 @@ void Config::Load(const std::string& path){
 		captureEnabled      = tbl["display"]["capture_enabled"].value_or(false);
 		captureDisplayIndex = tbl["display"]["capture_display"].value_or(0);
 		showClock           = tbl["display"]["show_clock"].value_or(false);
+		showLogEnabled      = tbl["showlog"]["enabled"].value_or(false);
 		projectsDir    = tbl["paths"]["projects"].value_or(std::string(""));
 		lastProject    = tbl["paths"]["last_project"].value_or(std::string(""));
 		fontsDir       = tbl["paths"]["fonts"].value_or(std::string(""));
@@ -92,6 +93,8 @@ void Config::Save(const std::string& path){
 	out << "capture_enabled = " << (captureEnabled ? "true" : "false") << "\n";
 	out << "capture_display = " << captureDisplayIndex << "\n";
 	out << "show_clock = " << (showClock ? "true" : "false") << "\n\n";
+	out << "[showlog]\n";
+	out << "enabled = " << (showLogEnabled ? "true" : "false") << "\n\n";
 	out << "[paths]\n";
 	out << "projects = '" << projectsDir << "'\n";
 	out << "last_project = '" << lastProject << "'\n";

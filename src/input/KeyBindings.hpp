@@ -18,13 +18,26 @@ namespace Keys{
 	constexpr SDL_Keycode DEBUG          = SDLK_D;
 	constexpr SDL_Keycode RELOAD_SCENES  = SDLK_U;
 	// (2.0.1) Mark the last executed cue in the project's fix-it log.
-	// D then O (debug popup open) is still the Overview popup; App
+	// D then O (debug popup open) opens the project scanner instead; App
 	// handles that chord before the key reaches a screen.
 	constexpr SDL_Keycode MARK_LINE      = SDLK_O;
 	// (2.1.0) Wipe the slave, like a `clearAll` that is always available.
 	// Only outside text-input mode: while typing, BACKSPACE deletes a
 	// character (InputHandler checks text mode first).
 	constexpr SDL_Keycode CLEAR_SCREEN   = SDLK_BACKSPACE;
+	// Open / close the project scanner (in a project). Handled by App,
+	// like the debug popup's chords, before the key reaches a screen.
+	constexpr SDL_Keycode SCANNER        = SDLK_C;
+
+	// Video seek: `,` back, `.` forward, SHIFT+`,` restart from the
+	// beginning (shifted so it can't be hit by accident). These are matched
+	// by *scancode*, the physical key: SDL3 keycodes follow the layout and
+	// the shift state, so SHIFT+`,` arrives as `;` on a Danish keyboard and
+	// `<` on a US one. Comma and period sit on the same physical keys in
+	// both layouts.
+	constexpr SDL_Scancode SEEK_BACK     = SDL_SCANCODE_COMMA;
+	constexpr SDL_Scancode SEEK_FORWARD  = SDL_SCANCODE_PERIOD;
+	constexpr double SEEK_STEP_SECONDS   = 5.0;
 }
 
 } // namespace SatyrAV

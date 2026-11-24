@@ -84,6 +84,12 @@ public:
 	// `[display] show_clock` in config.toml, a toggle in Options.
 	bool showClock = false;
 
+	// Write the show log (.log) and the per-act subtitles (.srt / .ass)
+	// in the project's showlog/ folder while a show runs. Off by default:
+	// only wanted for shows that are recorded. `[showlog] enabled` in
+	// config.toml, a toggle in Options.
+	bool showLogEnabled = false;
+
 private:
 	Config() = default;
 };

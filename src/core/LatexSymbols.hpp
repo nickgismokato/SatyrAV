@@ -24,7 +24,7 @@ namespace SatyrAV{
 //     almost always what the author meant. Write `\alpha\beta` (no
 //     separator needed) when two symbols should touch.
 //
-// The recognised set is documented in docs/commands.md.
+// The recognised set is documented in docs/dev/commands.md.
 std::string ExpandLatexSymbols(const std::string& text);
 
 } // namespace SatyrAV

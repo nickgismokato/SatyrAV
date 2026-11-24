@@ -99,7 +99,7 @@ static size_t FindStructural(const std::string& line, char target, size_t from =
 }
 
 // Start of a `#` line comment, or npos. See FindStructural.
-static size_t FindCommentStart(const std::string& line){
+size_t FindCommentStart(const std::string& line){
 	return FindStructural(line, '#');
 }
 
@@ -111,7 +111,7 @@ static size_t FindCommentStart(const std::string& line){
 // Only a `#` that starts the value and is followed by exactly 3 or 6 hex
 // digits is protected. A later `#` still starts a comment
 // (`bc = #102030   # warm blue`), and so does any `#` before the `=`.
-static size_t FindOptionCommentStart(const std::string& line){
+size_t FindOptionCommentStart(const std::string& line){
 	const size_t eq = line.find('=');
 	if(eq != std::string::npos &&
 	   FindStructural(line.substr(0, eq), '#') == std::string::npos){
@@ -281,7 +281,7 @@ static bool ParseDistSpec(const std::string& raw, DistSpec& out){
 
 // (1.4) Strict lookup — returns false on unknown name instead of defaulting
 // to Rain. Used by the [Options] parser to reject typos.
-static bool ParseParticleTypeStrict(const std::string& s, ParticleType& out){
+bool ParseParticleTypeStrict(const std::string& s, ParticleType& out){
 	std::string lower = s;
 	std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 	if(lower == "rain")             { out = ParticleType::Rain;        return true; }
@@ -728,7 +728,7 @@ static std::vector<std::string> SplitPlus(const std::string& s){
 // land on the run; line-level fields (pos, move, spin, rotate, size, random,
 // particle) fold into the shared lineMods — **leftmost wins** when two
 // segments both try to set the same line-level field. The rule is documented
-// in docs/commands.md under the `+` operator.
+// in docs/dev/commands.md under the `+` operator.
 static std::vector<TextRun> ParseTextRuns(const std::string& argRaw,
 	RenderModifiers& lineMods){
 	std::vector<TextRun> runs;
@@ -953,7 +953,7 @@ static Command ParseSingleCommand(const std::string& line, int lineNumber){
 		cmd.type = CommandType::Text;
 		// (1.6.3) Heuristic: a leading bareword (no quote, no `+`, no
 		// `#`) that didn't match any keyword is almost certainly a typo
-		// — flag it so the Overview Debug popup can surface it. Strings
+		// — flag it so the project scanner can surface it. Strings
 		// that genuinely start with text (quoted or with leading non-
 		// alpha) skip this path and behave as before.
 		// *(1.7)* Also let `´…´` through (UTF-8 0xC2 0xB4) so the new
@@ -1971,7 +1971,7 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 	}
 
 	// (1.6.3) Lift any per-command `unknownKeyword` markers into the
-	// scene's warnings list so Overview Debug can render them without
+	// scene's warnings list so the project scanner can render them without
 	// re-walking commands. Done after parsing so deeply-nested commands
 	// (compound bodies, loop bodies, group bodies) all get covered by
 	// recursing through subCommands and loopBody.

@@ -7,7 +7,7 @@ void HelpPopup::Draw(Renderer& r, TextRenderer& text){
 	if(!visible) return;
 
 	int lineH = text.GetLineHeight() + 2;
-	int lines = inProject ? 22 : 14;
+	int lines = inProject ? 25 : 14;
 	int contentH = lines * lineH + 60;
 	int contentW = 520;
 
@@ -40,9 +40,12 @@ void HelpPopup::Draw(Renderer& r, TextRenderer& text){
 		text.DrawText(renderer, "  CTRL+UP        Jump to top", x, y, txt); y += lineH;
 		text.DrawText(renderer, "  CTRL+DOWN      Jump to bottom", x, y, txt); y += lineH;
 		text.DrawText(renderer, "  K              Toggle video pause", x, y, txt); y += lineH;
+		text.DrawText(renderer, "  , / .          Video back / forward 5 seconds", x, y, txt); y += lineH;
+		text.DrawText(renderer, "  SHIFT+,        Restart video from the beginning", x, y, txt); y += lineH;
 		text.DrawText(renderer, "  M              Toggle music pause", x, y, txt); y += lineH;
 		text.DrawText(renderer, "  U              Reload scene files from disk", x, y, txt); y += lineH;
 		text.DrawText(renderer, "  O              Mark last cue's line in fix-it log", x, y, txt); y += lineH;
+		text.DrawText(renderer, "  C              Project scanner: mistakes, missing files", x, y, txt); y += lineH;
 		text.DrawText(renderer, "  BACKSPACE      Clear the slave (same as clearAll)", x, y, txt); y += lineH;
 		text.DrawText(renderer, "  F1-F12         Project audio hotkeys ([Hotkeys] in schema)", x, y, txt); y += lineH;
 	} else{

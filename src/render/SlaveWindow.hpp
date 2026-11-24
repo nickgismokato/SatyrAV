@@ -59,6 +59,11 @@ struct SlaveImageEntry{
 	float spawnTimeSec = 0.0f;
 	float currentSpin  = 0.0f;
 	std::string groupName;
+	// The file shown, for the subtitles' picture cues; empty when unknown.
+	std::string source;
+	// Unique per `show`, so the subtitles can tell two shows of the same
+	// file apart. Set by InsertImageByLayer.
+	uint64_t id = 0;
 
 	// (1.4) Animated GIF playback. When `frames` is non-empty, `tex` is
 	// ignored and the draw path picks `frames[frameIdx]` instead, wrapping
@@ -148,13 +153,14 @@ public:
 	// scene can stack multiple `show` calls on screen. `clear` /
 	// `clearImages` still drop every ungrouped image at once.
 	void ShowImage(SDL_Texture* tex, int w, int h, const RenderModifiers& mods,
-		const std::string& groupName = "");
+		const std::string& groupName = "", const std::string& source = "");
 	// (1.4) Animated GIF variant. `frames` and `delaysMs` must be the same
 	// length; the entry cycles through frames by wall time at draw. Pointers
 	// are borrowed (owned by MediaCache) and must outlive the entry.
 	void ShowAnimation(const std::vector<SDL_Texture*>& frames,
 		const std::vector<int>& delaysMs, int w, int h,
-		const RenderModifiers& mods, const std::string& groupName = "");
+		const RenderModifiers& mods, const std::string& groupName = "",
+		const std::string& source = "");
 	// Remove ungrouped images.
 	void ClearImage();
 	// Remove every image entry regardless of group.
@@ -201,6 +207,10 @@ public:
 	void StartCountdown(int seconds, const std::string& label);
 	void ClearCountdowns();
 
+	// Read-only views of what is on screen, for the show log's subtitles.
+	const std::vector<SlaveTextEntry>&  GetTextEntries()  const{ return textEntries; }
+	const std::vector<SlaveImageEntry>& GetImageEntries() const{ return imageEntries; }
+
 private:
 	std::vector<SlaveTextEntry> textEntries;
 	Colour bgColour = Colours::BLACK;
@@ -216,6 +226,7 @@ private:
 	// (1.8.3) Kept sorted by `mods.layer`, ties in push order — see
 	// InsertImageByLayer. The draw loop iterates it front-to-back as-is.
 	std::vector<SlaveImageEntry> imageEntries;
+	uint64_t nextImageId = 1;
 	void InsertImageByLayer(SlaveImageEntry&& entry);
 
 	// Active particle systems, each with its own group tag.

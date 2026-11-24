@@ -300,7 +300,7 @@ struct RenderModifiers{
 	// The default of 0 with ties broken by push order reproduces the
 	// pre-1.8.3 behaviour exactly — the most recent `show` sits on top.
 	// Negative values are legal and push an image behind the unlayered
-	// ones. Ignored by text and particles; see `layer()` in commands.md.
+	// ones. Ignored by text and particles; see `layer()` in docs/dev/commands.md.
 	int layer = 0;
 
 	// ── Animation: SPIN ──────────────────────────────────────
@@ -394,7 +394,7 @@ struct Command{
 	// (1.6.3) Set to the offending keyword when the parser fell through to
 	// `Text` because it didn't recognise the leading bareword. Empty when
 	// the command was either real text (started with a quote / `+`) or a
-	// recognised keyword. The Overview Debug popup walks scenes and lifts
+	// recognised keyword. The project scanner walks scenes and lifts
 	// this into the warnings list so authors can spot typos.
 	std::string unknownKeyword;
 
@@ -563,7 +563,7 @@ struct Scene{
 
 	// (1.6.3) Parser warnings raised while reading this scene's `.ngk`.
 	// Populated for unknown keywords and other recoverable issues so the
-	// Overview Debug popup can surface them. Empty on a clean parse.
+	// project scanner can surface them. Empty on a clean parse.
 	struct Warning{
 		int lineNumber = 0;
 		std::string message;

@@ -3,6 +3,8 @@
 #include "core/Config.hpp"
 #include "core/Logger.hpp"
 #include "core/TextPlan.hpp"
+#include "core/ProjectPaths.hpp"
+#include "input/KeyBindings.hpp"
 #include <filesystem>
 #include <random>
 #include <functional>
@@ -11,14 +13,7 @@
 namespace SatyrAV{
 
 static std::string ResolvePath(const std::string& base, const std::string& arg){
-	std::string fullPath = base + "/" + arg;
-	if(std::filesystem::exists(fullPath)) return fullPath;
-	const char* SUBDIRS[] = {"pictures", "movies", "sound", nullptr};
-	for(int i = 0; SUBDIRS[i]; i++){
-		std::string tryPath = base + "/" + SUBDIRS[i] + "/" + arg;
-		if(std::filesystem::exists(tryPath)) return tryPath;
-	}
-	return fullPath;
+	return ProjectPaths::ResolveMedia(base, arg);
 }
 
 void PerformanceScreen::OnEnter(){
@@ -146,6 +141,9 @@ void PerformanceScreen::HandleInput(InputAction action){
 			if(markStatusOk) LogEvent("O: " + markStatus);
 			break;
 		case InputAction::ClearScreen: ClearScreen(); break;
+		case InputAction::SeekBack:     SeekVideoKey(-Keys::SEEK_STEP_SECONDS, ","); break;
+		case InputAction::SeekForward:  SeekVideoKey(Keys::SEEK_STEP_SECONDS, "."); break;
+		case InputAction::RestartVideo: SeekVideoKey(0.0, "SHIFT+,", true); break;
 		case InputAction::FunctionKey:{
 			// (1.6.3) F1..F12 audio hotkey. Same key pressed twice while
 			// the same hotkey audio is still playing → stop (toggle).
@@ -186,6 +184,7 @@ void PerformanceScreen::Update(float dt){
 	deltaTime = dt;
 	media.Update();
 	UpdateAnimations();
+	UpdateShowLogMedia();
 	UpdateDebugInfo();
 }
 
@@ -388,13 +387,19 @@ void PerformanceScreen::PreloadForCurrentScene(){
 		return ext == ".mp4" || ext == ".avi" || ext == ".mkv" ||
 			ext == ".webm" || ext == ".mov";
 	};
+	// Into `&` / run{} (subCommands) too: a video started together with
+	// other things on one cue was otherwise never preloaded.
+	std::function<void(const Command&, std::vector<std::string>&)> collectCmd =
+		[&](const Command& cmd, std::vector<std::string>& out){
+		if(cmd.type == CommandType::Play && IsVideoExt(cmd.argument)){
+			out.push_back(ResolvePath(projectBasePath, cmd.argument));
+		}
+		for(const auto& sub : cmd.subCommands) collectCmd(sub, out);
+		for(const auto& sub : cmd.loopBody)    collectCmd(sub, out);
+	};
 	auto CollectVideoPaths = [&](const Scene* scene, std::vector<std::string>& out){
 		if(!scene) return;
-		for(const auto& cmd : scene->commands){
-			if(cmd.type == CommandType::Play && IsVideoExt(cmd.argument)){
-				out.push_back(ResolvePath(projectBasePath, cmd.argument));
-			}
-		}
+		for(const auto& cmd : scene->commands) collectCmd(cmd, out);
 	};
 	std::vector<std::string> videoPriority;
 	CollectVideoPaths(curr, videoPriority);
@@ -593,7 +598,9 @@ void PerformanceScreen::MarkLastExecutedLine(){
 
 // ── (2.1.0) [Animation] runner ───────────────────────────────
 
-const char* const PerformanceScreen::kAnimationGroupPrefix = "\x01anim:";
+// "\x01" and "anim:" are split: written together, `\x01a` is read as
+// one hex escape (0x1A), and the prefix lost its "a".
+const char* const PerformanceScreen::kAnimationGroupPrefix = "\x01" "anim:";
 
 static double NowSec(){ return SDL_GetTicks() / 1000.0; }
 
@@ -676,37 +683,16 @@ std::string PerformanceScreen::ResolveFontFile(const std::string& name){
 	auto hit = fontFileCache.find(name);
 	if(hit != fontFileCache.end()) return hit->second;
 
-	auto exists = [](const std::string& p){
-		std::error_code ec;
-		return std::filesystem::is_regular_file(Platform::Utf8ToPath(p), ec);
-	};
-	const bool hasDrive = name.size() >= 2 && name[1] == ':';
-	const bool absolute = hasDrive || name.front() == '/' || name.front() == '\\';
-	const bool hasSep = name.find('/') != std::string::npos
-		|| name.find('\\') != std::string::npos;
-
-	std::string found;
-	if(absolute){
-		found = name;
-	} else{
-		const std::string base = projectBasePath + "/";
-		std::vector<std::string> tries;
-		if(hasSep){
-			tries = {base + name};
-		} else{
-			tries = {base + "fonts/" + name, base + "font/" + name,
-			         base + "FONTS/" + name, base + name};
-		}
-		for(const auto& t : tries){
-			if(exists(t)){ found = t; break; }
-		}
-		// The shared FONTS folder (Config), or the name as written so the
-		// renderer's warning names what the scene asked for.
-		if(found.empty()) found = Config::Instance().ResolveFontPath(name);
-	}
-	if(!exists(found)){
+	// Same lookup the project scanner uses (core/ProjectPaths).
+	std::string found = ProjectPaths::FindFont(projectBasePath, name);
+	if(found.empty()){
 		Logger::Instance().Warnf("Font '%s' not found (looked in the project's "
 			"fonts/ and font/ folders, the project folder and FONTS)", name.c_str());
+		// The name as written, so the renderer's warning names what the
+		// scene asked for.
+		const bool hasSep = name.find('/') != std::string::npos
+			|| name.find('\\') != std::string::npos || (name.size() >= 2 && name[1] == ':');
+		found = hasSep ? name : Config::Instance().ResolveFontPath(name);
 	}
 	fontFileCache[name] = found;
 	return found;
@@ -757,12 +743,21 @@ void PerformanceScreen::StartShowIfNeeded(){
 	showStarted = true;
 	showStartTicks = (double)SDL_GetTicksNS() / 1e9;
 	sceneStartTicks = showStartTicks;
+	actStartTicks = showStartTicks;
+	showLogBase.clear();
+	logMedia = SubtitleTrack();
 
 	const ShowTime t = CurrentShowTime();
 	const std::string& revy = engine.GetRevyName();
 	std::string base;
+	if(!Config::Instance().showLogEnabled){
+		// The stopwatches still run; only the files are left out.
+		Logger::Instance().Infof("Show log is off (Options): no .log / .srt / .ass");
+		return;
+	}
 	if(showLog.Open(projectBasePath, revy, t.local, &base)){
-		Logger::Instance().Infof("Show log: %s.log / .srt", base.c_str());
+		showLogBase = base;
+		Logger::Instance().Infof("Show log: %s.log", base.c_str());
 	} else{
 		// The show goes on; only the log is missing.
 		Logger::Instance().Warnf("Could not create the show log in %s",
@@ -778,6 +773,11 @@ void PerformanceScreen::EnterSceneForLog(int aktIdx, int sceneIdx){
 	if(logAkt >= 0){
 		LogEvent("ended scene (" + ShowLog::FormatDuration(SecondsSince(sceneStartTicks)) + ")");
 	}
+	const bool newAkt = (aktIdx != logAkt);
+	if(newAkt && logAkt >= 0){
+		actSubs.Close(SecondsSince(actStartTicks));
+		LogEvent("ended act (" + ShowLog::FormatDuration(SecondsSince(actStartTicks)) + ")");
+	}
 
 	logAkt = aktIdx;
 	logScene = sceneIdx;
@@ -787,7 +787,96 @@ void PerformanceScreen::EnterSceneForLog(int aktIdx, int sceneIdx){
 	const Scene* sc = engine.GetScene(aktIdx, sceneIdx);
 	logSceneLabel = "Scene " + (sc ? sc->name : std::string("?"));
 	sceneStartTicks = (double)SDL_GetTicksNS() / 1e9;
+	if(newAkt){
+		actStartTicks = sceneStartTicks;
+		LogEvent("started act");
+		OpenActSubtitles(aktIdx);
+	}
 	LogEvent("started scene");
+}
+
+// Each act gets its own .srt / .ass, timed from the act's first cue,
+// because each act is edited as its own piece in post-production.
+void PerformanceScreen::OpenActSubtitles(int aktIdx){
+	if(!showLog.IsOpen() || showLogBase.empty()) return;
+	const auto& akts = engine.GetAkts();
+	const int number = (aktIdx >= 0 && aktIdx < (int)akts.size()) ? akts[aktIdx].number : 0;
+
+	auto& tr = app->GetTextRenderer();
+	auto& r = app->GetRenderer();
+	Subtitles::AssStyle style;
+	style.playResX = r.GetCanvasWidth();
+	style.playResY = r.GetCanvasHeight();
+	style.font = tr.FontFamilyName(tr.GetSlaveFontPath());
+	style.size = tr.GetSlaveFontSize();
+
+	const std::string base = Subtitles::ActBasePath(showLogBase, number);
+	if(actSubs.Open(base, style)){
+		const size_t slash = base.find_last_of("/\\");
+		const std::string name = slash == std::string::npos ? base : base.substr(slash + 1);
+		LogEvent("subtitles: " + name + ".srt / .ass");
+	} else{
+		Logger::Instance().Warnf("Could not create the subtitles %s.srt / .ass", base.c_str());
+	}
+}
+
+// What is on the slave now: text lines (animation passes left out — they
+// repeat, and the log has their cue) and pictures and the video.
+void PerformanceScreen::SnapshotSlave(std::vector<SubLine>& lines,
+	std::vector<SubMedia>& mediaOut){
+	auto& tr = app->GetTextRenderer();
+	const std::string sceneFamily = tr.FontFamilyName(tr.GetSlaveFontPath());
+	const int sceneSize = tr.GetSlaveFontSize();
+	const std::string animPrefix = kAnimationGroupPrefix;
+
+	auto fileName = [](const std::string& path){
+		const size_t slash = path.find_last_of("/\\");
+		return slash == std::string::npos ? path : path.substr(slash + 1);
+	};
+
+	for(const auto& e : slaveUI.GetTextEntries()){
+		if(e.groupName.rfind(animPrefix, 0) == 0) continue;
+		SubLine line;
+		bool blank = true;
+		for(const auto& r : e.runs){
+			if(r.text.empty()) continue;
+			if(r.text.find_first_not_of(" \t") != std::string::npos) blank = false;
+			SubRun s;
+			s.text = r.text;
+			s.bold = r.bold;
+			s.italic = r.italic;
+			s.font = r.fontPath.empty() ? sceneFamily : tr.FontFamilyName(r.fontPath);
+			s.size = r.fontSize > 0 ? r.fontSize : sceneSize;
+			line.push_back(std::move(s));
+		}
+		if(!blank) lines.push_back(std::move(line));
+	}
+
+	for(const auto& im : slaveUI.GetImageEntries()){
+		if(im.source.empty() || im.groupName.rfind(animPrefix, 0) == 0) continue;
+		mediaOut.push_back({im.id, "[PICTURE] " + fileName(im.source)});
+	}
+	if(const uint64_t serial = media.GetVideoSerial()){
+		// Top bit set, so a video id never equals a picture id.
+		mediaOut.push_back({serial | (1ull << 63), "[VIDEO] " + fileName(media.GetVideoPath())});
+	}
+}
+
+void PerformanceScreen::UpdateShowLogMedia(){
+	if(!showStarted || !showLog.IsOpen()) return;
+	std::vector<SubLine> lines;
+	std::vector<SubMedia> onScreen;
+	SnapshotSlave(lines, onScreen);
+
+	actSubs.Update(SecondsSince(actStartTicks), lines, onScreen);
+
+	std::vector<std::string> appeared;
+	std::vector<MediaCue> gone;
+	logMedia.UpdateMedia(SecondsSince(showStartTicks), onScreen, &appeared, &gone);
+	for(const auto& g : gone){
+		LogEvent("off screen: " + g.label + " (" + ShowLog::FormatDuration(g.end - g.start) + ")");
+	}
+	for(const auto& a : appeared) LogEvent("on screen: " + a);
 }
 
 void PerformanceScreen::LogEvent(const std::string& event){
@@ -799,10 +888,17 @@ void PerformanceScreen::EndShow(){
 	if(!showStarted) return;
 	if(logAkt >= 0){
 		LogEvent("ended scene (" + ShowLog::FormatDuration(SecondsSince(sceneStartTicks)) + ")");
+		actSubs.Close(SecondsSince(actStartTicks));
+		LogEvent("ended act (" + ShowLog::FormatDuration(SecondsSince(actStartTicks)) + ")");
+	}
+	std::vector<MediaCue> gone;
+	logMedia.Finish(SecondsSince(showStartTicks), &gone);
+	for(const auto& g : gone){
+		LogEvent("off screen: " + g.label + " (" + ShowLog::FormatDuration(g.end - g.start) + ")");
 	}
 	const ShowTime t = CurrentShowTime();
 	showLog.Write(t, "", "", "Ended show (" + ShowLog::FormatDuration(t.showSeconds) + ")");
-	showLog.Close(t.showSeconds + ShowLogWriter::kMaxSubtitleSeconds);
+	showLog.Close();
 	showStarted = false;
 }
 
@@ -836,6 +932,24 @@ void PerformanceScreen::ClearScreen(){
 	lastCommandStr = "BACKSPACE: clear screen";
 	Logger::Instance().Infof("Screen cleared (BACKSPACE)");
 	LogEvent(lastCommandStr);
+}
+
+// `,` / `.` move the playing video by `delta` seconds; SHIFT+`,` (`toStart`)
+// puts it back at its beginning. A paused video stays paused and shows the
+// new position. Not a cue, so `lastCommandStr` (what O marks) is left alone.
+void PerformanceScreen::SeekVideoKey(double delta, const char* key, bool toStart){
+	if(!media.HasVideo()) return;
+	const bool ok = toStart ? media.SeekVideo(0.0) : media.SeekVideoBy(delta);
+	if(!ok) return;
+
+	const double pos = media.GetVideoPosition();
+	const std::string where = ShowLog::FormatDuration(pos < 0.0 ? 0.0 : pos);
+	std::string what;
+	if(toStart)        what = "restart video";
+	else if(delta < 0) what = "video back " + std::to_string((int)-delta) + "s";
+	else               what = "video forward " + std::to_string((int)delta) + "s";
+	Logger::Instance().Infof("%s: %s (now %s)", key, what.c_str(), where.c_str());
+	LogEvent(std::string(key) + ": " + what + " (" + where + ")");
 }
 
 void PerformanceScreen::StepBack(){
@@ -1284,10 +1398,10 @@ void PerformanceScreen::DispatchSlaveCommand(const Command& cmd){
 					// stays on the single-texture ShowImage path.
 					if(cached->isAnimation && !cached->frames.empty()){
 						slaveUI.ShowAnimation(cached->frames, cached->frameDelaysMs,
-							cached->width, cached->height, cmd.mods, cmd.groupName);
+							cached->width, cached->height, cmd.mods, cmd.groupName, full);
 					} else if(cached->texture){
 						slaveUI.ShowImage(cached->texture,
-							cached->width, cached->height, cmd.mods, cmd.groupName);
+							cached->width, cached->height, cmd.mods, cmd.groupName, full);
 					}
 				}
 			}

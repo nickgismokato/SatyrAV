@@ -1,14 +1,13 @@
-// (2.1.0) The show time log: file naming, run numbering, the .log line
-// format, and the .srt subtitles built from the same events.
+// The show time log: file naming, run numbering and the .log line format.
+// The per-act subtitles are in test_subtitles.cpp.
 //
-// Pinned here: one numbered pair of files per run and day; the .log line
-// matches the TODO's example layout; each subtitle ends at the next event
-// but lasts at most kMaxSubtitleSeconds; and the .srt is written one event
-// behind, with the last one on Close.
+// Pinned here: one numbered .log per run and day, and the .log line
+// matches the TODO's example layout.
 
 #include <doctest/doctest.h>
 #include "helpers.hpp"
 #include "core/ShowLog.hpp"
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -74,12 +73,12 @@ TEST_CASE("Each run on the same day gets the next number"){
 	{
 		ShowLogWriter w;
 		REQUIRE(w.Open(project, "MatRevy 2026", day, &first));
-		w.Close(0);
+		w.Close();
 	}
 	{
 		ShowLogWriter w;
 		REQUIRE(w.Open(project, "MatRevy 2026", day, &second));
-		w.Close(0);
+		w.Close();
 	}
 	CHECK(first.size() > 2);
 	CHECK(first.substr(first.size() - 2) == "-1");
@@ -89,7 +88,7 @@ TEST_CASE("Each run on the same day gets the next number"){
 	CHECK(ShowLog::NextRunNumber(ShowLog::FolderFor(project), "MatRevy 2026", Date(2026, 12, 25)) == 1);
 }
 
-TEST_CASE("The .log and .srt hold the same events"){
+TEST_CASE("The .log holds one line per event"){
 	TempDir tmp("showlog");
 	std::string base;
 	ShowLogWriter w;
@@ -98,9 +97,8 @@ TEST_CASE("The .log and .srt hold the same events"){
 
 	w.Write(At(19, 30, 0, 0, 0.0),   "", "", "Started MatRevy2026");
 	w.Write(At(19, 30, 1, 500, 1.5), "Akt 1", "Scene BandIntro", "started scene");
-	// 20 s later: the previous subtitle is capped at 5 s.
 	w.Write(At(19, 30, 21, 500, 21.5), "Akt 1", "Scene BandIntro", "show logo.png");
-	w.Close(23.0);
+	w.Close();
 	CHECK_FALSE(w.IsOpen());
 
 	const std::string log = ReadAll(base + ".log");
@@ -108,17 +106,13 @@ TEST_CASE("The .log and .srt hold the same events"){
 		"24/12-2026 | 19:30:00.000 | Started MatRevy2026\n"
 		"24/12-2026 | 19:30:01.500 | Akt 1 | Scene BandIntro | started scene\n"
 		"24/12-2026 | 19:30:21.500 | Akt 1 | Scene BandIntro | show logo.png\n");
-
-	const std::string srt = ReadAll(base + ".srt");
-	CHECK(srt ==
-		"1\n00:00:00,000 --> 00:00:01,500\nStarted MatRevy2026\n\n"
-		"2\n00:00:01,500 --> 00:00:06,500\nAkt 1 | Scene BandIntro\nstarted scene\n\n"
-		"3\n00:00:21,500 --> 00:00:23,000\nAkt 1 | Scene BandIntro\nshow logo.png\n\n");
+	// The subtitles are per act now, written by ActSubtitleWriter.
+	CHECK_FALSE(std::filesystem::exists(base + ".srt"));
 }
 
 TEST_CASE("Writing to a closed log does nothing"){
 	ShowLogWriter w;
 	w.Write(At(1, 2, 3, 4, 5), "a", "b", "c");
-	w.Close(10);
+	w.Close();
 	CHECK_FALSE(w.IsOpen());
 }

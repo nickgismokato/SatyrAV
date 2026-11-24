@@ -3,14 +3,14 @@
 ## Dependencies
 
 - CMake 3.20+
-- **SDL3 3.2 or newer, SDL3_ttf, SDL3_image** *(2.0.0 — see the SDL3 note below; 1.x needed SDL2)*
+- **SDL3 3.2 or newer, SDL3_ttf, SDL3_image** *(see the SDL3 note below; 1.x needed SDL2)*
 - FFmpeg 5.1+ (`libavcodec`, `libavformat`, `libavutil`, `libswscale`, `libswresample`)
 - C++17 compiler (GCC 10+, Clang 12+, or MSVC 2019+)
 - toml++ (fetched automatically via CMake FetchContent)
 
-> **Runtime requirement (1.1.0+):** SatyrAV prefers SDL's D3D11 backend on Windows, which is present on all supported Windows versions; if it is unavailable the renderer falls back to whatever SDL picks. Video decoding uses **D3D11VA hardware acceleration** on Windows — any GPU with H.264/HEVC decode support works (Intel HD 4000+, NVIDIA Kepler+, AMD GCN+). On Linux, SDL falls through to OpenGL and video decoding uses FFmpeg's multi-threaded software decoders.
+> **Runtime requirement :** SatyrAV prefers SDL's D3D11 backend on Windows, which is present on all supported Windows versions; if it is unavailable the renderer falls back to whatever SDL picks. Video decoding uses **D3D11VA hardware acceleration** on Windows — any GPU with H.264/HEVC decode support works (Intel HD 4000+, NVIDIA Kepler+, AMD GCN+). On Linux, SDL falls through to OpenGL and video decoding uses FFmpeg's multi-threaded software decoders.
 
-> **SDL3 packaging varies (2.0.0).** Debian 13 packages it (SDL 3.2.10, SDL3_ttf 3.2.2, SDL3_image 3.2.4); Ubuntu 24.04 does not. Where it is missing, build SDL3 from source into a prefix in your home directory — no root needed — and point CMake at it. 2.0.0 was developed against SDL 3.4.14 and has also been built and run against the three Debian 13 versions (built from source at those versions, not installed from the Debian packages themselves). The MinGW cross-build is unaffected: `setup-mingw-deps.sh` downloads official SDL3 MinGW binaries.
+> **SDL3 packaging varies .** Debian 13 packages it (SDL 3.2.10, SDL3_ttf 3.2.2, SDL3_image 3.2.4); Ubuntu 24.04 does not. Where it is missing, build SDL3 from source into a prefix in your home directory — no root needed — and point CMake at it. 2.0.0 was developed against SDL 3.4.14 and has also been built and run against the three Debian 13 versions (built from source at those versions, not installed from the Debian packages themselves). The MinGW cross-build is unaffected: `setup-mingw-deps.sh` downloads official SDL3 MinGW binaries.
 
 ## Linux
 
@@ -87,7 +87,7 @@ rm -rf ~/mingw-deps && ./setup-mingw-deps.sh
 
 This downloads and extracts SDL3, SDL3_ttf, SDL3_image, and FFmpeg (GyanD builds) into `~/mingw-deps`.
 
-> **Delete any pre-2.0.0 `mingw-deps` first.** If an old SDL2 sysroot is left in place, `find_package` can pick up stale SDL2 configs and produce confusing errors part-way through the build. The `rm -rf` above is the whole fix.
+> **Delete any SDL2-era `mingw-deps` first.** If an old SDL2 sysroot is left in place, `find_package` can pick up stale SDL2 configs and produce confusing errors part-way through the build. The `rm -rf` above is the whole fix.
 
 ### Build
 
@@ -118,7 +118,7 @@ sudo apt install nsis
 makensis installer/satyr-av.nsi
 ```
 
-## Unit tests *(1.8.1)*
+## Unit tests
 
 > **Tests are OFF by default.** Every build command shown above produces a
 > normal SatyrAV build with **no** test code compiled, **no** test framework
@@ -168,6 +168,17 @@ FFmpeg are not installed at all (which, given SDL3 packaging, is common):
 cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/satyr-tests
 ```
 
+### Render tests
+
+With the flag on, the root build also adds `satyr-render-tests`: the real
+renderer, video player and app, run off-screen (no window, no sound), driven
+with key presses. `ctest` runs it with the core suite; to run it alone, from
+the source root:
+
+```bash
+./build/tests/render/satyr-render-tests
+```
+
 See [tests/README.md](../tests/README.md) for the file-by-file breakdown and
 for what is deliberately left untested.
 
@@ -186,9 +197,9 @@ The build pipeline copies SDL3 / FFmpeg DLLs and the `assets/` folder into the i
 ### Configure / CMake
 
 - **CMake can't find SDL3 (cross-compile).** Re-run `./setup-mingw-deps.sh`; the `[5/5] Fixing SDL cmake config paths` step rewrites the hardcoded prefixes inside the bundled cmake configs. Without it, the imports point at `/tmp/tardir/...` and `find_package` silently fails. If you upgraded from a 1.x checkout, `rm -rf ~/mingw-deps` **first** — a leftover SDL2 sysroot is picked up in preference and produces errors that look nothing like the real cause.
-- **CMake can't find SDL3 (native Linux).** *(2.0.0)* `find_package(SDL3 REQUIRED CONFIG)` fails outright rather than falling back. On Debian 13 install `libsdl3-dev`, `libsdl3-ttf-dev` **and** `libsdl3-image-dev` — they are three separate packages and a missing one fails with the same wording. On a distribution without SDL3 packages (Ubuntu 24.04), build it from source into `~/sdl3-prefix` as shown in *Build SDL3 from source* and pass `-DCMAKE_PREFIX_PATH=$HOME/sdl3-prefix`.
-- **SDL3 itself won't configure: `Couldn't find dependency package for XTEST`.** *(2.0.0)* `libxtst-dev` is missing. Either install it or configure SDL3 with `-DSDL_X11_XTEST=OFF` — SatyrAV never uses input synthesis.
-- **SDL3_ttf / SDL3_image: `Could not find CMakeLists.txt for harfbuzz` (or `zlib`).** *(2.0.0)* The release tarballs do not include their `external/` submodules, so vendored builds cannot work from a tarball. Configure with `-DSDLTTF_VENDORED=OFF` / `-DSDLIMAGE_VENDORED=OFF` to use system libraries.
+- **CMake can't find SDL3 (native Linux).** `find_package(SDL3 REQUIRED CONFIG)` fails outright rather than falling back. On Debian 13 install `libsdl3-dev`, `libsdl3-ttf-dev` **and** `libsdl3-image-dev` — they are three separate packages and a missing one fails with the same wording. On a distribution without SDL3 packages (Ubuntu 24.04), build it from source into `~/sdl3-prefix` as shown in *Build SDL3 from source* and pass `-DCMAKE_PREFIX_PATH=$HOME/sdl3-prefix`.
+- **SDL3 itself won't configure: `Couldn't find dependency package for XTEST`.** `libxtst-dev` is missing. Either install it or configure SDL3 with `-DSDL_X11_XTEST=OFF` — SatyrAV never uses input synthesis.
+- **SDL3_ttf / SDL3_image: `Could not find CMakeLists.txt for harfbuzz` (or `zlib`).** The release tarballs do not include their `external/` submodules, so vendored builds cannot work from a tarball. Configure with `-DSDLTTF_VENDORED=OFF` / `-DSDLIMAGE_VENDORED=OFF` to use system libraries.
 - **CMake reconfigures against the wrong toolchain.** `CMAKE_TOOLCHAIN_FILE` is only read on a *fresh* cache. If you built natively in `build/` and then pass the MinGW toolchain into the same directory, it is ignored. Use a separate build directory (`build/` vs `build-win/`) — never re-point an existing one.
 - **Version didn't change after editing `VERSION`.** CMake reads the file at configure time and bakes it in as `SATYR_AV_VERSION`. Re-run `cmake ..` in the build directory; a plain `make` will not pick it up.
 
@@ -196,7 +207,7 @@ The build pipeline copies SDL3 / FFmpeg DLLs and the `assets/` folder into the i
 
 - **`undefined reference to av_*` / `SDL_*` at link time only.** Almost always a bitness or import-library mismatch — a 32-bit SDL3/FFmpeg drop under a 64-bit MinGW toolchain, or a stale `~/mingw-deps`. Delete `~/mingw-deps` and re-run `./setup-mingw-deps.sh`.
 - **`undefined reference to av_*` only, with SDL linking fine.** The FFmpeg `.dll.a` import libraries were never generated because `gendef` was missing when the setup script ran. Install `mingw-w64-tools` and re-run `./setup-mingw-deps.sh`.
-- **`undefined reference to WinMain`.** *(2.0.0)* The SDL3 entry-point wiring is incomplete: `src/main.cpp` must `#include <SDL3/SDL_main.h>` **and** the target must link `SDL3::SDL3main`. SDL3 split these apart; SDL2 got it via `SDL2main` alone.
+- **`undefined reference to WinMain`.** The SDL3 entry-point wiring is incomplete: `src/main.cpp` must `#include <SDL3/SDL_main.h>` **and** the target must link `SDL3::SDL3main`. SDL3 split these apart; SDL2 got it via `SDL2main` alone.
 - **toml++ download fails behind a proxy/offline.** toml++ comes in via CMake `FetchContent`, so the first configure needs network access. Either configure once while online (the download is cached in the build directory) or point `FETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS` at a local checkout.
 - **Out-of-memory / killed during `make -j$(nproc)`.** The render and parser translation units are large. Drop to `make -j4` or `make -j2` on machines with less than ~8 GB RAM.
 - **`satyr-tests` target doesn't exist / `ctest` reports "No tests were found".** Tests are opt-in. Re-configure with `-DSATYR_BUILD_TESTS=ON` — see *Unit tests* above. The flag is cached per build directory, so it must be passed to `cmake`, not to `make`.
@@ -206,23 +217,23 @@ The build pipeline copies SDL3 / FFmpeg DLLs and the `assets/` folder into the i
 ### Launch
 
 - **`SDL3.dll` / `avcodec-*.dll` / `SDL3_ttf.dll` not found on launch.** The runtime DLLs must sit next to `satyr-av.exe`. If the installer or build copy step was skipped, copy them from `~/mingw-deps/bin/` along with the MinGW runtime (`libstdc++-6.dll`, `libgcc_s_seh-1.dll`, `libwinpthread-1.dll`) into the executable's directory. See the **Package** section above.
-- **A console window opens alongside the app.** *(2.0.0)* The executable was linked as a console binary. `WIN32_EXECUTABLE TRUE` must be set on the `satyr-av` target — SDL2 got this implicitly from `SDL2::SDL2main`'s `-mwindows`, and `SDL3::SDL3main` deliberately does not add it.
-- **Nothing is printed anywhere when something fails on Windows.** Expected: the release binary is GUI-subsystem, so `stdout`/`stderr` are discarded. Use the log at `Documents\SatyrAV\log\satyrav-YYYY-MM-DD.log`. Note that many low-level failures still only write to `stderr` and are therefore invisible — see the *stderr → Logger* item in [TODO.md](TODO.md).
+- **A console window opens alongside the app.** The executable was linked as a console binary. `WIN32_EXECUTABLE TRUE` must be set on the `satyr-av` target — SDL2 got this implicitly from `SDL2::SDL2main`'s `-mwindows`, and `SDL3::SDL3main` deliberately does not add it.
+- **Nothing is printed anywhere when something fails on Windows.** Expected: the release binary is GUI-subsystem, so `stdout`/`stderr` are discarded. Use the log at `Documents\SatyrAV\log\satyrav-YYYY-MM-DD.log`.
 - **Crash with no window, or font/icon missing.** SatyrAV resolves `assets/` relative to the working directory. Either run the binary from the repo root, or copy the `assets/` folder next to `satyr-av.exe` so it can be found at runtime.
-- **`config.toml` reload error after editing paths by hand.** From 1.5.1 the config writer emits paths as TOML literal strings (`'C:\Users\…'`). If you hand-edit a path with backslashes inside double quotes, `\U` etc. are read as escape sequences and the config silently reverts to defaults — wrap path values in single quotes instead.
+- **`config.toml` reload error after editing paths by hand.** The config writer emits paths as TOML literal strings (`'C:\Users\…'`). If you hand-edit a path with backslashes inside double quotes, `\U` etc. are read as escape sequences and the config silently reverts to defaults — wrap path values in single quotes instead.
 - **Settings don't stick between runs.** `config.toml` is never written to the build directory — it lives at `Documents\SatyrAV\config.toml` on Windows and `~/.config/satyrav/config.toml` elsewhere (note: *not* alongside `~/satyrav/projects/`). If that location is read-only or on a disconnected network drive, saves fail silently — check the day's log.
 
 ### During a show
 
-- **Video is wrong on one machine only (black, garbled, wrong colours, or it stutters where it did not before 2.0.0).** *(2.0.0)* Open the Debug popup (`D`) while the clip plays and read the `Decode:` line. If it says `Hardware (zero-copy)`, set `zero_copy = false` under `[video]` in `config.toml` and restart: that puts video back on the pre-2.0.0 route and tells you whether the graphics driver's handling of the new path is at fault. The log records which path every clip chose and why.
+- **Video is wrong on one machine only (black, garbled, wrong colours, or it stutters).** Open the Debug popup (`D`) while the clip plays and read the `Decode:` line. If it says `Hardware (zero-copy)`, set `zero_copy = false` under `[video]` in `config.toml` and restart: that puts video back on the pre-2.0.0 route and tells you whether the graphics driver's handling of the new path is at fault. The log records which path every clip chose and why.
 - **The Debug popup says `Software` on Windows.** Hardware decode is not available for that clip's codec on that GPU, or the D3D11 renderer could not be created. It will play, at a much higher CPU cost; a 4K clip may stutter. The log has the reason.
 
 - **Black slave window, no error.** Confirm the configured slave display index actually exists (`Display N` in the debug popup, `D`). On a single-monitor dev box, enable `Slave Window Mode → Windowed (dev)` in the Options screen so the slave opens as a normal resizable window on the primary display.
 - **Slave content is drawn far too small, or off in a corner.** The project's `[Display]` rect in `schema.toml` is set to something narrower than the physical screen. Set all five keys to `0` to go back to "fill the display", or re-open `D → S` and adjust, then ESC to save.
 - **A scene is missing from the navigator.** Scenes are listed by name in `schema.toml` under `[Structure.AktN] schema = [...]`; a `.ngk` file that isn't listed there is never loaded. The name in the array must match the filename without the `.ngk` extension.
-- **A cue does nothing, or shows raw text instead of running.** An unrecognised leading keyword falls through to `text` by design, so a typo like `txet "Hi"` prints the argument instead of failing loudly. Open the Overview Debug popup (`D → O`) — it lists every parser warning and every `show` / `play` path that doesn't resolve to a file on disk.
-- **No sound, or sound on the wrong output.** The audio device is a *global* setting, not per project: Options → `Audio Output`. If the saved device was unplugged since the last run, SatyrAV falls back to the system default and logs it. *(2.0.1)* If no output can be opened at all — or the device stops taking sound mid-clip — videos play silently instead of freezing on their first frame, and the log says so once. Before 2.0.1 a missing device froze every video.
-- **Video plays but stutters or drops to software decode.** D3D11VA needs a GPU with decode support for the codec in question; unusual codecs (VP9 profile 2, AV1 on older cards) fall back to FFmpeg's software decoders. See [video-pipeline.md](video-pipeline.md).
-- **The backstage screen does not update.** *(2.0.2)* Open the Debug popup (`D`) and read the *Backstage* line. `off` — the project's `schema.toml` has no `[Backstage] Url`, or `Enabled = false`. `FAILED … host name not found` — no network, or a typo in the Url. `FAILED … could not connect` or `timed out` — the ticker is not running or not reachable. `sent` but nothing changes backstage — check that the current scene has a `[Backstage]` block: a scene without one sends nothing (the log says so). The log lists every request line by line with its result. The Linux build can only send to `http://` Urls.
+- **A cue does nothing, or shows raw text instead of running.** An unrecognised leading keyword falls through to `text` by design, so a typo like `txet "Hi"` prints the argument instead of failing loudly. Open the project scanner (`C`) — it lists every parser warning, every `[Options]` mistake and every file or font that doesn't resolve on disk, each with its file and line.
+- **No sound, or sound on the wrong output.** The audio device is a *global* setting, not per project: Options → `Audio Output`. If the saved device was unplugged since the last run, SatyrAV falls back to the system default and logs it. If no output can be opened at all — or the device stops taking sound mid-clip — videos play silently instead of freezing on their first frame, and the log says so once. Before 2.0.1 a missing device froze every video.
+- **Video plays but stutters or drops to software decode.** D3D11VA needs a GPU with decode support for the codec in question; unusual codecs (VP9 profile 2, AV1 on older cards) fall back to FFmpeg's software decoders. See [video-pipeline.md](dev/video-pipeline.md).
+- **The backstage screen does not update.** Open the Debug popup (`D`) and read the *Backstage* line. `off` — the project's `schema.toml` has no `[Backstage] Url`, or `Enabled = false`. `FAILED … host name not found` — no network, or a typo in the Url. `FAILED … could not connect` or `timed out` — the ticker is not running or not reachable. `sent` but nothing changes backstage — check that the current scene has a `[Backstage]` block: a scene without one sends nothing (the log says so). The log lists every request line by line with its result. The Linux build can only send to `http://` Urls.
 
 > **Logs.** Every run appends to `<SatyrAV>/log/satyrav-YYYY-MM-DD.log` (`Documents\SatyrAV\log\` on Windows, `~/satyrav/log/` elsewhere) and mirrors to stderr. When something fails without a visible error, that file is the first place to look.

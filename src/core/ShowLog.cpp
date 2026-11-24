@@ -48,8 +48,7 @@ int NextRunNumber(const std::string& folder, const std::string& revyName,
 	std::error_code ec;
 	for(int run = 1; run < 10000; run++){
 		const std::string base = folder + "/" + BaseNameFor(revyName, date, run);
-		if(!fs::exists(Platform::Utf8ToPath(base + ".log"), ec) &&
-		   !fs::exists(Platform::Utf8ToPath(base + ".srt"), ec)){
+		if(!fs::exists(Platform::Utf8ToPath(base + ".log"), ec)){
 			return run;
 		}
 	}
@@ -109,14 +108,14 @@ void Now(std::tm& local, int& millis){
 } // namespace ShowLog
 
 ShowLogWriter::~ShowLogWriter(){
-	if(open) Close(pendingStart + kMaxSubtitleSeconds);
+	Close();
 }
 
 bool ShowLogWriter::IsOpen() const{ return open; }
 
 bool ShowLogWriter::Open(const std::string& projectPath, const std::string& revyName,
 	const std::tm& date, std::string* outBasePath){
-	if(open) Close(pendingStart + kMaxSubtitleSeconds);
+	Close();
 
 	const std::string folder = ShowLog::FolderFor(projectPath);
 	std::error_code ec;
@@ -126,21 +125,11 @@ bool ShowLogWriter::Open(const std::string& projectPath, const std::string& revy
 	const int run = ShowLog::NextRunNumber(folder, revyName, date);
 	const std::string base = folder + "/" + ShowLog::BaseNameFor(revyName, date, run);
 
-	// Text mode, so both files get the platform's line endings and open
-	// cleanly in Notepad and in editors that import .srt.
+	// Text mode, so the platform's line endings: opens cleanly in Notepad.
 	logFile.open(Platform::Utf8ToPath(base + ".log"), std::ios::out | std::ios::trunc);
-	srtFile.open(Platform::Utf8ToPath(base + ".srt"), std::ios::out | std::ios::trunc);
-	if(!logFile.is_open() || !srtFile.is_open()){
-		logFile.close();
-		srtFile.close();
-		return false;
-	}
+	if(!logFile.is_open()) return false;
 
 	open = true;
-	srtIndex = 0;
-	havePending = false;
-	pendingStart = 0;
-	pendingText.clear();
 	if(outBasePath) *outBasePath = base;
 	return true;
 }
@@ -148,36 +137,13 @@ bool ShowLogWriter::Open(const std::string& projectPath, const std::string& revy
 void ShowLogWriter::Write(const ShowTime& t, const std::string& akt,
 	const std::string& scene, const std::string& event){
 	if(!open) return;
-
 	logFile << ShowLog::FormatLogLine(t, akt, scene, event) << '\n';
 	logFile.flush();
-
-	FlushPendingSubtitle(t.showSeconds);
-	std::string where = akt;
-	if(!scene.empty()) where += (where.empty() ? "" : " | ") + scene;
-	pendingText = where.empty() ? event : where + "\n" + event;
-	pendingStart = t.showSeconds;
-	havePending = true;
 }
 
-void ShowLogWriter::FlushPendingSubtitle(double endSeconds){
-	if(!havePending) return;
-	double end = endSeconds;
-	if(end > pendingStart + kMaxSubtitleSeconds) end = pendingStart + kMaxSubtitleSeconds;
-	if(end < pendingStart) end = pendingStart;
-	srtFile << ++srtIndex << '\n'
-	        << ShowLog::FormatSrtTime(pendingStart) << " --> "
-	        << ShowLog::FormatSrtTime(end) << '\n'
-	        << pendingText << "\n\n";
-	srtFile.flush();
-	havePending = false;
-}
-
-void ShowLogWriter::Close(double endSeconds){
+void ShowLogWriter::Close(){
 	if(!open) return;
-	FlushPendingSubtitle(endSeconds);
 	logFile.close();
-	srtFile.close();
 	open = false;
 }
 

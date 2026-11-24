@@ -98,3 +98,9 @@ endif()
 # reports per-case results, so splitting into per-case CTest entries would
 # only duplicate that output.
 add_test(NAME satyr-core-suite COMMAND satyr-tests)
+
+# Render tests (tests/render/): the real renderer, media player and app,
+# off-screen. Need SDL3 and FFmpeg, so only from the root build.
+if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+	add_subdirectory(render)
+endif()

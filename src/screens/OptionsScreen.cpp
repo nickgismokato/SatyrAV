@@ -1,11 +1,15 @@
 #include "screens/OptionsScreen.hpp"
 #include "App.hpp"
 #include "core/Config.hpp"
+#include "core/Logger.hpp"
+#include <SDL3/SDL_dialog.h>
+#include <filesystem>
 
 namespace SatyrAV{
 
 void OptionsScreen::OnEnter(){
 	focusedField = 0;
+	folderPickStatus.clear();
 
 	// (1.6.4) Reset every dropdown's expanded flag on entry. Without this,
 	// leaving the screen with ESC while a dropdown was still open left
@@ -17,6 +21,7 @@ void OptionsScreen::OnEnter(){
 	captureDropdown.Close();
 	audioDeviceDropdown.Close();
 	showClockDropdown.Close();
+	showLogDropdown.Close();
 
 	fontColourDropdown.label = "Font Colour";
 	fontColourDropdown.SetOptions({"Orange", "White", "Lime Green"});
@@ -47,6 +52,10 @@ void OptionsScreen::OnEnter(){
 	showClockDropdown.label = "Clock on Master";
 	showClockDropdown.SetOptions({"Off", "On"});
 
+	// Show log and per-act subtitles, for recorded shows.
+	showLogDropdown.label = "Show Log & Subtitles";
+	showLogDropdown.SetOptions({"Off", "On"});
+
 	// Load current values
 	auto& config = Config::Instance();
 	fontSizeField.SetText(std::to_string(config.fontSize));
@@ -54,6 +63,7 @@ void OptionsScreen::OnEnter(){
 	displayDropdown.SetSelectedIndex(config.slaveDisplayIndex);
 	slaveModeDropdown.SetSelectedIndex(config.slaveWindowed ? 1 : 0);
 	showClockDropdown.SetSelectedIndex(config.showClock ? 1 : 0);
+	showLogDropdown.SetSelectedIndex(config.showLogEnabled ? 1 : 0);
 
 	PopulateCaptureOptions();
 
@@ -91,6 +101,47 @@ void OptionsScreen::OnEnter(){
 	}
 
 	UpdateFocus();
+}
+
+// ── Folder chooser ───────────────────────────────────────────
+
+void OptionsScreen::OpenFolderDialog(){
+	{
+		std::lock_guard<std::mutex> lock(folderPick->mtx);
+		if(folderPick->open) return; // one at a time
+		folderPick->open = true;
+	}
+	folderPickStatus = "Choosing folder...";
+
+	// Start in the folder typed so far, if it exists.
+	std::string start = projectsDirField.GetText();
+	std::error_code ec;
+	if(start.empty() || !std::filesystem::is_directory(start, ec)) start.clear();
+
+	// The callback owns this copy of the pointer and deletes it.
+	auto* hold = new std::shared_ptr<FolderPick>(folderPick);
+	SDL_ShowOpenFolderDialog(&OptionsScreen::OnFolderChosen, hold,
+		app->GetRenderer().GetMasterWindow(),
+		start.empty() ? nullptr : start.c_str(), false);
+}
+
+void SDLCALL OptionsScreen::OnFolderChosen(void* userdata,
+		const char* const* filelist, int filter){
+	(void)filter;
+	auto* hold = static_cast<std::shared_ptr<FolderPick>*>(userdata);
+	{
+		FolderPick& p = **hold;
+		std::lock_guard<std::mutex> lock(p.mtx);
+		p.open = false;
+		if(!filelist){
+			p.error = SDL_GetError();
+		} else if(filelist[0]){
+			p.path = filelist[0];
+			p.ready = true;
+		}
+		// filelist[0] == nullptr: cancelled, nothing changes.
+	}
+	delete hold;
 }
 
 void OptionsScreen::OnExit(){
@@ -190,6 +241,7 @@ void OptionsScreen::HandleInput(InputAction action){
 	if(focusedField == 5) activeDropdown = &captureDropdown;
 	if(focusedField == 6) activeDropdown = &audioDeviceDropdown;
 	if(focusedField == 7) activeDropdown = &showClockDropdown;
+	if(focusedField == 8) activeDropdown = &showLogDropdown;
 
 	if(activeDropdown && activeDropdown->IsExpanded()){
 		switch(action){
@@ -202,6 +254,13 @@ void OptionsScreen::HandleInput(InputAction action){
 
 	if(activeDropdown && action == InputAction::Execute){
 		activeDropdown->Toggle();
+		return;
+	}
+
+	// ENTER on the projects directory opens the system's folder dialog.
+	// Typing the path still works as before.
+	if(focusedField == 2 && action == InputAction::Execute){
+		OpenFolderDialog();
 		return;
 	}
 
@@ -220,6 +279,7 @@ void OptionsScreen::HandleInput(InputAction action){
 		captureDropdown.Close();
 		audioDeviceDropdown.Close();
 		showClockDropdown.Close();
+	showLogDropdown.Close();
 		UpdateFocus();
 	} else if(action == InputAction::NavDown || action == InputAction::Tab){
 		focusedField = (focusedField + 1) % FIELD_COUNT;
@@ -229,6 +289,7 @@ void OptionsScreen::HandleInput(InputAction action){
 		captureDropdown.Close();
 		audioDeviceDropdown.Close();
 		showClockDropdown.Close();
+	showLogDropdown.Close();
 		UpdateFocus();
 	}
 }
@@ -242,6 +303,7 @@ void OptionsScreen::UpdateFocus(){
 	captureDropdown.focused    = (focusedField == 5);
 	audioDeviceDropdown.focused = (focusedField == 6);
 	showClockDropdown.focused   = (focusedField == 7);
+	showLogDropdown.focused     = (focusedField == 8);
 
 	bool needsText = (focusedField == 1 || focusedField == 2);
 	app->GetInput().SetTextInputMode(needsText);
@@ -281,6 +343,7 @@ void OptionsScreen::SaveConfig(){
 	}
 
 	config.showClock = (showClockDropdown.GetSelectedIndex() == 1);
+	config.showLogEnabled = (showLogDropdown.GetSelectedIndex() == 1);
 
 	config.Save();
 
@@ -289,6 +352,19 @@ void OptionsScreen::SaveConfig(){
 
 void OptionsScreen::Update(float deltaTime){
 	(void)deltaTime;
+	std::lock_guard<std::mutex> lock(folderPick->mtx);
+	if(folderPick->ready){
+		folderPick->ready = false;
+		projectsDirField.SetText(folderPick->path);
+		folderPickStatus = "Folder chosen - Save to keep it";
+	} else if(!folderPick->error.empty()){
+		Logger::Instance().Warnf("Folder dialog could not be shown: %s",
+			folderPick->error.c_str());
+		folderPick->error.clear();
+		folderPickStatus = "No folder dialog here - type the path";
+	} else if(!folderPick->open && folderPickStatus == "Choosing folder..."){
+		folderPickStatus.clear(); // cancelled
+	}
 }
 
 void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
@@ -305,9 +381,9 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 	int fieldW = 400;
 	int fieldX = centerX - fieldW / 2;
 	int y = 80;
-	// (2.1.0) 70 rather than 80 per row, so nine rows and Save still fit
-	// on a 720-high master.
-	const int rowH = 70;
+	// 62 per row, so ten rows and Save still fit on a 720-high master
+	// (a dropdown is about 52 high).
+	const int rowH = 62;
 
 	fontColourDropdown.x = fieldX; fontColourDropdown.y = y;
 	fontColourDropdown.w = fieldW;
@@ -322,6 +398,13 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 	projectsDirField.x = fieldX; projectsDirField.y = y;
 	projectsDirField.w = fieldW;
 	projectsDirField.Draw(r, text);
+	if(!folderPickStatus.empty()){
+		text.DrawText(renderer, folderPickStatus,
+			fieldX + fieldW + 10, y + 10, Colours::ORANGE);
+	} else if(focusedField == 2){
+		text.DrawText(renderer, "ENTER: Browse...",
+			fieldX + fieldW + 10, y + 10, Colours::ORANGE);
+	}
 
 	y += rowH;
 	displayDropdown.x = fieldX; displayDropdown.y = y;
@@ -383,6 +466,11 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 	showClockDropdown.Draw(r, text);
 
 	y += rowH;
+	showLogDropdown.x = fieldX; showLogDropdown.y = y;
+	showLogDropdown.w = fieldW;
+	showLogDropdown.Draw(r, text);
+
+	y += rowH;
 	Colour btnC = (focusedField == FIELD_COUNT - 1) ? Colours::ORANGE : Colours::WHITE;
 	text.DrawTextCentered(renderer, "[ Save ]", centerX, y, btnC);
 
@@ -393,6 +481,7 @@ void OptionsScreen::Draw(Renderer& r, TextRenderer& text){
 	captureDropdown.DrawOverlay(r, text);
 	audioDeviceDropdown.DrawOverlay(r, text);
 	showClockDropdown.DrawOverlay(r, text);
+	showLogDropdown.DrawOverlay(r, text);
 
 }
 

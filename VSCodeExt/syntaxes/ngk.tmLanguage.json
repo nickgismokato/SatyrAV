@@ -3,26 +3,38 @@
 	"name": "NGK",
 	"scopeName": "source.ngk",
 	"patterns": [
+		{ "include": "#hex-colour-value" },
 		{ "include": "#comments" },
 		{ "include": "#section-headers" },
+		{ "include": "#option-keys" },
+		{ "include": "#particle-tunables" },
+		{ "include": "#animation-keys" },
+		{ "include": "#font-directives" },
 		{ "include": "#commands" },
 		{ "include": "#group-block" },
 		{ "include": "#loop-block" },
 		{ "include": "#run-block" },
 		{ "include": "#macro-call" },
-		{ "include": "#option-keys" },
+		{ "include": "#cue-reference" },
 		{ "include": "#particle-types" },
 		{ "include": "#modifiers" },
 		{ "include": "#strings" },
 		{ "include": "#numbers" }
 	],
 	"repository": {
+		"hex-colour-value": {
+			"comment": "A value such as `TextColour = #FF8800`: a colour, not a comment.",
+			"match": "(=)\\s*(#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{3}))(?![0-9A-Za-z_])",
+			"captures": {
+				"2": { "name": "constant.other.colour.ngk" }
+			}
+		},
 		"comments": {
 			"match": "#.*$",
 			"name": "comment.line.number-sign.ngk"
 		},
 		"section-headers": {
-			"match": "^\\s*\\[(Options|Preload|Commands|Macro|Cue|Hotkeys|RevyData|Structure|Display|(?i:backstage)|Particle\\.[A-Z]+)\\]\\s*$",
+			"match": "^\\s*\\[(Options|Preload|Commands|Macro|Cue|Hotkeys|RevyData|Structure|Display|(?i:backstage)|(?i:animations?)|Particle\\.[A-Z]+)\\]\\s*$",
 			"captures": {
 				"1": { "name": "entity.name.section.ngk" }
 			},
@@ -59,9 +71,40 @@
 			}
 		},
 		"option-keys": {
-			"match": "(?i)^\\s*(fontsize|fontbolditalic|fontbold|fontitalic|font|textoutline|capitalize|cap|audiofade|backgroundcolou?r|bc|textcolou?r|subtitleitalic|subtitlecolou?r|subtitletransparency|subtitleposy|fixedtextcent(?:re|er)|name|expectedtime|actors|ninjas|url|enabled)(?=\\s*=)",
+			"match": "(?i)^\\s*(fontsize|fontbolditalic|fontbold|fontitalic|font|textoutline|capitalize|cap|audiofade|backgroundcolou?r|bc|textcolou?r|subtitleitalic|subtitlecolou?r|subtitletransparency|subtitleposy|fixedtextcent(?:re|er)|disabletextoutline|transparentbackground|name|expectedtime|actors|ninjas|url|enabled)(?=\\s*=)",
 			"captures": {
 				"1": { "name": "variable.parameter.option.ngk" }
+			}
+		},
+		"particle-tunables": {
+			"comment": "Per-particle-type tunables in [Options], e.g. `RAIN.SPEED = 2`.",
+			"match": "(?i)^\\s*((?:rain|snow|confetti|rise|scatter|brownian|oscillation|orbit|noise|lifecurve)\\.(?:speed|density|dens|x\\.dist|vx\\.dist|vy\\.dist|vx|vy|x))(?=\\s*=)",
+			"captures": {
+				"1": { "name": "variable.parameter.option.ngk" }
+			}
+		},
+		"animation-keys": {
+			"comment": "Keys inside an [Animation] block. `show =` / `text =` are keys here, not commands.",
+			"match": "(?i)^\\s*(show|text|path|duration|repeat|for|every|randomx|randomy|layer|size)(?=\\s*=)(?:\\s*=\\s*(forever)(?![A-Za-z0-9_]))?",
+			"captures": {
+				"1": { "name": "variable.parameter.animation.ngk" },
+				"2": { "name": "constant.language.ngk" }
+			}
+		},
+		"font-directives": {
+			"comment": "`use FONT` / `use default` and `fontSize N` / `fontSize default` rows.",
+			"match": "^\\s*(use|fontSize)(?![A-Za-z0-9_])(?!\\s*=)(?:\\s+(default)(?![A-Za-z0-9_]))?",
+			"captures": {
+				"1": { "name": "keyword.control.directive.ngk" },
+				"2": { "name": "constant.language.ngk" }
+			}
+		},
+		"cue-reference": {
+			"comment": "A trailing `\\\\Name` claiming a [Cue] note.",
+			"match": "(?<=\\s)(\\\\)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?:#.*)?$)",
+			"captures": {
+				"1": { "name": "punctuation.definition.cue.ngk" },
+				"2": { "name": "entity.name.tag.cue.ngk" }
 			}
 		},
 		"particle-types": {

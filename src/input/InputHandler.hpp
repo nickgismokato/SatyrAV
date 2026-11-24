@@ -27,6 +27,9 @@ enum class InputAction{
 	ReloadScenes,
 	MarkLine,       // (2.0.1) O: log the last executed cue to fix-it/
 	ClearScreen,    // (2.1.0) BACKSPACE outside text mode: clear the slave
+	SeekBack,       // `,`: video back SEEK_STEP_SECONDS
+	SeekForward,    // `.`: video forward SEEK_STEP_SECONDS
+	RestartVideo,   // SHIFT+`,`: video back to its beginning
 	TextInput,
 	Backspace,
 	// (1.6.3) F1..F12 collapsed into one action with an integer payload
@@ -64,7 +67,7 @@ private:
 	std::string lastTextInput;
 	int  lastFunctionKey = 0;
 
-	InputAction TranslateKey(SDL_Keycode key, uint16_t mod);
+	InputAction TranslateKey(SDL_Keycode key, SDL_Scancode scancode, uint16_t mod);
 };
 
 } // namespace SatyrAV

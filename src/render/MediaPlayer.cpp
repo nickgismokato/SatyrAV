@@ -961,9 +961,8 @@ bool MediaPlayer::IsVideoZeroCopy() const{
 	return active && active->zeroCopy;
 }
 
-// (2.0.0) Plumbing for the 2.1.0 fast-forward / rewind / restart commands.
-// Nothing calls this yet. The work is done by the decode thread; this only
-// files the request and re-bases the clocks.
+// The work is done by the decode thread; this only files the request and
+// re-bases the clocks.
 bool MediaPlayer::SeekVideo(double seconds){
 	if(!active || !active->started) return false;
 	VideoPlayback* vp = active;
@@ -990,7 +989,22 @@ bool MediaPlayer::SeekVideo(double seconds){
 	// cannot: it has no sound to follow.
 	if(!vp->audioSilenced.load()) vp->wallClockFallback = false;
 	vp->wdLastChangeTick = 0;
+	// Paused: show the new position now rather than on resume.
+	if(videoPaused) showFrameWhilePaused = true;
 	return true;
+}
+
+bool MediaPlayer::SeekVideoBy(double deltaSeconds){
+	if(!active || !active->started) return false;
+	return SeekVideo(active->nextPTS + deltaSeconds);
+}
+
+uint64_t MediaPlayer::GetVideoSerial() const{
+	return active ? active->serial : 0;
+}
+
+std::string MediaPlayer::GetVideoPath() const{
+	return active ? active->path : std::string();
 }
 
 double MediaPlayer::GetVideoPosition() const{
@@ -1114,7 +1128,9 @@ void MediaPlayer::ActivateVideo(VideoPlayback* vp){
 	}
 
 	active = vp;
+	vp->serial = ++videoSerialCounter;
 	videoPaused = false;
+	showFrameWhilePaused = false;
 
 	// (2.0.0) Bind the already-populated stream rather than opening a device.
 	// A preloaded clip has been queueing audio into this stream while
@@ -1209,8 +1225,70 @@ bool MediaPlayer::PlayVideo(const std::string& path, SDL_Renderer* renderer,
 // Main thread only. The ring holds YUV420P CPU frames on the read-back
 // paths, and references to decoder surfaces in VRAM on the zero-copy path.
 
+// Puts one decoded ring frame on the clip's texture. The caller holds `mtx`
+// and does the ring bookkeeping.
+void MediaPlayer::PresentRingFrame(VideoPlayback* vp, SDL_Renderer* renderer,
+		AVFrame* show, bool& firstFrameFailed){
+	if(vp->zeroCopy){
+		// (2.0.0) GPU-to-GPU: decoder surface → NV12 display texture.
+		// The reference is dropped straight afterwards, which hands the
+		// surface back to the decoder; the picture lives on in the texture.
+		const bool ok = D3D11Interop::CopyFrameToTexture(
+			renderer, vp->hwDeviceCtx, show, &vp->texture);
+		av_frame_unref(show);
+		if(ok){
+			vp->presentedAny = true;
+		} else if(!vp->presentedAny){
+			firstFrameFailed = true;
+		} else if(!vp->zeroCopyErrorLogged){
+			vp->zeroCopyErrorLogged = true;
+			Logger::Instance().Errorf(
+				"MediaPlayer: zero-copy frame copy failed mid-clip for %s",
+				vp->path.c_str());
+		}
+	} else{
+		// Ring frames are YUV420P (planar Y, U, V). Upload via SDL_UpdateYUVTexture
+		// to the IYUV texture — avoids the libswscale NV12→NV12 semi-planar bug
+		// that silently zeroed the UV plane (producing green output).
+		SDL_UpdateYUVTexture(vp->texture, nullptr,
+			show->data[0], show->linesize[0],
+			show->data[1], show->linesize[1],
+			show->data[2], show->linesize[2]);
+	}
+}
+
+// A seek made while paused. Once the decode thread has reset the ring and
+// decoded the first frame at the new position, that frame goes on screen
+// and is consumed, so the clip holds there until K resumes it. Its sound is
+// already queued (the stream is detached while paused) and plays on resume.
+void MediaPlayer::PresentPausedSeekFrame(SDL_Renderer* renderer){
+	VideoPlayback* vp = active;
+	if(vp->seekPending.load()) return;
+
+	SDL_LockMutex(vp->mtx);
+	if(vp->bufferedFrames > 0 && vp->ringReady[vp->readIdx]){
+		bool firstFrameFailed = false; // a paused clip has already shown frames
+		PresentRingFrame(vp, renderer, vp->ring[vp->readIdx], firstFrameFailed);
+		vp->nextPTS = vp->ringPts[vp->readIdx];
+		vp->ringReady[vp->readIdx] = 0;
+		vp->readIdx = (vp->readIdx + 1) % vp->ringCapacity;
+		vp->bufferedFrames--;
+		SDL_SignalCondition(vp->frameConsumed);
+		showFrameWhilePaused = false;
+	} else if(!vp->threadRunning){
+		// Seeked to the very end: no frame is coming. The clip ends when
+		// playback resumes, as it would have anyway.
+		showFrameWhilePaused = false;
+	}
+	SDL_UnlockMutex(vp->mtx);
+}
+
 void MediaPlayer::UpdateVideoFrame(SDL_Renderer* renderer){
-	if(!active || !active->started || videoPaused) return;
+	if(!active || !active->started) return;
+	if(videoPaused){
+		if(showFrameWhilePaused) PresentPausedSeekFrame(renderer);
+		return;
+	}
 	VideoPlayback* vp = active;
 	bool zeroCopyFirstFrameFailed = false;
 	// (2.0.0) A seek is in flight: the ring is about to be thrown away by the
@@ -1294,33 +1372,7 @@ void MediaPlayer::UpdateVideoFrame(SDL_Renderer* renderer){
 			vp->readIdx = (vp->readIdx + 1) % vp->ringCapacity;
 			vp->bufferedFrames--;
 		}
-		AVFrame* show = vp->ring[vp->readIdx];
-		if(vp->zeroCopy){
-			// (2.0.0) GPU-to-GPU: decoder surface → NV12 display texture.
-			// The reference is dropped straight afterwards, which hands the
-			// surface back to the decoder; the picture lives on in the texture.
-			const bool ok = D3D11Interop::CopyFrameToTexture(
-				renderer, vp->hwDeviceCtx, show, &vp->texture);
-			av_frame_unref(show);
-			if(ok){
-				vp->presentedAny = true;
-			} else if(!vp->presentedAny){
-				zeroCopyFirstFrameFailed = true;
-			} else if(!vp->zeroCopyErrorLogged){
-				vp->zeroCopyErrorLogged = true;
-				Logger::Instance().Errorf(
-					"MediaPlayer: zero-copy frame copy failed mid-clip for %s",
-					vp->path.c_str());
-			}
-		} else{
-			// Ring frames are YUV420P (planar Y, U, V). Upload via SDL_UpdateYUVTexture
-			// to the IYUV texture — avoids the libswscale NV12→NV12 semi-planar bug
-			// that silently zeroed the UV plane (producing green output).
-			SDL_UpdateYUVTexture(vp->texture, nullptr,
-				show->data[0], show->linesize[0],
-				show->data[1], show->linesize[1],
-				show->data[2], show->linesize[2]);
-		}
+		PresentRingFrame(vp, renderer, vp->ring[vp->readIdx], zeroCopyFirstFrameFailed);
 		vp->nextPTS = vp->ringPts[vp->readIdx];
 		vp->ringReady[vp->readIdx] = 0;
 		vp->readIdx = (vp->readIdx + 1) % vp->ringCapacity;

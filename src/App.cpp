@@ -192,7 +192,15 @@ void App::Run(){
 		uint64_t now = SDL_GetPerformanceCounter();
 		float dt = (float)(now - lastTick) / (float)freq;
 		lastTick = now;
+		Frame(dt);
+	}
+}
 
+// One pass of the main loop: input, update, draw, present. Split out of
+// Run so the render tests can step the real app frame by frame with the
+// off-screen video driver (tests/render/).
+void App::Frame(float dt){
+	{
 		SDL_Event event;
 		while(SDL_PollEvent(&event)){
 			if(event.type == SDL_EVENT_QUIT){
@@ -205,19 +213,19 @@ void App::Run(){
 				helpPopup.HandleMouseDown(event.button.x, event.button.y);
 				debugPopup.HandleMouseDown(event.button.x, event.button.y);
 				sizePopup.HandleMouseDown(event.button.x, event.button.y);
-				overviewPopup.HandleMouseDown(event.button.x, event.button.y);
+				scannerPopup.HandleMouseDown(event.button.x, event.button.y);
 			}
 			if(event.type == SDL_EVENT_MOUSE_BUTTON_UP){
 				helpPopup.HandleMouseUp();
 				debugPopup.HandleMouseUp();
 				sizePopup.HandleMouseUp();
-				overviewPopup.HandleMouseUp();
+				scannerPopup.HandleMouseUp();
 			}
 			if(event.type == SDL_EVENT_MOUSE_MOTION){
 				helpPopup.HandleMouseMove(event.motion.x, event.motion.y);
 				debugPopup.HandleMouseMove(event.motion.x, event.motion.y);
 				sizePopup.HandleMouseMove(event.motion.x, event.motion.y);
-				overviewPopup.HandleMouseMove(event.motion.x, event.motion.y);
+				scannerPopup.HandleMouseMove(event.motion.x, event.motion.y);
 			}
 
 			// ── Size popup has absolute input priority while visible. ──
@@ -255,35 +263,40 @@ void App::Run(){
 				continue;
 			}
 
-			// ── (1.6.3) Open overview popup: O while debug popup is open. ──
-			// Mirrors the D→S chord for the rect editor. Walks every scene
-			// of the active project and reports parser warnings + missing
-			// media files.
-			if(event.type == SDL_EVENT_KEY_DOWN &&
-				event.key.key == SDLK_O &&
-				debugPopup.IsVisible() &&
-				inProject){
+			// ── Project scanner: C in a project, or O while the debug popup
+			// is open (the old Overview chord). Not while typing.
+			if(event.type == SDL_EVENT_KEY_DOWN && inProject &&
+				!scannerPopup.IsVisible() && !input.IsTextInputMode() &&
+				(event.key.key == Keys::SCANNER ||
+				 (event.key.key == SDLK_O && debugPopup.IsVisible()))){
 				auto* perfScreen = static_cast<PerformanceScreen*>(
 					screens[ScreenID::Performance].get());
 				if(perfScreen){
-					overviewPopup.Open(perfScreen->GetCueEngine(),
-						perfScreen->GetProjectPath());
+					scannerPopup.Open(perfScreen->GetProjectPath());
 					debugPopup.Hide();
 				}
 				continue;
 			}
 
-			// ── Overview popup is modal while visible. ESC closes; UP/DOWN
-			// scrolls; everything else is swallowed so the underlying
-			// screen doesn't react.
-			if(overviewPopup.IsVisible()){
+			// ── The scanner is modal while visible. C / ESC close, R rescans,
+			// UP/DOWN scroll; everything else is swallowed so the screen
+			// underneath doesn't react.
+			if(scannerPopup.IsVisible()){
 				if(event.type == SDL_EVENT_KEY_DOWN){
-					if(event.key.key == Keys::QUIT){
-						overviewPopup.Close();
-					} else if(event.key.key == SDLK_UP){
-						overviewPopup.ScrollUp();
-					} else if(event.key.key == SDLK_DOWN){
-						overviewPopup.ScrollDown();
+					const bool shift = (event.key.mod & SDL_KMOD_SHIFT) != 0;
+					const SDL_Keycode k = event.key.key;
+					if(k == Keys::QUIT || k == Keys::SCANNER){
+						scannerPopup.Close();
+					} else if(k == SDLK_R){
+						scannerPopup.Rescan();
+					} else if(k == SDLK_UP){
+						scannerPopup.Scroll(shift ? -10 : -1);
+					} else if(k == SDLK_DOWN){
+						scannerPopup.Scroll(shift ? 10 : 1);
+					} else if(k == SDLK_PAGEUP){
+						scannerPopup.Scroll(-10);
+					} else if(k == SDLK_PAGEDOWN){
+						scannerPopup.Scroll(10);
 					}
 				}
 				continue;
@@ -323,7 +336,7 @@ void App::Run(){
 			helpPopup.Draw(renderer, textRenderer);
 			debugPopup.Draw(renderer, textRenderer);
 			sizePopup.Draw(renderer, textRenderer);
-			overviewPopup.Draw(renderer, textRenderer);
+			scannerPopup.Draw(renderer, textRenderer);
 
 			// Single present for the entire frame
 			renderer.PresentMaster();

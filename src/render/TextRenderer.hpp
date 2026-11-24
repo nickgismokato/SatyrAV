@@ -81,6 +81,11 @@ public:
 
 	void SetSlaveFontSize(int size);
 	int GetSlaveFontSize() const;
+	// The regular slave face's file, after the cascade.
+	const std::string& GetSlaveFontPath() const{ return slaveFontPaths[0]; }
+	// A font file's family name ("DejaVu Sans"), for the .ass subtitles.
+	// Read once per file; falls back to the file name without extension.
+	std::string FontFamilyName(const std::string& fontPath) const;
 	int GetSlaveLineHeight() const;
 
 	// (1.6.1) Re-load the slave-side italic/bold/bold-italic faces. Called
@@ -133,6 +138,7 @@ private:
 	TTF_Font* PickSlaveFont(bool bold, bool italic,
 		const std::string& fontPath, int fontSize) const;
 	mutable std::map<std::string, TTF_Font*> extraFonts;
+	mutable std::map<std::string, std::string> familyNames;
 	void CloseExtraFonts();
 	// Open all four slave faces from `slaveFontPaths` at the given size.
 	// Empty paths leave the slot null. Called when the size changes or when

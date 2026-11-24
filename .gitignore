@@ -36,6 +36,8 @@ mingw-deps/
 *.tar.gz
 *.7z
 SatyrAV-Installer.exe
+dist-win/
+VSCodeExt/*.vsix
 
 # OS
 .DS_Store
