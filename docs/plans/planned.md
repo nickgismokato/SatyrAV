@@ -70,13 +70,27 @@ Items are in no particular order. (**Critical**) marks the ones to look at first
         ```
     - A proper parser has to be created since some write minutes, minutter, min, sekunder, seconds, etc. So we have to make sure to be able to understand what is actually written. Some also just write `$n$ minutter` which indicate that they have no idea. Sometimes they also include the `$` and sometimes they do not. Also if any of these information is missing, we just have to give default values.
         - If title is missing we just write: "No title found"
-        - If eta is missing we just write: "69m:00"
+        - If eta is missing we just write: "69m00"
         - If Actors is missing, we write no actor names and the same with nijas.
         - If for some reason our parser cannot read it, or don't understand it, these above values is also the default values for this case.
 
 ---
 
 ## Planned for 2.2.0
+- **(Critical)** Add a forloop for showing pictures.
+    - A big problem is when you have more than a hundred images, it can be hard to write it all into an `.ngk` file. So a looping method could be useful.
+    - One way of doing it could be like this:
+        ```txt
+        [Commands]
+        for i in (1,100) do
+            show picture.[i].png
+        end do
+        ```
+        This would then do the same as writing `show picture1.png`, `show picture2.png`, ..., `show picture100.png`. But it would ease the workload of a show developer.
+    - Currently I am thinking of using the `.[i].` notation to indicate where exactly the index should be. This syntax would make it clear where we are indexing, which mean we could potentially index pictures labeled `pic4ture.png` since we can just do `pic.[i].ture.png`. And most pictures doesn't actually use naming like `.[i].`, so we won't have a name clashing problem.
+    - The index should be dynamically defined, meaning we are not forced to use the index `i` but could potentially use anything like `.[toilet].`.
+    - The syntax `for i in (1,100) do` means mathematically "for $i\in[1,100]\subset\mathbb{Z}$ do". **Note** that our indexes can be negative. This practice should be looked heavily down upon, but since not all users are neither programmer nor mathematicians, this need to be done.
+    - I am thinking maybe there could also be some internal functionality inside the loop that can be activated when the index is equal to a value. This would allow us to create stuff like full clears during the looping. 
 - Package the VSCode extension cleanly: `vsce package` asks about a missing `LICENSE` and a missing `repository` field in `VSCodeExt/package.json`. Add a `LICENSE` to `VSCodeExt/` (the project's MIT licence) and `"repository": { "type": "git", "url": "https://github.com/nickgismokato/SatyrAV.git" }`, so it packages without prompts.
 - Add powerpoint animetions transitions for picture to picture. Essentially making it possible to run a slideshow like in powerpoint.
 - (*Maybe defer to later*) Add messenger/other communication app default template to mimic communication.
