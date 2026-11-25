@@ -1318,13 +1318,11 @@ void PerformanceScreen::DispatchSlaveCommand(const Command& cmd){
 			if(!cmd.mods.randomImagePaths.empty()){
 				auto& paths = cmd.mods.randomImagePaths;
 				if(paths.size() == 1 && paths[0].rfind("DIR:", 0) == 0){
-					std::string dirName = paths[0].substr(4);
-					std::string fullDir = projectBasePath + "/pictures/" + dirName;
-					if(std::filesystem::exists(fullDir)){
-						for(auto& e : std::filesystem::directory_iterator(fullDir)){
-							if(e.is_regular_file()) candidates.push_back(e.path().string());
-						}
-					}
+					// Every file in pictures/<folder> (a folder path such as
+					// `MEGA/Lyric` works too), by UTF-8 name.
+					const std::string dirName = ProjectPaths::Normalise(paths[0].substr(4));
+					candidates = ProjectPaths::ExpandWildcard(projectBasePath,
+						"pictures/" + dirName + "/*");
 				} else{
 					candidates = paths;
 				}
@@ -1334,9 +1332,10 @@ void PerformanceScreen::DispatchSlaveCommand(const Command& cmd){
 
 			if(candidates.empty()) break;
 
+			// A name with folders in it (`MEGA/Lyric/1A.png`) is looked up
+			// in the project like any other; an absolute path (a
+			// randomImages folder's files) is used as it is.
 			auto resolveOne = [&](const std::string& p) -> std::string{
-				if(p.find('/') != std::string::npos || p.find('\\') != std::string::npos)
-					return p;
 				return ResolvePath(projectBasePath, p);
 			};
 
@@ -1431,7 +1430,7 @@ void PerformanceScreen::UpdateDebugInfo(){
 
 	dbg.lastCommand = lastCommandStr;
 	dbg.lastCommandPath = lastCommandPath;
-	dbg.lastCommandFileExists = !lastCommandPath.empty() && std::filesystem::exists(lastCommandPath);
+	dbg.lastCommandFileExists = ProjectPaths::IsFile(lastCommandPath);
 
 	dbg.slaveWidth = app->GetRenderer().GetSlaveWidth();
 	dbg.slaveHeight = app->GetRenderer().GetSlaveHeight();

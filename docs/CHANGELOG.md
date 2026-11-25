@@ -2,6 +2,25 @@
 
 All notable changes to **SatyrAV** are documented here. Versions are listed newest first.
 
+## Version 2.1.1 — shipped
+
+A bug-fix release for pictures in folders, plus wildcards in `[Preload]`. Existing projects and scene files work as before.
+
+### Added
+- **Wildcards in `[Preload]`.** One line loads a whole folder of pictures: `MEGA/*.png` every PNG directly in `pictures/MEGA/`, `MEGA/**/*.png` every PNG in it and in every folder below. `*` matches any run of characters and `?` one, within a folder or file name; `**` any number of folders. Case is ignored. A pattern that matches nothing is a project-scanner warning.
+
+### Fixed
+- **Scene files saved on Windows read as empty on Linux.** Their lines end in CR LF, and the CR stayed on every line, so no section header matched and not a single cue was read. The CR, and a UTF-8 byte-order mark at the start, are now dropped on every platform.
+- **Pictures in folders could not be shown or preloaded.** `show MEGA/1.png` used the name exactly as written, from wherever SatyrAV was started, instead of looking in the project; and the preload cache resolved names its own way, so a preloaded picture could be asked for under a different name. `show`, `[Preload]`, `randomImages` and the project scanner now share one lookup: the project folder, then `pictures/`, `movies/` and `sound/`, with folders as deep as needed.
+- **Names with spaces** (`MEGA/Lyric/Sequence 1/1A.png`) work in `show`, `[Preload]` and `randomImages`, on Linux and Windows.
+- **Folder and file names that differ only in case** (`Mega/1.png` for `MEGA/1.png`) are found on Linux too, as on Windows; `\` works as a folder separator everywhere.
+- `randomImages(FOLDER)` takes a deeper folder (`randomImages(MEGA/Lyric)`) and reads names with `æøå` on Windows.
+- `[Preload]` entries may be quoted, for a name with `#` in it.
+
+### Tests
+- New `test_project_paths.cpp`: folders, spaces, `\`, case, absolute paths and wildcards. Parser tests for CR LF files, a byte-order mark, and names with folders and spaces; scanner tests for patterns and nested names. The CR LF test used to record the empty Linux read as expected behaviour and now expects the fix. 285 core test cases in all.
+- A new render test runs a CR LF scene through the real app: a wildcard `[Preload]` and pictures in nested folders with spaces, shown.
+
 ## Version 2.1.0 — shipped
 
 It brings a clear-screen key, per-scene text outline, `use` / `fontSize` for fonts and sizes mid-scene, repeating animations, a see-through slave, video seeking, a folder chooser, a show log with per-act subtitles for the recording, a clock and stopwatches, the project scanner, render tests, and rewritten documentation. Existing projects and scene files load and look exactly as before: every new option is off unless a project or scene turns it on. What was planned, and what was settled, is in [plans/implemented.md](plans/implemented.md).

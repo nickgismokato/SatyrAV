@@ -4,6 +4,16 @@ What was planned and shipped, newest version first — the planning history of S
 
 ---
 
+## 2.1.1 — shipped
+
+A bug fix found in the show, plus one feature. See [CHANGELOG.md](../CHANGELOG.md) for the detail.
+
+- **Fixed:** scene files saved on Windows (CR LF) read as empty on Linux.
+- **Fixed:** `show` and `[Preload]` with pictures in folders and subfolders, and names with spaces, on Linux and Windows.
+- **Wildcards in `[Preload]`** — `MEGA/*.png` for one folder, `MEGA/**/*.png` for it and every folder below.
+
+---
+
 ## 2.1.0 — shipped
 
 See [CHANGELOG.md](../CHANGELOG.md) for the detail.

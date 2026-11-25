@@ -169,3 +169,31 @@ TEST_CASE("Scanner: a new project scans clean"){
 	CHECK(r.Clean());
 	CHECK(r.filesScanned > 1);
 }
+
+TEST_CASE("Scanner: folders, spaces and [Preload] wildcards"){
+	TempDir p("scan");
+	p.Write("schema.toml", "[Structure]\nakter = 1\n[Structure.Akt1]\nschema = [\"A\"]\n");
+	p.Write("pictures/MEGA/Lyric/Sequence 1/1A.png", "x");
+	p.Write("pictures/MEGA/5.png", "x");
+	p.Write("scenes/A.ngk",
+		"[Preload]\r\n"                          // 1  (CRLF file, as saved on Windows)
+		"MEGA/*.png\r\n"                         // 2  matches
+		"MEGA/Nothing/*.png\r\n"                 // 3  matches nothing
+		"MEGA/Lyric/Sequence 1/1A.png\r\n"       // 4  fine
+		"[Commands]\r\n"                         // 5
+		"show MEGA/Lyric/Sequence 1/1A.png\r\n"  // 6  fine
+		"show mega/5.png\r\n"                    // 7  fine (case)
+		"show MEGA/Lyric/Sequence 1/9Z.png\r\n"  // 8  missing
+		"show randomImages(MEGA/Lyric/Sequence 1)\r\n"); // 9 fine
+	const ScanReport r = ProjectScanner::Scan(p.Str());
+	INFO(Dump(r));
+	const std::string f = "scenes/A.ngk";
+	CHECK_FALSE(Has(r, f, 2, ""));
+	CHECK(Has(r, f, 3, "matches no file", ScanFinding::Level::Warning));
+	CHECK_FALSE(Has(r, f, 4, ""));
+	CHECK_FALSE(Has(r, f, 6, ""));
+	CHECK_FALSE(Has(r, f, 7, ""));
+	CHECK(Has(r, f, 8, "file 'MEGA/Lyric/Sequence 1/9Z.png' not found"));
+	CHECK_FALSE(Has(r, f, 9, ""));
+	CHECK(r.findings.size() == 2);
+}

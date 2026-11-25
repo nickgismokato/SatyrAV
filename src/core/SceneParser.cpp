@@ -1538,6 +1538,12 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 	std::vector<std::string> allLines;
 	std::string rawLine;
 	while(std::getline(file, rawLine)){
+		// A file saved on Windows ends each line in CR LF. Read in binary
+		// terms on Linux, every line kept its CR, so no section header
+		// matched (`[Commands]\r`) and the scene came out empty. Strip it,
+		// and a UTF-8 byte-order mark on the first line, on every platform.
+		if(!rawLine.empty() && rawLine.back() == '\r') rawLine.pop_back();
+		if(allLines.empty() && rawLine.rfind("\xEF\xBB\xBF", 0) == 0) rawLine.erase(0, 3);
 		allLines.push_back(rawLine);
 	}
 	scene.sourceLines = allLines;
@@ -1763,7 +1769,8 @@ Scene SceneParser::ParseFile(const std::string& scenePath){
 				break;
 			}
 			case Section::Preload:{
-				scene.preloadPaths.push_back(line);
+				// Quotes allowed, for a name with `#` in it.
+				scene.preloadPaths.push_back(StripQuotes(line));
 				break;
 			}
 			case Section::Macro:{

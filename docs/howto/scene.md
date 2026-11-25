@@ -36,7 +36,7 @@ Only `[Commands]` is needed. The sections can come in any order.
 | Section | What it's for |
 |---|---|
 | [`[Options]`](../dev/commands.md#options) | How the scene looks — background, text colour, font, outline, … Overrides the project's options for this scene only. See [options.md](options.md). |
-| [`[Preload]`](../dev/commands.md#preload) | Files to load before the scene runs, so the first `show` / `play` is instant. One file per line. |
+| [`[Preload]`](../dev/commands.md#preload) | Files to load before the scene runs, so the first `show` / `play` is instant. One file per line, or a pattern: `MEGA/*.png` loads every PNG in `pictures/MEGA/`, `MEGA/**/*.png` every PNG below it. |
 | [`[Commands]`](../dev/commands.md#commands) | The cues, one per line, in show order. |
 | [`[Macro]`](../dev/commands.md#macro) | Blocks of cues with a name, used with `macro NAME`. See [Running several things at once](#running-several-things-at-once). |
 | [`[Animation]`](../dev/commands.md#animation) | Named animations that repeat, started with `show NAME`. See [Movement and animation](#movement-and-animation). |
@@ -50,7 +50,7 @@ Only `[Commands]` is needed. The sections can come in any order.
 - **Quotes:** `"…"`, `'…'` and `´…´` all work; use the one your text doesn't contain: `text 'She said "no".'`
 - **New line in text:** `\n` — `text "Line one\nLine two"`.
 - **Maths and Greek:** `\alpha`, `\pi`, `\leq`, `\infty`, `\mathbb{R}` and more become the real symbols — see [LaTeX symbols](../dev/commands.md#latex-symbols).
-- **Files** are found in the project folder, then `pictures/`, `movies/` and `sound/`, so `show logo.png` finds `pictures/logo.png`.
+- **Files** are found in the project folder, then `pictures/`, `movies/` and `sound/`, so `show logo.png` finds `pictures/logo.png` and `show MEGA/Lyric/Sequence 1/1A.png` finds it in `pictures/MEGA/Lyric/Sequence 1/`. Spaces in folder and file names need nothing; `/` and `\` both work, and case doesn't matter. Put a name with `#` in quotes: `show "Song #1.png"`.
 - **Several things on one ENTER:** join them with `&` — `clear & text "Act two" & play gong.mp3`.
 
 ## Text

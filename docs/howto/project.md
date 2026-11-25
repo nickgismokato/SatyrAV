@@ -36,7 +36,8 @@ MatRevy_2026/
 ## Files and names
 
 - **Scenes** are `scenes/<Name>.ngk`, named in `schema.toml` without `.ngk`. The name is what the master shows; `æøå` and spaces are fine.
-- **Media** can go anywhere in the project folder. A scene names a file by itself (`show logo.png`) and SatyrAV looks in the project folder, then `pictures/`, `movies/` and `sound/`. A path with a folder in it — `show posters/act1.png` — is taken from the project folder.
+- **Media** can go anywhere in the project folder, in folders as deep as you like. A scene names a file by itself or with its folders (`show logo.png`, `show MEGA/Lyric/Sequence 1/1A.png`), and SatyrAV looks for that in the project folder, then in `pictures/`, `movies/` and `sound/`. Spaces in names are fine, `/` and `\` both work, and upper / lower case doesn't matter — on Linux as on Windows.
+- **Scene files saved on Windows** (CR LF line endings) read the same on Linux.
 - **Video or sound** is decided by the extension: `.mp4`, `.mkv`, `.webm`, `.avi` and `.mov` are videos, anything else `play` is given is sound.
 - **Fonts** are looked for in the project's `fonts/` (or `font/`) folder, the project folder, then the shared `FONTS` folder — so a font only one show uses can travel with the project.
 

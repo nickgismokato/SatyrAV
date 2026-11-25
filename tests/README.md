@@ -70,6 +70,7 @@ cmake -S tests -B build-tests && cmake --build build-tests && ./build-tests/saty
 | `test_show_log.cpp` | the show log — file names, run numbers, the `.log` line |
 | `test_subtitles.cpp` | the per-act `.srt` / `.ass` — text and media cues from slave snapshots, bold / italic / font tags, file names per act |
 | `test_project_scanner.cpp` | the project scanner — every kind of finding with its file and line, and a new project scanning clean |
+| `test_project_paths.cpp` | where a name points on disk — folders, spaces, `\`, case, absolute paths, and `[Preload]` wildcards (`*`, `?`, `**`) |
 
 ## Render tests
 

@@ -1172,25 +1172,41 @@ TEST_CASE("A group brace on the following line is accepted"){
 
 // ── Line endings ─────────────────────────────────────────────
 
-TEST_CASE("CRLF scene files"){
-	// Trim() strips only spaces and tabs, so a stray '\r' would end up
-	// glued to the last token on every line. On Windows that never
-	// happens because ParseFile opens the stream in text mode and the CRT
-	// translates CRLF to LF on read. On POSIX there is no translation, so
-	// a scene authored on Windows and parsed on Linux keeps the '\r' and
-	// section headers stop matching.
-	//
-	// The assertions below therefore differ per platform *on purpose* —
-	// they document the real behaviour rather than an aspiration. See the
-	// note in docs/dev/scene-format.md.
+TEST_CASE("CRLF scene files parse the same on every platform"){
+	// A scene saved on Windows ends its lines in CR LF. On POSIX the CR used
+	// to stay on every line, so `[Commands]\r` matched no section and the
+	// scene came out empty — on Linux only. ParseFile now drops it.
 	auto scene = ParseScene("[Commands]\r\nclear\r\ntext \"a\"\r\n");
-#ifdef _WIN32
 	REQUIRE(scene.commands.size() == 2);
 	CHECK(scene.commands[0].type == CommandType::Clear);
-#else
-	// '[Commands]\r' never matches the section header, so nothing is read.
-	CHECK(scene.commands.empty());
-#endif
+	CHECK(scene.commands[1].runs[0].text == "a");
+	CHECK(scene.sourceLines[0] == "[Commands]");
+}
+
+TEST_CASE("A UTF-8 byte-order mark before the first section is ignored"){
+	auto scene = ParseScene("\xEF\xBB\xBF[Commands]\ntext \"a\"\n");
+	REQUIRE(scene.commands.size() == 1);
+}
+
+TEST_CASE("File names with folders and spaces stay whole"){
+	auto scene = ParseScene(
+		"[Preload]\n"
+		"MEGA/Lyric/Sequence 1/1A.png\n"
+		"\"Song #1.png\"\n"
+		"MEGA/*.png\n"
+		"[Commands]\n"
+		"show MEGA/Lyric/Sequence 1/1A.png\n"
+		"show size([100, 100], MEGA/Lyric/Sequence 1/2A.png)\n"
+		"show \"my picture.png\"\n");
+	REQUIRE(scene.preloadPaths.size() == 3);
+	CHECK(scene.preloadPaths[0] == "MEGA/Lyric/Sequence 1/1A.png");
+	CHECK(scene.preloadPaths[1] == "Song #1.png");
+	CHECK(scene.preloadPaths[2] == "MEGA/*.png");
+	REQUIRE(scene.commands.size() == 3);
+	CHECK(scene.commands[0].argument == "MEGA/Lyric/Sequence 1/1A.png");
+	CHECK(scene.commands[1].argument == "MEGA/Lyric/Sequence 1/2A.png");
+	CHECK(scene.commands[1].mods.width == 100);
+	CHECK(scene.commands[2].argument == "my picture.png");
 }
 
 TEST_CASE("LF scene files parse identically everywhere"){

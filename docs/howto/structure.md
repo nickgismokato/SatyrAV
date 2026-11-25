@@ -27,7 +27,7 @@ You can jump anywhere with the arrow keys and run any cue from there; SHIFT+ENTE
 | Running a cue | Anything not loaded yet — a picture not in `[Preload]` is read from disk at that moment. |
 | Pressing `U` | Every scene file again, from disk, without leaving the show. |
 
-So: **list big pictures and GIFs in `[Preload]`** — they're then on screen the moment the cue runs. Videos need nothing: SatyrAV finds every `play` of a video in the current and next scene and loads it ahead, so it starts at once. Sounds start immediately anyway.
+So: **list big pictures and GIFs in `[Preload]`** — they're then on screen the moment the cue runs. For a folder of pictures, one line does it: `MEGA/*.png` (that folder) or `MEGA/**/*.png` (and every folder below). Videos need nothing: SatyrAV finds every `play` of a video in the current and next scene and loads it ahead, so it starts at once. Sounds start immediately anyway.
 
 Nothing in a cue waits on the network or on a slow disk: the backstage screen is told in the background, and the log is written line by line.
 

@@ -1,5 +1,7 @@
 #include "render/MediaCache.hpp"
 #include "core/Logger.hpp"
+#include "core/Platform.hpp"
+#include "core/ProjectPaths.hpp"
 #include <SDL3_image/SDL_image.h>
 #include <filesystem>
 #include <cstdio>
@@ -7,15 +9,10 @@
 
 namespace SatyrAV{
 
+// The same lookup the show and the project scanner use (core/ProjectPaths),
+// so a preloaded picture is found under the key `show` asks for.
 std::string MediaCache::ResolvePath(const std::string& base, const std::string& rel){
-	std::string full = base + "/" + rel;
-	if(std::filesystem::exists(full)) return full;
-	const char* SUBDIRS[] = {"pictures", "movies", "sound", nullptr};
-	for(int i = 0; SUBDIRS[i]; i++){
-		std::string tryPath = base + "/" + SUBDIRS[i] + "/" + rel;
-		if(std::filesystem::exists(tryPath)) return tryPath;
-	}
-	return full;
+	return ProjectPaths::ResolveMedia(base, rel);
 }
 
 bool MediaCache::IsImageExt(const std::string& ext){
@@ -40,8 +37,9 @@ static std::string LowerExt(const std::string& path){
 
 void MediaCache::PreloadFiles(const std::vector<std::string>& paths,
 	const std::string& projectBase, SDL_Renderer* renderer){
-	for(auto& relPath : paths){
-		std::string full = ResolvePath(projectBase, relPath);
+	// [Preload] entries may be patterns (`MEGA/*.png`): expanded here, so
+	// every file they match is loaded.
+	for(const auto& full : ProjectPaths::ExpandPreload(projectBase, paths)){
 		if(cache.count(full)) continue; // already cached
 
 		std::string ext = LowerExt(full);
@@ -57,11 +55,9 @@ void MediaCache::PreloadFiles(const std::vector<std::string>& paths,
 			CachedMedia entry;
 			entry.path = full;
 			entry.isImage = false;
-			if(std::filesystem::exists(full)){
-				try{
-					entry.sizeBytes = (size_t)std::filesystem::file_size(full);
-				} catch(...){}
-			}
+			std::error_code ec;
+			const auto size = std::filesystem::file_size(Platform::Utf8ToPath(full), ec);
+			if(!ec) entry.sizeBytes = (size_t)size;
 			cache[full] = entry;
 		}
 	}
@@ -76,8 +72,8 @@ void MediaCache::PreloadForSceneTransition(
 	// Build the set of paths to keep
 	std::vector<std::string> keepPaths;
 	auto addResolved = [&](const std::vector<std::string>& paths){
-		for(auto& p : paths){
-			keepPaths.push_back(ResolvePath(projectBase, p));
+		for(auto& p : ProjectPaths::ExpandPreload(projectBase, paths)){
+			keepPaths.push_back(std::move(p));
 		}
 	};
 	addResolved(prevPaths);

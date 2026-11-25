@@ -144,5 +144,5 @@ With the debug popup open:
 Each finding has its file and line — errors in red, warnings in yellow — and is also written to SatyrAV's log. It finds:
 
 - **In `schema.toml`:** a file that doesn't read; scenes listed without a `.ngk`; missing F-key sounds and fonts; unknown option names and values of the wrong kind (`FontSize = "25"` instead of `25`).
-- **In each scene:** misspelled sections (`[commands]`) and lines outside any section; unknown options, bad colours, numbers and `true` / `false`, and options that only work in `schema.toml`; pictures, videos, sounds and fonts that don't exist — in cues, `[Preload]`, `[Animation]`, `randomImages` and `use`; unknown commands; and mistakes in `[Animation]`, `[Backstage]` and `[Cue]`.
+- **In each scene:** misspelled sections (`[commands]`) and lines outside any section; unknown options, bad colours, numbers and `true` / `false`, and options that only work in `schema.toml`; pictures, videos, sounds and fonts that don't exist — in cues, `[Preload]`, `[Animation]`, `randomImages` and `use` — and `[Preload]` patterns that match nothing; unknown commands; and mistakes in `[Animation]`, `[Backstage]` and `[Cue]`.
 - **Scenes no akt uses:** a `.ngk` in `scenes/` that `schema.toml` doesn't list.

@@ -66,13 +66,16 @@ Per-scene settings that override project-level defaults.
 
 Files to pre-decode/pre-cache before the scene runs, so the first `show` or `play` is instant.
 
-- **Syntax:** `[Preload]` on its own line, one filename per line.
-- **Arguments:** bare filename or relative path. The resolver searches the project root first, then `pictures/`, `movies/`, and `sound/` in that order.
+- **Syntax:** `[Preload]` on its own line, one name or pattern per line. Quotes are allowed and needed for a name with `#`.
+- **Names:** a file name, or a path with folders (`MEGA/Lyric/Sequence 1/1A.png`, spaces allowed, `/` or `\`). Looked up as everywhere else (`ProjectPaths::ResolveMedia`): the project folder, then `pictures/`, `movies/`, `sound/`; names that differ only in case are found too; an absolute path is used as it is.
+- **Patterns** (`ProjectPaths::ExpandWildcard`): `*` matches any run of characters and `?` one, within one folder or file name; `**` matches any number of folders, none included. Case is ignored. `MEGA/*.png` is every PNG directly in `pictures/MEGA/`; `MEGA/**/*.png` every PNG in it and below. Each matching file is preloaded; a pattern that matches nothing is a scanner warning.
+- **What is loaded:** pictures and GIFs become textures (`MediaCache`), fonts are opened. Videos need no entry — every `play` of a video in the scene and the next is preloaded by `MediaPlayer`. The cache is keyed on the resolved path, which `show` resolves the same way, so a preloaded picture is a cache hit.
 - **Example:**
     ```txt
     [Preload]
     satyr-logo.png
-    intro.mp3
+    MEGA/Lyric/Sequence 1/1A.png
+    MEGA/**/*.png
     ```
 
 ### `[Cue]`
@@ -410,7 +413,7 @@ How the centred text stack is placed when `FixedTextCentre = true` (in `schema.t
 ### `show`
 
 - **Syntax:** `show FILE` or `show MODIFIER(..., FILE)`
-- **Arguments:** `FILE` — image filename (resolved against the project root, `pictures/`, etc.). Modifiers wrap around the filename.
+- **Arguments:** `FILE` — image file name or path with folders, spaces allowed (resolved against the project root, then `pictures/`, `movies/`, `sound/`; case-insensitive fallback). Modifiers wrap around the filename.
 - **Supported formats:** `.png`, `.jpg`/`.jpeg`, `.bmp`, `.webp`, and `.gif`. Animated `.gif` files cycle through their frames at the delays encoded in the file — see the note below.
 - **Behaviour:** Adds the image to the slave. Images stack: a new `show` goes on top of the ones already there (see [`layer()`](#layern-content) to choose the order). `clear` removes ungrouped images, `clearImages` all of them.
 - **Output:** The image is drawn into the targeted slave rect, fitted to target dimensions unless `size()` / `scale()` overrides.
@@ -803,7 +806,7 @@ VYDistP2 = 0.1
 
 ### `randomImages([LIST])` and `randomImages(FOLDER)`
 
-- **Arguments:** a comma-separated list, or a folder name under `pictures/`.
+- **Arguments:** a comma-separated list, or a folder under `pictures/` (`faces`, or a deeper one: `MEGA/Lyric`).
 - **Behaviour :** Each particle spawn picks a *new* random image from the list/folder, so a rain of `randomImages(professorPhotos)` drops many different photos, not the same one repeatedly.
 - **Example:** `show particle(RAIN, 50, randomImages(professorPhotos))`
 

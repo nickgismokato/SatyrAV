@@ -271,12 +271,8 @@ std::vector<std::string> ScanSchema(Collector& out, const std::string& projectPa
 void CheckMediaName(Collector& out, const std::string& file, int line,
 	const std::string& what, const std::string& name, const std::string& projectPath){
 	if(name.empty()) return;
-	// A path with a folder in it is used as written (randomImages lists).
-	const bool hasSep = name.find('/') != std::string::npos ||
-		name.find('\\') != std::string::npos;
-	const std::string full = hasSep && !ProjectPaths::IsFile(projectPath + "/" + name)
-		? name : ProjectPaths::ResolveMedia(projectPath, name);
-	if(!ProjectPaths::IsFile(full)){
+	// The show's own lookup: folders, spaces, `\`, case as on Windows.
+	if(!ProjectPaths::IsFile(ProjectPaths::ResolveMedia(projectPath, name))){
 		out.Add(Level::Error, file, line, what + ": file '" + name + "' not found");
 	}
 }
@@ -291,11 +287,10 @@ void CheckCommand(Collector& out, const std::string& file, const Command& c,
 		const auto& rnd = c.mods.randomImagePaths;
 		if(!rnd.empty()){
 			if(rnd.size() == 1 && rnd[0].rfind("DIR:", 0) == 0){
-				const std::string dir = rnd[0].substr(4);
-				const std::string full = projectPath + "/pictures/" + dir;
-				if(!ProjectPaths::IsDirectory(full)){
+				const std::string dir = ProjectPaths::Normalise(rnd[0].substr(4));
+				if(ProjectPaths::ExpandWildcard(projectPath, "pictures/" + dir + "/*").empty()){
 					out.Add(Level::Error, file, line, "randomImages: folder 'pictures/"
-						+ dir + "' not found");
+						+ dir + "' not found or empty");
 				}
 			} else{
 				for(const auto& p : rnd) CheckMediaName(out, file, line, "randomImages", p, projectPath);
@@ -384,7 +379,10 @@ void ScanScene(Collector& out, const std::string& projectPath, const std::string
 			}
 			case Sec::Preload:{
 				const std::string name = Unquote(line);
-				if(IsFontFile(name)){
+				if(ProjectPaths::HasWildcard(name)){
+					if(ProjectPaths::ExpandWildcard(projectPath, name).empty())
+						out.Add(Level::Warning, file, lineNo, "[Preload]: '" + name + "' matches no file");
+				} else if(IsFontFile(name)){
 					if(ProjectPaths::FindFont(projectPath, name).empty())
 						out.Add(Level::Error, file, lineNo, "[Preload]: font file '" + name + "' not found");
 				} else{

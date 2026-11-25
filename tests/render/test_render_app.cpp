@@ -220,3 +220,33 @@ TEST_CASE("App: with the show log off, a show writes no files"){
 	rig.Key(SDLK_ESCAPE, SDL_SCANCODE_ESCAPE);
 	CHECK_FALSE(fs::exists(fs::path(project) / "showlog"));
 }
+
+TEST_CASE("App: a CRLF scene shows pictures in nested folders with spaces, preloaded by wildcard"){
+	TempDir tmp("render-app");
+	const std::string p = tmp.File("Nested_2026");
+	tmp.Write("Nested_2026/schema.toml",
+		"[RevyData]\nRevy = \"Nested 2026\"\n"
+		"[Structure]\nakter = 1\n[Structure.Akt1]\nschema = [\"N\"]\n");
+	// Saved on Windows: CR LF line endings.
+	tmp.Write("Nested_2026/scenes/N.ngk",
+		"[Preload]\r\n"
+		"MEGA/**/*.bmp\r\n"
+		"[Commands]\r\n"
+		"text \"Test\"\r\n"
+		"show MEGA/Lyric/Sequence 1/pic one.bmp\r\n"
+		"show mega/top.bmp\r\n");
+	SaveBmp(p + "/pictures/MEGA/Lyric/Sequence 1/pic one.bmp", 0, 255, 0);
+	SaveBmp(p + "/pictures/MEGA/top.bmp", 255, 0, 0);
+
+	AppRig rig(false);
+	REQUIRE(rig.ok);
+	rig.OpenAndEnter(p);
+	rig.Enter();                       // text "Test"
+	REQUIRE(rig.HasText("Test"));
+	rig.Enter();                       // the picture in Sequence 1
+	CHECK(rig.HasImage("MEGA/Lyric/Sequence 1/pic one.bmp"));
+	rig.Enter();                       // written in lower case, found as MEGA/top.bmp
+	CHECK(rig.HasImage("MEGA/top.bmp"));
+	for(const auto& im : rig.Perf().GetSlaveWindow().GetImageEntries()) CHECK(im.tex != nullptr);
+	rig.Key(SDLK_ESCAPE, SDL_SCANCODE_ESCAPE);
+}
