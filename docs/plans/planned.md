@@ -9,6 +9,43 @@ Items are in no particular order. (**Critical**) marks the ones to look at first
 ## Planned for 2.3.0
 - include `SDL_camera.h` for direct camera input which is used sometimes.
 - Add full Vulcan. No OpenGL support since it is essentially deprecated at this point for modern hardware.
+- *(deferred from 2.1.0)* Add powerpoint animetions transitions for picture to picture. Essentially making it possible to run a slideshow like in powerpoint.
+- *(deferred from 2.2.0)* Add messenger/other communication app default template to mimic communication.
+- *(deferred from 2.1.0)* Create full physics model for particle systems, accelerated with hardware
+    - While adding the physics models we should also look at how we could optimize it. Currently it lacks if to many "particels" is displayed. Especially on older hardware. `SIMD` comes to mind and also maybe using Broad-Phase Collision Detection.
+- *(deferred from 2.1.0)* OSC Receiver, i.e. listen for OSC messages from lightning desk to control cues. Mainly interested in QLab, MagicQ (**main controller used by SaTyR**) and maybe GrandMA.
+---
+
+## Planned for 2.2.0
+- **(Critical)** Add a forloop for showing pictures.
+    - A big problem is when you have more than a hundred images, it can be hard to write it all into an `.ngk` file. So a looping method could be useful.
+    - One way of doing it could be like this:
+        ```txt
+        [Commands]
+        for i in (1,100) do
+            show picture.[i].png
+        end do
+        ```
+        This would then do the same as writing `show picture1.png`, `show picture2.png`, ..., `show picture100.png`. But it would ease the workload of a show developer.
+    - Currently I am thinking of using the `.[i].` notation to indicate where exactly the index should be. This syntax would make it clear where we are indexing, which mean we could potentially index pictures labeled `pic4ture.png` since we can just do `pic.[i].ture.png`. And most pictures doesn't actually use naming like `.[i].`, so we won't have a name clashing problem.
+    - The index should be dynamically defined, meaning we are not forced to use the index `i` but could potentially use anything like `.[toilet].`.
+    - The syntax `for i in (1,100) do` means mathematically "for $i\in[1,100]\subset\mathbb{Z}$ do". **Note** that our indexes can be negative. This practice should be looked heavily down upon, but since not all users are neither programmer nor mathematicians, this need to be done.
+    - I am thinking maybe there could also be some internal functionality inside the loop that can be activated when the index is equal to a value. This would allow us to create stuff like full clears during the looping. 
+- **(Critical)** Package the VSCode extension cleanly: `vsce package` asks about a missing `LICENSE` and a missing `repository` field in `VSCodeExt/package.json`. Add a `LICENSE` to `VSCodeExt/` (the project's MIT licence) and `"repository": { "type": "git", "url": "https://github.com/nickgismokato/SatyrAV.git" }`, so it packages without prompts.
+- *(Nice to have)* Beginner-friendly install of the VSCode extension. The current copy-folder / `vsce` methods are too fiddly for most users.
+    - **Release asset.** Attach `satyrav-ngk-<version>.vsix` to each GitHub release. Users install it in VSCode via Extensions view &rarr; **⋯** &rarr; **Install from VSIX…** (or drag the file onto the Extensions view). No Node or terminal needed on their side. Depends on the clean-packaging item above.
+    - **GitHub Actions workflow** (optional). Run `vsce package` on release publish and upload the `.vsix` automatically, so packaging never depends on the local Node version.
+    - **Windows installer checkbox** (optional). Add a component to `installer/satyr-av.nsi`, e.g. "Install VSCode syntax highlighting", that bundles the `.vsix` and runs `code --install-extension` if `code` is on `PATH` (skip quietly otherwise).
+    - Update `VSCodeExt/README.md` so the `.vsix` route is the recommended install for end users.
+    - *(Maybe later)* Publish to the VS Marketplace and/or Open VSX so users can search "SatyrAV" and get auto-updates. Needs a publisher account and access token, and `publisher` in `package.json` must match it.
+- Add an application-window capture source (Windows only) so we can stream another running program onto the slave display. Video only — no audio capture.
+	- **Backend.** Windows Graphics Capture (WGC) via `GraphicsCaptureItem::CreateFromHWND` &rarr; `Direct3D11CaptureFramePool` &rarr; `FrameArrived`, sharing the existing D3D11 device with SDL/FFmpeg so the captured BGRA texture stays on the GPU. Requires Win11 (no yellow capture border).
+	- **Cue integration.** New `capture "<window-title>"` keyword in `SceneParser`, new `CommandType::Capture`, dispatched through `CueEngine` &rarr; `SlaveWindow`. Tear-down via a `stopCapture` command (or fold into existing clear semantics — decide during design).
+	- **Slave draw layer.** New layer in `SlaveWindow` between the video layer and the images layer. **Must honour the `[TargetedDisplay]` rect** so the captured window can be moved / scaled / rotated like images via `D → S`.
+	- **Window identity.** Case-insensitive **substring match on the window title** with a fallback message if not found. Easy for operators; revisit if it proves too fuzzy in practice.
+	- **Picker UI.** New popup that enumerates top-level windows (`EnumWindows`, filtered to visible + non-empty title, excludes SatyrAV's own HWNDs) so the operator can pick at scene-edit time. The chosen title substring is written back into the `.ngk`.
+	- **Phased landing:** (1) backend `WindowCaptureSource` class, verified against a debug texture; (2) `SlaveWindow` draw layer with rect support; (3) `SceneParser` / `CueEngine` wiring; (4) picker popup.
+	- **Why deferred from 1.7:** WGC needs WinRT ABI headers (`<windows.graphics.capture.h>` full method tables, `<windows.graphics.directx.direct3d11.interop.h>`, working `__uuidof` on templated `ITypedEventHandler`, etc.). The Debian mingw-w64 13 sysroot used for the current cross-compile only ships partial forward-decls — every workaround we tried hit a new gap (no `<wrl/event.h>`, no `<wrl/implements.h>`, `__declspec(uuid)` silently ignored, missing `IDirect3D11CaptureFramePool` method tables, missing `WindowsCreateStringReference` decl). Lands cleanly once the toolchain catches up — naturally that's the SDL3 / D3D11 reshuffle in 2.0.0 + MSYS2 (or equivalent full Windows SDK) by 2.2.0.
 - (**Critical**) Add `TexReader.cpp` functionality to read $\TeX$ files and parse it into `.ngk` files.
 	- All `.ngk` files should be handled by having the `[backstage]` created by the parser.
     - A sketch should be empty for any commands. This will have to be added manually later.
@@ -73,35 +110,3 @@ Items are in no particular order. (**Critical**) marks the ones to look at first
         - If eta is missing we just write: "69m00"
         - If Actors is missing, we write no actor names and the same with nijas.
         - If for some reason our parser cannot read it, or don't understand it, these above values is also the default values for this case.
-
----
-
-## Planned for 2.2.0
-- **(Critical)** Add a forloop for showing pictures.
-    - A big problem is when you have more than a hundred images, it can be hard to write it all into an `.ngk` file. So a looping method could be useful.
-    - One way of doing it could be like this:
-        ```txt
-        [Commands]
-        for i in (1,100) do
-            show picture.[i].png
-        end do
-        ```
-        This would then do the same as writing `show picture1.png`, `show picture2.png`, ..., `show picture100.png`. But it would ease the workload of a show developer.
-    - Currently I am thinking of using the `.[i].` notation to indicate where exactly the index should be. This syntax would make it clear where we are indexing, which mean we could potentially index pictures labeled `pic4ture.png` since we can just do `pic.[i].ture.png`. And most pictures doesn't actually use naming like `.[i].`, so we won't have a name clashing problem.
-    - The index should be dynamically defined, meaning we are not forced to use the index `i` but could potentially use anything like `.[toilet].`.
-    - The syntax `for i in (1,100) do` means mathematically "for $i\in[1,100]\subset\mathbb{Z}$ do". **Note** that our indexes can be negative. This practice should be looked heavily down upon, but since not all users are neither programmer nor mathematicians, this need to be done.
-    - I am thinking maybe there could also be some internal functionality inside the loop that can be activated when the index is equal to a value. This would allow us to create stuff like full clears during the looping. 
-- Package the VSCode extension cleanly: `vsce package` asks about a missing `LICENSE` and a missing `repository` field in `VSCodeExt/package.json`. Add a `LICENSE` to `VSCodeExt/` (the project's MIT licence) and `"repository": { "type": "git", "url": "https://github.com/nickgismokato/SatyrAV.git" }`, so it packages without prompts.
-- Add powerpoint animetions transitions for picture to picture. Essentially making it possible to run a slideshow like in powerpoint.
-- (*Maybe defer to later*) Add messenger/other communication app default template to mimic communication.
-- Add an application-window capture source (Windows only) so we can stream another running program onto the slave display. Video only — no audio capture.
-	- **Backend.** Windows Graphics Capture (WGC) via `GraphicsCaptureItem::CreateFromHWND` &rarr; `Direct3D11CaptureFramePool` &rarr; `FrameArrived`, sharing the existing D3D11 device with SDL/FFmpeg so the captured BGRA texture stays on the GPU. Requires Win11 (no yellow capture border).
-	- **Cue integration.** New `capture "<window-title>"` keyword in `SceneParser`, new `CommandType::Capture`, dispatched through `CueEngine` &rarr; `SlaveWindow`. Tear-down via a `stopCapture` command (or fold into existing clear semantics — decide during design).
-	- **Slave draw layer.** New layer in `SlaveWindow` between the video layer and the images layer. **Must honour the `[TargetedDisplay]` rect** so the captured window can be moved / scaled / rotated like images via `D → S`.
-	- **Window identity.** Case-insensitive **substring match on the window title** with a fallback message if not found. Easy for operators; revisit if it proves too fuzzy in practice.
-	- **Picker UI.** New popup that enumerates top-level windows (`EnumWindows`, filtered to visible + non-empty title, excludes SatyrAV's own HWNDs) so the operator can pick at scene-edit time. The chosen title substring is written back into the `.ngk`.
-	- **Phased landing:** (1) backend `WindowCaptureSource` class, verified against a debug texture; (2) `SlaveWindow` draw layer with rect support; (3) `SceneParser` / `CueEngine` wiring; (4) picker popup.
-	- **Why deferred from 1.7:** WGC needs WinRT ABI headers (`<windows.graphics.capture.h>` full method tables, `<windows.graphics.directx.direct3d11.interop.h>`, working `__uuidof` on templated `ITypedEventHandler`, etc.). The Debian mingw-w64 13 sysroot used for the current cross-compile only ships partial forward-decls — every workaround we tried hit a new gap (no `<wrl/event.h>`, no `<wrl/implements.h>`, `__declspec(uuid)` silently ignored, missing `IDirect3D11CaptureFramePool` method tables, missing `WindowsCreateStringReference` decl). Lands cleanly once the toolchain catches up — naturally that's the SDL3 / D3D11 reshuffle in 2.0.0 + MSYS2 (or equivalent full Windows SDK) by 2.2.0.
-- *(deferred from 2.1.0)* Create full physics model for particle systems, accelerated with hardware
-    - While adding the physics models we should also look at how we could optimize it. Currently it lacks if to many "particels" is displayed. Especially on older hardware. `SIMD` comes to mind and also maybe using Broad-Phase Collision Detection.
-- *(deferred from 2.1.0)* OSC Receiver, i.e. listen for OSC messages from lightning desk to control cues. Mainly interested in QLab and maybe GrandMA.
