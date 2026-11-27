@@ -2,6 +2,8 @@
 
 Problems we know about, and things that must be checked so they don't become problems. Not tied to a version; most critical first. Plans are in [plans/planned.md](plans/planned.md).
 
+- Command-list scroll doesn't scroll correctly when the main window is in a windowed mode.
+	- When in a window mode on the main screen during a project and a scene has been chosen, if the commands word-wrap the scrolling is scrolling to short. This should have been fixed in version 1.6.4 (Commit [2c6138d](https://github.com/nickgismokato/SatyrAV/commit/2c6138d48501a4819952bd0bed6adac7b9034241)), but we never tested it in windowed mode.
 - (**Critical**) **The capture mirror stutters during video and particles.** Which screens are affected has depended on which physical monitor each window is on.
 	- **History.** Before 2.0.0 the report was the other way round: the slave stuttered and the capture mirror looked smooth. Zero-copy video made the slave much smoother, so decoding was a real part of the slave's problem and that part is fixed. What remains shows on the capture mirror.
 	- **Two suspects, from reading the frame loop. Neither is confirmed — this needs measurement, not more reasoning.**
